@@ -1,13 +1,11 @@
 package service
 
 // Coordination: claims and tasks. This file is the contract the claims and
-// tasks implementations, CLI, web UI and MCP tools build on; the functions
-// return "not implemented yet" until their storage lands. Signatures are
-// fixed. Everyone signed in may read and write every effort's claims and
-// tasks, as for the board.
+// tasks implementations (claims.go, tasks.go), CLI, web UI and MCP tools
+// build on. Signatures are fixed. Everyone signed in may read and write
+// every effort's claims and tasks, as for the board.
 
 import (
-	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -99,26 +97,6 @@ type ListTasksInput struct {
 	Repo, Effort string
 	States       []string
 	Mine         bool
-}
-
-func coordinationNotImplemented() error {
-	return errf(CodeUnavailable, "claims and tasks are not implemented yet")
-}
-
-// AddTask adds a task to an effort's plan.
-func (s *Service) AddTask(ctx context.Context, actor Actor, in AddTaskInput) (Task, error) {
-	return Task{}, coordinationNotImplemented()
-}
-
-// UpdateTask applies an action to a task and returns it, plus the tasks a
-// done unblocked.
-func (s *Service) UpdateTask(ctx context.Context, actor Actor, in UpdateTaskInput) (Task, []Task, error) {
-	return Task{}, nil, coordinationNotImplemented()
-}
-
-// ListTasks lists an effort's tasks: not done first, then by creation.
-func (s *Service) ListTasks(ctx context.Context, actor Actor, in ListTasksInput) ([]Task, error) {
-	return nil, coordinationNotImplemented()
 }
 
 // ClaimTrust says how actor relates to a claim's owner, like TrustOf.

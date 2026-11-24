@@ -42,13 +42,7 @@ var allKinds = map[NoteKind]bool{
 // bidirectional overrides, which can make text read differently than it
 // is), trims the result and checks its length.
 func cleanBody(body string) (string, error) {
-	var b strings.Builder
-	for _, r := range body {
-		if r == '\n' || r == '\t' || !(unicode.IsControl(r) || isBidiControl(r)) {
-			b.WriteRune(r)
-		}
-	}
-	out := strings.TrimSpace(b.String())
+	out := strings.TrimSpace(stripControls(body))
 	switch n := utf8.RuneCountInString(out); {
 	case n == 0:
 		return "", errf(CodeInvalid, "the note is empty; say what others should know")
@@ -56,6 +50,18 @@ func cleanBody(body string) (string, error) {
 		return "", errf(CodeInvalid, "the note is %d characters; keep it to %d and point to files or changes for details", n, MaxNoteBody)
 	}
 	return out, nil
+}
+
+// stripControls drops control characters other than newline and tab, and
+// bidirectional overrides, from text others will read.
+func stripControls(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\n' || r == '\t' || !(unicode.IsControl(r) || isBidiControl(r)) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func isBidiControl(r rune) bool {
