@@ -479,6 +479,8 @@ type Check struct {
 	Result        string                 `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"` // pass or fail
 	Passed        int32                  `protobuf:"varint,3,opt,name=passed,proto3" json:"passed,omitempty"`
 	Failed        int32                  `protobuf:"varint,4,opt,name=failed,proto3" json:"failed,omitempty"`
+	RanByVx       bool                   `protobuf:"varint,5,opt,name=ran_by_vx,json=ranByVx,proto3" json:"ran_by_vx,omitempty"` // vx ran the command; false: reported by the author
+	DurationMs    int64                  `protobuf:"varint,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -537,6 +539,20 @@ func (x *Check) GetPassed() int32 {
 func (x *Check) GetFailed() int32 {
 	if x != nil {
 		return x.Failed
+	}
+	return 0
+}
+
+func (x *Check) GetRanByVx() bool {
+	if x != nil {
+		return x.RanByVx
+	}
+	return false
+}
+
+func (x *Check) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
 	}
 	return 0
 }
@@ -686,20 +702,24 @@ func (x *FileChange) GetDeleted() int32 {
 }
 
 type Changeset struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hash          string                 `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
-	ChangeId      string                 `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	Parents       []string               `protobuf:"bytes,3,rep,name=parents,proto3" json:"parents,omitempty"`
-	Tree          string                 `protobuf:"bytes,4,opt,name=tree,proto3" json:"tree,omitempty"`
-	Origin        string                 `protobuf:"bytes,5,opt,name=origin,proto3" json:"origin,omitempty"` // vx or upstream
-	GitSha        string                 `protobuf:"bytes,6,opt,name=git_sha,json=gitSha,proto3" json:"git_sha,omitempty"`
-	Author        *Author                `protobuf:"bytes,7,opt,name=author,proto3" json:"author,omitempty"`
-	Intent        string                 `protobuf:"bytes,8,opt,name=intent,proto3" json:"intent,omitempty"`
-	DependsOn     []string               `protobuf:"bytes,9,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	Evidence      *Evidence              `protobuf:"bytes,10,opt,name=evidence,proto3" json:"evidence,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Files         []*FileChange          `protobuf:"bytes,12,rep,name=files,proto3" json:"files,omitempty"`
-	Effort        string                 `protobuf:"bytes,13,opt,name=effort,proto3" json:"effort,omitempty"` // slug, empty for upstream changesets
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Hash      string                 `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	ChangeId  string                 `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	Parents   []string               `protobuf:"bytes,3,rep,name=parents,proto3" json:"parents,omitempty"`
+	Tree      string                 `protobuf:"bytes,4,opt,name=tree,proto3" json:"tree,omitempty"`
+	Origin    string                 `protobuf:"bytes,5,opt,name=origin,proto3" json:"origin,omitempty"` // vx or upstream
+	GitSha    string                 `protobuf:"bytes,6,opt,name=git_sha,json=gitSha,proto3" json:"git_sha,omitempty"`
+	Author    *Author                `protobuf:"bytes,7,opt,name=author,proto3" json:"author,omitempty"`
+	Intent    string                 `protobuf:"bytes,8,opt,name=intent,proto3" json:"intent,omitempty"`
+	DependsOn []string               `protobuf:"bytes,9,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	Evidence  *Evidence              `protobuf:"bytes,10,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	CreatedAt string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Files     []*FileChange          `protobuf:"bytes,12,rep,name=files,proto3" json:"files,omitempty"`
+	Effort    string                 `protobuf:"bytes,13,opt,name=effort,proto3" json:"effort,omitempty"` // slug, empty for upstream changesets
+	// Set when the server merged the author's snapshot onto newer work: the
+	// evidence was gathered on snapshot_tree, not on tree.
+	SnapshotTree  string `protobuf:"bytes,14,opt,name=snapshot_tree,json=snapshotTree,proto3" json:"snapshot_tree,omitempty"`
+	Merged        bool   `protobuf:"varint,15,opt,name=merged,proto3" json:"merged,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -823,6 +843,20 @@ func (x *Changeset) GetEffort() string {
 		return x.Effort
 	}
 	return ""
+}
+
+func (x *Changeset) GetSnapshotTree() string {
+	if x != nil {
+		return x.SnapshotTree
+	}
+	return ""
+}
+
+func (x *Changeset) GetMerged() bool {
+	if x != nil {
+		return x.Merged
+	}
+	return false
 }
 
 type Workspace struct {
@@ -2726,17 +2760,20 @@ func (x *SetBaseResponse) GetWorkspace() *Workspace {
 }
 
 type LandRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorkspaceId   string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
-	Base          string                 `protobuf:"bytes,2,opt,name=base,proto3" json:"base,omitempty"`     // changeset the snapshot was made on
-	Tree          string                 `protobuf:"bytes,3,opt,name=tree,proto3" json:"tree,omitempty"`     // snapshot root tree, objects uploaded first
-	Intent        string                 `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"` // empty: the workspace intent
-	Evidence      *Evidence              `protobuf:"bytes,5,opt,name=evidence,proto3" json:"evidence,omitempty"`
-	DependsOn     []string               `protobuf:"bytes,6,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	Model         string                 `protobuf:"bytes,7,opt,name=model,proto3" json:"model,omitempty"`
-	Session       string                 `protobuf:"bytes,8,opt,name=session,proto3" json:"session,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	Base        string                 `protobuf:"bytes,2,opt,name=base,proto3" json:"base,omitempty"`     // changeset the snapshot was made on
+	Tree        string                 `protobuf:"bytes,3,opt,name=tree,proto3" json:"tree,omitempty"`     // snapshot root tree, objects uploaded first
+	Intent      string                 `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"` // empty: the workspace intent
+	Evidence    *Evidence              `protobuf:"bytes,5,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	DependsOn   []string               `protobuf:"bytes,6,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	Model       string                 `protobuf:"bytes,7,opt,name=model,proto3" json:"model,omitempty"`
+	Session     string                 `protobuf:"bytes,8,opt,name=session,proto3" json:"session,omitempty"`
+	// Refuse to merge onto newer work: if the effort moved past base, nothing
+	// lands and effort_moved is set, so the caller can sync and re-check.
+	RequireUpToDate bool `protobuf:"varint,9,opt,name=require_up_to_date,json=requireUpToDate,proto3" json:"require_up_to_date,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LandRequest) Reset() {
@@ -2825,6 +2862,13 @@ func (x *LandRequest) GetSession() string {
 	return ""
 }
 
+func (x *LandRequest) GetRequireUpToDate() bool {
+	if x != nil {
+		return x.RequireUpToDate
+	}
+	return false
+}
+
 type LandResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Landed        bool                   `protobuf:"varint,1,opt,name=landed,proto3" json:"landed,omitempty"`
@@ -2833,6 +2877,7 @@ type LandResponse struct {
 	AutoMerged    []string               `protobuf:"bytes,4,rep,name=auto_merged,json=autoMerged,proto3" json:"auto_merged,omitempty"` // paths changed on both sides that merged cleanly
 	Conflicts     []*Conflict            `protobuf:"bytes,5,rep,name=conflicts,proto3" json:"conflicts,omitempty"`                     // set when landed is false
 	EffortHead    string                 `protobuf:"bytes,6,opt,name=effort_head,json=effortHead,proto3" json:"effort_head,omitempty"`
+	EffortMoved   bool                   `protobuf:"varint,7,opt,name=effort_moved,json=effortMoved,proto3" json:"effort_moved,omitempty"` // require_up_to_date was set and the effort had moved
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2907,6 +2952,13 @@ func (x *LandResponse) GetEffortHead() string {
 		return x.EffortHead
 	}
 	return ""
+}
+
+func (x *LandResponse) GetEffortMoved() bool {
+	if x != nil {
+		return x.EffortMoved
+	}
+	return false
 }
 
 type AbandonRequest struct {
@@ -3682,12 +3734,15 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\fon_behalf_of\x18\x04 \x01(\tR\n" +
 	"onBehalfOf\x12\x14\n" +
 	"\x05model\x18\x05 \x01(\tR\x05model\x12\x18\n" +
-	"\asession\x18\x06 \x01(\tR\asession\"c\n" +
+	"\asession\x18\x06 \x01(\tR\asession\"\xa0\x01\n" +
 	"\x05Check\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\tR\x06result\x12\x16\n" +
 	"\x06passed\x18\x03 \x01(\x05R\x06passed\x12\x16\n" +
-	"\x06failed\x18\x04 \x01(\x05R\x06failed\"M\n" +
+	"\x06failed\x18\x04 \x01(\x05R\x06failed\x12\x1a\n" +
+	"\tran_by_vx\x18\x05 \x01(\bR\aranByVx\x12\x1f\n" +
+	"\vduration_ms\x18\x06 \x01(\x03R\n" +
+	"durationMs\"M\n" +
 	"\bEvidence\x12$\n" +
 	"\x06checks\x18\x01 \x03(\v2\f.vx.v1.CheckR\x06checks\x12\x1b\n" +
 	"\tnew_tests\x18\x02 \x03(\tR\bnewTests\"\xaa\x01\n" +
@@ -3699,7 +3754,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bnew_hash\x18\x04 \x01(\tR\anewHash\x12\x12\n" +
 	"\x04mode\x18\x05 \x01(\tR\x04mode\x12\x14\n" +
 	"\x05added\x18\x06 \x01(\x05R\x05added\x12\x18\n" +
-	"\adeleted\x18\a \x01(\x05R\adeleted\"\x86\x03\n" +
+	"\adeleted\x18\a \x01(\x05R\adeleted\"\xc3\x03\n" +
 	"\tChangeset\x12\x12\n" +
 	"\x04hash\x18\x01 \x01(\tR\x04hash\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x18\n" +
@@ -3716,7 +3771,9 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\v \x01(\tR\tcreatedAt\x12'\n" +
 	"\x05files\x18\f \x03(\v2\x11.vx.v1.FileChangeR\x05files\x12\x16\n" +
-	"\x06effort\x18\r \x01(\tR\x06effort\"\xf8\x01\n" +
+	"\x06effort\x18\r \x01(\tR\x06effort\x12#\n" +
+	"\rsnapshot_tree\x18\x0e \x01(\tR\fsnapshotTree\x12\x16\n" +
+	"\x06merged\x18\x0f \x01(\bR\x06merged\"\xf8\x01\n" +
 	"\tWorkspace\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
@@ -3830,7 +3887,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04base\x18\x02 \x01(\tR\x04base\"A\n" +
 	"\x0fSetBaseResponse\x12.\n" +
-	"\tworkspace\x18\x01 \x01(\v2\x10.vx.v1.WorkspaceR\tworkspace\"\xec\x01\n" +
+	"\tworkspace\x18\x01 \x01(\v2\x10.vx.v1.WorkspaceR\tworkspace\"\x99\x02\n" +
 	"\vLandRequest\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x12\n" +
 	"\x04base\x18\x02 \x01(\tR\x04base\x12\x12\n" +
@@ -3840,7 +3897,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"depends_on\x18\x06 \x03(\tR\tdependsOn\x12\x14\n" +
 	"\x05model\x18\a \x01(\tR\x05model\x12\x18\n" +
-	"\asession\x18\b \x01(\tR\asession\"\xe1\x01\n" +
+	"\asession\x18\b \x01(\tR\asession\x12+\n" +
+	"\x12require_up_to_date\x18\t \x01(\bR\x0frequireUpToDate\"\x84\x02\n" +
 	"\fLandResponse\x12\x16\n" +
 	"\x06landed\x18\x01 \x01(\bR\x06landed\x12.\n" +
 	"\tchangeset\x18\x02 \x01(\v2\x10.vx.v1.ChangesetR\tchangeset\x12\x18\n" +
@@ -3849,7 +3907,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"autoMerged\x12-\n" +
 	"\tconflicts\x18\x05 \x03(\v2\x0f.vx.v1.ConflictR\tconflicts\x12\x1f\n" +
 	"\veffort_head\x18\x06 \x01(\tR\n" +
-	"effortHead\" \n" +
+	"effortHead\x12!\n" +
+	"\feffort_moved\x18\a \x01(\bR\veffortMoved\" \n" +
 	"\x0eAbandonRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"A\n" +
 	"\x0fAbandonResponse\x12.\n" +

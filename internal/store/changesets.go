@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -115,6 +116,29 @@ func (q Q) ResolveChangeset(ctx context.Context, repoID uuid.UUID, ref string) (
 		}
 		return q.GetChangeset(ctx, repoID, h)
 	}
+	if isChangeIDPrefix(ref) {
+		// "8tm9" or "8tm9-f": the newest changeset whose change ID starts so.
+		rows, err := q.db.Query(ctx, `select distinct change_id from changesets where repo_id = $1 and change_id like $2 limit 2`, repoID, ref+"%")
+		if err != nil {
+			return ChangesetRow{}, err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return ChangesetRow{}, err
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if len(ids) == 1 {
+			return q.ResolveChangeset(ctx, repoID, ids[0])
+		}
+		if len(ids) > 1 {
+			return ChangesetRow{}, fmt.Errorf("change id prefix %q is ambiguous", ref)
+		}
+	}
 	if len(ref) < 6 || len(ref) > 64 {
 		return ChangesetRow{}, fmt.Errorf("changeset %q: %w", ref, ErrNotFound)
 	}
@@ -223,4 +247,21 @@ func (q Q) OnChain(ctx context.Context, repoID uuid.UUID, head, target hash.Hash
 		)
 		select exists (select 1 from chain where hash = $3)`, repoID, head, target, limit).Scan(&found)
 	return found, err
+}
+
+// isChangeIDPrefix reports whether ref could be the start of a change ID
+// ("8tm9", "8tm9-f"): at least four characters from the change ID alphabet.
+func isChangeIDPrefix(ref string) bool {
+	if len(ref) < 4 || len(ref) >= 9 {
+		return false
+	}
+	for i, r := range ref {
+		if i == 4 && r == '-' {
+			continue
+		}
+		if !strings.ContainsRune("bcdfghjkmnpqrstvwxz23456789", r) {
+			return false
+		}
+	}
+	return true
 }

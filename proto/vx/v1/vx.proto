@@ -61,6 +61,8 @@ message Check {
   string result = 2; // pass or fail
   int32 passed = 3;
   int32 failed = 4;
+  bool ran_by_vx = 5; // vx ran the command; false: reported by the author
+  int64 duration_ms = 6;
 }
 
 message Evidence {
@@ -92,6 +94,10 @@ message Changeset {
   string created_at = 11;
   repeated FileChange files = 12;
   string effort = 13; // slug, empty for upstream changesets
+  // Set when the server merged the author's snapshot onto newer work: the
+  // evidence was gathered on snapshot_tree, not on tree.
+  string snapshot_tree = 14;
+  bool merged = 15;
 }
 
 message Workspace {
@@ -332,6 +338,9 @@ message LandRequest {
   repeated string depends_on = 6;
   string model = 7;
   string session = 8;
+  // Refuse to merge onto newer work: if the effort moved past base, nothing
+  // lands and effort_moved is set, so the caller can sync and re-check.
+  bool require_up_to_date = 9;
 }
 
 message LandResponse {
@@ -341,6 +350,7 @@ message LandResponse {
   repeated string auto_merged = 4; // paths changed on both sides that merged cleanly
   repeated Conflict conflicts = 5; // set when landed is false
   string effort_head = 6;
+  bool effort_moved = 7; // require_up_to_date was set and the effort had moved
 }
 
 message AbandonRequest {

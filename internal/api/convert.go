@@ -60,7 +60,7 @@ func evidencePB(e *object.Evidence) *vxv1.Evidence {
 	}
 	out := &vxv1.Evidence{NewTests: e.NewTests}
 	for _, c := range e.Checks {
-		out.Checks = append(out.Checks, &vxv1.Check{Name: c.Name, Result: c.Result, Passed: int32(c.Passed), Failed: int32(c.Failed)})
+		out.Checks = append(out.Checks, &vxv1.Check{Name: c.Name, Result: c.Result, Passed: int32(c.Passed), Failed: int32(c.Failed), RanByVx: c.RanByVX, DurationMs: c.DurationMs})
 	}
 	return out
 }
@@ -74,7 +74,7 @@ func evidenceFromPB(e *vxv1.Evidence) (*object.Evidence, error) {
 		if c.Result != "pass" && c.Result != "fail" {
 			return nil, fmt.Errorf("check %q: result must be pass or fail", c.Name)
 		}
-		out.Checks = append(out.Checks, object.Check{Name: c.Name, Result: c.Result, Passed: int(c.Passed), Failed: int(c.Failed)})
+		out.Checks = append(out.Checks, object.Check{Name: c.Name, Result: c.Result, Passed: int(c.Passed), Failed: int(c.Failed), RanByVX: c.RanByVx, DurationMs: c.DurationMs})
 	}
 	if out.IsEmpty() {
 		return nil, nil
@@ -106,6 +106,7 @@ func changesetPB(h hash.Hash, cs *object.Changeset, effort string, files []store
 		},
 		Intent: cs.Intent, DependsOn: cs.DependsOn, Evidence: evidencePB(cs.Evidence),
 		CreatedAt: ts(cs.CreatedAt), Effort: effort,
+		SnapshotTree: cs.SnapshotTree.String(), Merged: cs.Merged(),
 	}
 	for _, p := range cs.Parents {
 		out.Parents = append(out.Parents, p.String())

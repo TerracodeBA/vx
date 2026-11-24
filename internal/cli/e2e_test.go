@@ -153,7 +153,7 @@ func TestTwoAgentsCollaborate(t *testing.T) {
 		t.Fatalf("B should see the effort moved: %q", out)
 	}
 	out = b.must("land")
-	if !strings.Contains(out, "merged onto it") {
+	if !strings.Contains(out, "merged your changes onto theirs") {
 		t.Fatalf("B land should rebase: %q", out)
 	}
 	if b.read("auth.go") == "" {
@@ -229,5 +229,90 @@ func TestTwoAgentsCollaborate(t *testing.T) {
 	}
 	if out := a.must("show", log.Changesets[0].ChangeID); !strings.Contains(out, "agent:alice/tests for user:alice") {
 		t.Fatalf("show = %q", out)
+	}
+}
+
+func TestVerifiedLandAndHonestEvidence(t *testing.T) {
+	h, aliceToken := newHarness(t)
+	work := t.TempDir()
+	alice := h.user("alice", aliceToken, work)
+	alice.must("repo", "create", "svc")
+	alice.must("effort", "new", "Feature", "--repo", "svc")
+	a := h.user("a", aliceToken, work)
+	b := h.user("b", aliceToken, work)
+	a.must("clone", "svc", "feature", "a")
+	b.must("clone", "svc", "feature", "b")
+	a.dir, b.dir = filepath.Join(work, "a"), filepath.Join(work, "b")
+
+	// A lands first.
+	a.must("new", "Add one")
+	a.write("one.txt", "1\n")
+	a.must("land")
+
+	// B's plain land is merged by the server: the evidence is marked.
+	b.must("new", "Add two")
+	b.write("two.txt", "2\n")
+	out := b.must("land", "--check", "unit=pass:3")
+	if !strings.Contains(out, "evidence was gathered before that merge") {
+		t.Fatalf("land output should flag the merge: %s", out)
+	}
+	show := b.must("show", "--repo", "svc", strings.Fields(out)[1])
+	if !strings.Contains(show, "merged onto newer work") || !strings.Contains(show, "check unit: pass (reported, 3 passed, 0 failed)") {
+		t.Fatalf("show = %s", show)
+	}
+
+	// --require-up-to-date refuses to merge.
+	a.must("new", "Add three")
+	a.write("three.txt", "3\n")
+	b.must("sync")
+	b.must("new", "Add four")
+	b.write("four.txt", "4\n")
+	a.must("land")
+	if out, code := b.run("land", "--require-up-to-date"); code != cli.ExitConflict || !strings.Contains(out, "moved on") {
+		t.Fatalf("require-up-to-date: %d %s", code, out)
+	}
+
+	// --run syncs first, runs the check on the merged files, lands unmerged.
+	out = b.must("land", "--run", "test -f three.txt && test -f four.txt")
+	if !strings.Contains(out, "syncing before running checks") || !strings.Contains(out, "pass test -f three.txt") || strings.Contains(out, "merged your changes") {
+		t.Fatalf("verified land = %s", out)
+	}
+	logOut := b.must("log", "-n", "1")
+	if !strings.Contains(logOut, "run by vx") || strings.Contains(logOut, "merged onto newer work") {
+		t.Fatalf("log = %s", logOut)
+	}
+	// A failing --run check stops the land.
+	b.must("new", "Broken")
+	b.write("five.txt", "5\n")
+	if out, code := b.run("land", "--run", "exit 3"); code == 0 || !strings.Contains(out, "checks failed") {
+		t.Fatalf("failing check should stop land: %d %s", code, out)
+	}
+
+	// Change-id prefixes resolve.
+	var lj struct {
+		Changesets []struct {
+			ChangeID string `json:"change_id"`
+		}
+	}
+	if err := json.Unmarshal([]byte(a.must("log", "--json")), &lj); err != nil {
+		t.Fatal(err)
+	}
+	if out := a.must("show", lj.Changesets[0].ChangeID[:4]); !strings.Contains(out, lj.Changesets[0].ChangeID) {
+		t.Fatalf("prefix show = %s", out)
+	}
+
+	// vx wait returns once someone lands.
+	a.must("sync")
+	done := make(chan string, 1)
+	go func() {
+		out, _ := a.run("wait", "--timeout", "20s", "--interval", "50ms")
+		done <- out
+	}()
+	b.must("land", "-m", "Add five")
+	if out := <-done; !strings.Contains(out, "Add five") {
+		t.Fatalf("wait = %s", out)
+	}
+	if out := a.must("status"); !strings.Contains(out, "Recently landed") {
+		t.Fatalf("status = %s", out)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -13,7 +12,6 @@ import (
 
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/internal/client"
-	"github.com/TerracodeBA/vx/internal/engine"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
@@ -86,7 +84,13 @@ func (a *App) newCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "new INTENT",
 		Short: "Open a workspace for one task in the current effort",
-		Args:  cobra.ExactArgs(1),
+		Long: `Open a workspace: one task, described by its intent, that ends in one land.
+Other agents see your intent in vx status while you work. The intent
+becomes the change's description and, when shipped, its commit message.
+
+Keep tasks small and land often: vx land closes the workspace, so run
+vx new again for the next task.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -196,6 +200,15 @@ func (a *App) statusCmd() *cobra.Command {
 						}
 					}
 					out["others"] = others
+					if log, err := c.Efforts.Log(ctx, connect.NewRequest(&vxv1.LogRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort, Limit: 3})); err == nil && len(log.Msg.Changesets) > 0 {
+						a.printf("\nRecently landed:\n")
+						var recent []map[string]string
+						for _, cs := range log.Msg.Changesets {
+							a.printf("  %s %s  %-44s %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), cs.Author.Principal)
+							recent = append(recent, map[string]string{"hash": cs.Hash, "change_id": cs.ChangeId, "intent": cs.Intent, "author": cs.Author.Principal})
+						}
+						out["recent"] = recent
+					}
 				}
 			}
 			var files []map[string]string
@@ -209,6 +222,16 @@ func (a *App) statusCmd() *cobra.Command {
 				files = append(files, map[string]string{"op": string(ch.Op), "path": ch.Path})
 			}
 			out["changes"] = files
+			marked, err := filesWithMarkers(ctx, wc, changes)
+			if err != nil {
+				return err
+			}
+			if len(marked) > 0 {
+				a.printf("\nUnresolved conflict markers in: %s\nvx land will refuse these files until the markers are gone.\n", strings.Join(marked, ", "))
+			} else if len(changes) > 0 {
+				a.printf("\nNo conflict markers; ready to land.\n")
+			}
+			out["conflict_markers"] = marked
 			a.emit(out)
 			return nil
 		},
@@ -283,271 +306,6 @@ func filterPaths(changes []object.Change, paths []string) []object.Change {
 	return out
 }
 
-// ---------- land ----------
-
-func (a *App) landCmd() *cobra.Command {
-	var intent, model, session string
-	var checks, dependsOn, newTests []string
-	var allowMarkers bool
-	cmd := &cobra.Command{
-		Use:   "land",
-		Short: "Land your changes into the effort",
-		Long: `Land the working copy's changes into the effort.
-
-If others landed in the meantime, the server merges your changes onto
-theirs. Only real conflicts stop the land; then run vx sync, fix the
-conflicting files and land again.
-
-Record what you checked, so reviewers see the evidence:
-  vx land --check "go test ./...=pass:142"`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			c, wc, err := a.clientAndCopy()
-			if err != nil {
-				return err
-			}
-			ctx := ctxOf(cmd)
-			if wc.Config.Workspace == "" {
-				if intent == "" {
-					return errors.New("no workspace open: run `vx new \"INTENT\"` first, or pass --intent")
-				}
-				if _, err := a.openWorkspace(ctx, c, wc, intent); err != nil {
-					return err
-				}
-			}
-			evidence, err := parseChecks(checks, newTests)
-			if err != nil {
-				return err
-			}
-			tree, changes, err := wc.Snapshot(ctx)
-			if err != nil {
-				return err
-			}
-			if len(changes) == 0 {
-				return errors.New("nothing to land: no local changes")
-			}
-			if !allowMarkers {
-				for _, ch := range changes {
-					if ch.Op == object.OpDelete {
-						continue
-					}
-					data, err := wc.ReadBlob(ctx, ch.New.Hash)
-					if err != nil {
-						return err
-					}
-					if workcopy.HasConflictMarkers(data) {
-						return fmt.Errorf("%s still has conflict markers; resolve them or pass --allow-markers", ch.Path)
-					}
-				}
-			}
-			trees, blobs, err := object.NewObjects(ctx, wc.Objects, wc.Config.BaseTreeHash(), tree)
-			if err != nil {
-				return err
-			}
-			if _, err := c.Upload(ctx, wc.Objects, append(trees, blobs...)); err != nil {
-				return fmt.Errorf("upload: %w", err)
-			}
-			if model == "" {
-				model = a.Getenv("VX_MODEL")
-			}
-			if session == "" {
-				session = a.Getenv("VX_SESSION")
-			}
-			resp, err := c.Workspaces.Land(ctx, connect.NewRequest(&vxv1.LandRequest{
-				WorkspaceId: wc.Config.Workspace, Base: wc.Config.Base, Tree: tree.String(),
-				Intent: intent, Evidence: evidence, DependsOn: dependsOn, Model: model, Session: session,
-			}))
-			if err != nil {
-				return err
-			}
-			r := resp.Msg
-			if !r.Landed {
-				a.printf("Not landed: your changes conflict with changes already in the effort (now at %s).\n\n", short(r.EffortHead))
-				for _, cf := range r.Conflicts {
-					a.printf("  %-14s %s %s\n", cf.Kind, cf.Path, cf.Detail)
-				}
-				a.printf("\nRun `vx sync` to bring in those changes and mark the conflicts, fix them, then `vx land` again.\n")
-				a.emit(r)
-				return errConflict
-			}
-			// Bring the working copy to the new effort head: our snapshot
-			// plus whatever the merge brought in from others.
-			cs := r.Changeset
-			newTree, err := hash.Parse(cs.Tree)
-			if err != nil {
-				return err
-			}
-			if err := c.FetchTree(ctx, wc.Objects, newTree); err != nil {
-				return err
-			}
-			incoming, err := object.DiffTrees(ctx, wc.Objects, tree, newTree)
-			if err != nil {
-				return err
-			}
-			if err := wc.Apply(ctx, incoming); err != nil {
-				return err
-			}
-			wc.Config.Base, wc.Config.BaseTree = cs.Hash, cs.Tree
-			wc.Config.Workspace, wc.Config.Intent, wc.Config.ChangeID = "", "", ""
-			if err := wc.Save(); err != nil {
-				return err
-			}
-			var added, deleted int32
-			for _, f := range cs.Files {
-				added += f.Added
-				deleted += f.Deleted
-			}
-			a.printf("Landed %s (%s): %s\n  %d file(s), +%d -%d\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), len(cs.Files), added, deleted)
-			if r.Rebased {
-				a.printf("  The effort had moved; your changes were merged onto it")
-				if len(r.AutoMerged) > 0 {
-					a.printf(" (merged line by line: %s)", strings.Join(r.AutoMerged, ", "))
-				}
-				a.printf(".\n")
-			}
-			if len(incoming) > 0 {
-				a.printf("  Updated %d file(s) here with others' changes.\n", len(incoming))
-			}
-			a.emit(r)
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&intent, "intent", "m", "", "what this change does (default: the workspace intent)")
-	cmd.Flags().StringArrayVar(&checks, "check", nil, `evidence, as "NAME=pass|fail[:PASSED[:FAILED]]" (repeatable)`)
-	cmd.Flags().StringArrayVar(&newTests, "new-test", nil, "name of a test this change adds (repeatable)")
-	cmd.Flags().StringArrayVar(&dependsOn, "depends-on", nil, "symbol this change relies on, e.g. auth.Login (repeatable)")
-	cmd.Flags().StringVar(&model, "model", "", "model that wrote the change (default: VX_MODEL)")
-	cmd.Flags().StringVar(&session, "session", "", "agent session id (default: VX_SESSION)")
-	cmd.Flags().BoolVar(&allowMarkers, "allow-markers", false, "land even if files contain conflict markers")
-	return cmd
-}
-
-func parseChecks(checks, newTests []string) (*vxv1.Evidence, error) {
-	if len(checks) == 0 && len(newTests) == 0 {
-		return nil, nil
-	}
-	ev := &vxv1.Evidence{NewTests: newTests}
-	for _, s := range checks {
-		name, rest, ok := strings.Cut(s, "=")
-		if !ok || strings.TrimSpace(name) == "" {
-			return nil, fmt.Errorf("check %q: use NAME=pass or NAME=fail:PASSED:FAILED", s)
-		}
-		parts := strings.Split(rest, ":")
-		ch := &vxv1.Check{Name: strings.TrimSpace(name), Result: parts[0]}
-		if ch.Result != "pass" && ch.Result != "fail" {
-			return nil, fmt.Errorf("check %q: result must be pass or fail", s)
-		}
-		for i, dst := range []*int32{&ch.Passed, &ch.Failed} {
-			if len(parts) > i+1 {
-				n, err := strconv.Atoi(parts[i+1])
-				if err != nil {
-					return nil, fmt.Errorf("check %q: %v", s, err)
-				}
-				*dst = int32(n)
-			}
-		}
-		ev.Checks = append(ev.Checks, ch)
-	}
-	return ev, nil
-}
-
-// ---------- sync ----------
-
-func (a *App) syncCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "sync",
-		Short: "Bring in changes others landed, keeping your local edits",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			c, wc, err := a.clientAndCopy()
-			if err != nil {
-				return err
-			}
-			ctx := ctxOf(cmd)
-			eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
-			if err != nil {
-				return err
-			}
-			head := eff.Msg.Effort.Head
-			if head == wc.Config.Base {
-				a.printf("Up to date at %s.\n", short(head))
-				a.emit(map[string]any{"up_to_date": true, "base": head})
-				return nil
-			}
-			cs, err := c.Efforts.GetChangeset(ctx, connect.NewRequest(&vxv1.GetChangesetRequest{Repo: wc.Config.Repo, Ref: head}))
-			if err != nil {
-				return err
-			}
-			theirs, err := hash.Parse(cs.Msg.Changeset.Tree)
-			if err != nil {
-				return err
-			}
-			if err := c.FetchTree(ctx, wc.Objects, theirs); err != nil {
-				return err
-			}
-			ours, local, err := wc.Snapshot(ctx)
-			if err != nil {
-				return err
-			}
-			result := theirs
-			var conflicts []engine.Conflict
-			if len(local) > 0 {
-				mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, wc.Config.BaseTreeHash(), ours, theirs, merge.Labels{
-					Base: "base " + short(wc.Config.Base), Ours: "local", Theirs: "effort " + short(head),
-				})
-				if err != nil {
-					return err
-				}
-				result, conflicts = mr.Tree, mr.Conflicts
-			}
-			incoming, err := object.DiffTrees(ctx, wc.Objects, ours, result)
-			if err != nil {
-				return err
-			}
-			if err := wc.Apply(ctx, incoming); err != nil {
-				return err
-			}
-			wc.Config.Base, wc.Config.BaseTree = head, theirs.String()
-			if wc.Config.Workspace != "" {
-				if _, err := c.Workspaces.SetBase(ctx, connect.NewRequest(&vxv1.SetBaseRequest{Id: wc.Config.Workspace, Base: head})); err != nil {
-					return err
-				}
-			}
-			if err := wc.Save(); err != nil {
-				return err
-			}
-			a.printf("Synced to %s: %d file(s) updated", short(head), len(incoming))
-			if len(local) > 0 {
-				a.printf(", your %d local change(s) kept", len(local))
-			}
-			a.printf(".\n")
-			var cj []map[string]string
-			for _, cf := range conflicts {
-				cj = append(cj, map[string]string{"path": cf.Path, "kind": string(cf.Kind), "detail": cf.Detail})
-			}
-			out := map[string]any{"base": head, "updated": len(incoming), "local_changes": len(local), "conflicts": cj}
-			if len(conflicts) > 0 {
-				a.printf("\nConflicts to resolve:\n")
-				for _, cf := range conflicts {
-					hint := "edit the file and remove the markers"
-					switch cf.Kind {
-					case engine.ConflictModifyDelete:
-						hint = "the effort deleted it; your version is kept, delete it if that is right"
-					case engine.ConflictDeleteModify:
-						hint = "you deleted it but the effort changed it; their version is back, delete it again if that is right"
-					case engine.ConflictBinary, engine.ConflictMode:
-						hint = "your version is kept"
-					}
-					a.printf("  %-14s %s (%s)\n", cf.Kind, cf.Path, hint)
-				}
-				a.printf("\nThen run `vx land`.\n")
-				a.emit(out)
-				return errConflict
-			}
-			a.emit(out)
-			return nil
-		},
-	}
-}
-
 // ---------- abandon ----------
 
 func (a *App) abandonCmd() *cobra.Command {
@@ -610,15 +368,7 @@ func (a *App) logCmd() *cobra.Command {
 					who += ", " + cs.Author.Model
 				}
 				a.printf("    %s, %s\n", who, cs.CreatedAt)
-				if cs.Evidence != nil {
-					for _, ch := range cs.Evidence.Checks {
-						a.printf("    check %s: %s", ch.Name, ch.Result)
-						if ch.Passed > 0 || ch.Failed > 0 {
-							a.printf(" (%d passed, %d failed)", ch.Passed, ch.Failed)
-						}
-						a.printf("\n")
-					}
-				}
+				a.printDetails(cs, "    ")
 				for _, f := range cs.Files {
 					a.printf("    %s %-48s +%d -%d\n", opLetter(object.Op(f.Op)), f.Path, f.Added, f.Deleted)
 				}
@@ -669,6 +419,10 @@ func (a *App) showCmd() *cobra.Command {
 				a.printf(" (%s)", cs.Author.Model)
 			}
 			a.printf("\ndate   %s\n\n    %s\n\n", cs.CreatedAt, strings.ReplaceAll(strings.TrimSpace(cs.Intent), "\n", "\n    "))
+			a.printDetails(cs, "")
+			if len(cs.Files) > 0 {
+				a.printf("\n")
+			}
 			for _, f := range cs.Files {
 				a.printf("  %s %-48s +%d -%d\n", opLetter(object.Op(f.Op)), f.Path, f.Added, f.Deleted)
 			}
@@ -678,4 +432,31 @@ func (a *App) showCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&repoFlag, "repo", "", "repository")
 	return cmd
+}
+
+// printDetails prints a change's evidence, new tests, dependencies and
+// whether the server merged it onto newer work.
+func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
+	if cs.Merged {
+		a.printf("%smerged onto newer work by the server; evidence below was gathered before the merge\n", indent)
+	}
+	if ev := cs.Evidence; ev != nil {
+		for _, ch := range ev.Checks {
+			how := "reported"
+			if ch.RanByVx {
+				how = fmt.Sprintf("run by vx, %.1fs", float64(ch.DurationMs)/1000)
+			}
+			a.printf("%scheck %s: %s (%s", indent, ch.Name, ch.Result, how)
+			if ch.Passed > 0 || ch.Failed > 0 {
+				a.printf(", %d passed, %d failed", ch.Passed, ch.Failed)
+			}
+			a.printf(")\n")
+		}
+		if len(ev.NewTests) > 0 {
+			a.printf("%snew tests: %s\n", indent, strings.Join(ev.NewTests, ", "))
+		}
+	}
+	if len(cs.DependsOn) > 0 {
+		a.printf("%sdepends on: %s\n", indent, strings.Join(cs.DependsOn, ", "))
+	}
 }

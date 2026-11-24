@@ -326,14 +326,14 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 	}
 	res, err := h.svc.Land(ctx, actorFrom(ctx), service.LandInput{
 		WorkspaceID: id, Base: base, Tree: tree, Intent: m.Intent, Evidence: ev,
-		DependsOn: m.DependsOn, Model: m.Model, Session: m.Session,
+		DependsOn: m.DependsOn, Model: m.Model, Session: m.Session, RequireUpToDate: m.RequireUpToDate,
 	})
 	if err != nil {
 		return nil, toConnect(err)
 	}
 	out := &vxv1.LandResponse{
 		Landed: res.Landed, Rebased: res.Rebased, AutoMerged: res.AutoMerged,
-		Conflicts: conflictsPB(res.Conflicts), EffortHead: res.EffortHead.String(),
+		Conflicts: conflictsPB(res.Conflicts), EffortHead: res.EffortHead.String(), EffortMoved: res.EffortMoved,
 	}
 	if res.Landed {
 		effort := ""

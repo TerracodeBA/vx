@@ -239,7 +239,11 @@ func commitMessage(slug string, c *object.Changeset) string {
 	}
 	if c.Evidence != nil {
 		for _, ch := range c.Evidence.Checks {
-			fmt.Fprintf(&b, "Vx-Evidence: %s\n", checkText(ch))
+			text := checkText(ch)
+			if c.Merged() {
+				text += ", before merge"
+			}
+			fmt.Fprintf(&b, "Vx-Evidence: %s\n", text)
 		}
 	}
 	return b.String()
@@ -247,10 +251,16 @@ func commitMessage(slug string, c *object.Changeset) string {
 
 func checkText(ch object.Check) string {
 	s := ch.Name + " " + ch.Result
+	var notes []string
 	if ch.Passed > 0 || ch.Failed > 0 {
-		s += fmt.Sprintf(" (%d passed, %d failed)", ch.Passed, ch.Failed)
+		notes = append(notes, fmt.Sprintf("%d passed, %d failed", ch.Passed, ch.Failed))
 	}
-	return s
+	if ch.RanByVX {
+		notes = append(notes, "run by vx")
+	} else {
+		notes = append(notes, "reported")
+	}
+	return s + " (" + strings.Join(notes, ", ") + ")"
 }
 
 // prBody describes the effort for reviewers: goal, changes, evidence and
@@ -275,7 +285,11 @@ func prBody(p ShipPlan) string {
 		fmt.Fprintf(&b, "- %s (`%s`, %s)\n", c.Title(), c.ChangeID, who)
 		if c.Evidence != nil {
 			for _, ch := range c.Evidence.Checks {
-				checks = append(checks, fmt.Sprintf("- `%s`: %s", c.ChangeID, checkText(ch)))
+				line := fmt.Sprintf("- `%s`: %s", c.ChangeID, checkText(ch))
+				if c.Merged() {
+					line += " on the author's snapshot, before vx merged it onto newer work"
+				}
+				checks = append(checks, line)
 			}
 		}
 	}

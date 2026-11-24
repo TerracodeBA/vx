@@ -152,7 +152,7 @@ func TestShipToGitHub(t *testing.T) {
 		t.Fatalf("shipment = %+v, pr = %+v", res.Shipment, res.PR)
 	}
 	body := gh.bodies[41]
-	for _, want := range []string{"Limit login attempts per IP.", "Add rate limit middleware", "agent:alice/backend for user:alice", "go test ./... pass (12 passed, 0 failed)"} {
+	for _, want := range []string{"Limit login attempts per IP.", "Add rate limit middleware", "agent:alice/backend for user:alice", "go test ./... pass (12 passed, 0 failed, reported)"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("PR body missing %q:\n%s", want, body)
 		}

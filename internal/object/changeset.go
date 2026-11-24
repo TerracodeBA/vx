@@ -35,6 +35,10 @@ type Check struct {
 	Result string `json:"result"` // "pass" or "fail"
 	Passed int    `json:"passed,omitempty"`
 	Failed int    `json:"failed,omitempty"`
+	// RanByVX is true when vx ran the command itself (vx land --run),
+	// false when the author reported the result (vx land --check).
+	RanByVX    bool  `json:"ran_by_vx,omitempty"`
+	DurationMs int64 `json:"duration_ms,omitempty"`
 }
 
 // Evidence is what an author offers as proof that a change works.
@@ -61,7 +65,15 @@ type Changeset struct {
 	DependsOn []string    `json:"depends_on,omitempty"`
 	Evidence  *Evidence   `json:"evidence,omitempty"`
 	CreatedAt time.Time   `json:"created_at"`
+	// SnapshotTree is the tree the author actually had, set when the server
+	// merged it onto newer work so Tree differs. Evidence describes this
+	// tree, not Tree.
+	SnapshotTree hash.Hash `json:"snapshot_tree,omitempty"`
 }
+
+// Merged reports whether the server merged the author's snapshot onto newer
+// work, so the evidence was gathered on a different tree than the one landed.
+func (c *Changeset) Merged() bool { return !c.SnapshotTree.IsZero() && c.SnapshotTree != c.Tree }
 
 // CurrentVersion is the changeset encoding version.
 const CurrentVersion = 1

@@ -89,7 +89,7 @@ Start here:
 		a.loginCmd(), a.whoamiCmd(), a.agentCmd(),
 		a.repoCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
-		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(),
+		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(),
 	)
 	return root
 }

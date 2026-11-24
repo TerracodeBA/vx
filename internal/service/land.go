@@ -26,6 +26,8 @@ type LandInput struct {
 	DependsOn   []string
 	Model       string
 	Session     string
+	// RequireUpToDate refuses to merge onto newer work.
+	RequireUpToDate bool
 }
 
 // LandResult is the outcome of Land.
@@ -37,6 +39,8 @@ type LandResult struct {
 	AutoMerged []string          // paths changed on both sides that merged cleanly
 	Conflicts  []engine.Conflict // set when Landed is false
 	EffortHead hash.Hash
+	// EffortMoved is set when RequireUpToDate refused the land.
+	EffortMoved bool
 }
 
 // ErrNothingToLand is returned when a snapshot has no changes.
@@ -106,6 +110,10 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 	res := LandResult{EffortHead: eff.Head}
 
 	newTree := in.Tree
+	if eff.Head != base.Hash && in.RequireUpToDate {
+		res.EffortMoved = true
+		return res, nil
+	}
 	if eff.Head != base.Hash {
 		mr, err := engine.MergeTrees(ctx, s.Blobs, base.Tree, in.Tree, head.Tree, merge.Labels{
 			Base:   "base " + base.Hash.Short(),
@@ -154,6 +162,9 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		DependsOn: in.DependsOn,
 		Evidence:  in.Evidence,
 		CreatedAt: s.Now(),
+	}
+	if newTree != in.Tree {
+		cs.SnapshotTree = in.Tree
 	}
 
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
