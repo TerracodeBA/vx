@@ -1,0 +1,6 @@
+/bin/
+/dist/
+/.vxdata/
+*.test
+*.out
+.env
