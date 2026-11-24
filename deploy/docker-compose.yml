@@ -1,0 +1,42 @@
+# Run vx with its database:
+#   cd deploy && docker compose up -d
+#   docker compose exec vx vx-server user-add you --name "Your Name" --email you@example.com
+# Then open http://localhost:7070 and sign in with the printed token.
+#
+# Optional, for GitHub repos: put VX_GITHUB_TOKEN=... in a .env file next to
+# this one (a fine-grained token with Contents and Pull requests read/write).
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vx}
+      POSTGRES_DB: vx
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vx"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  vx:
+    image: ghcr.io/terracodeba/vx:${VX_VERSION:-latest}
+    build:
+      context: ..
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VX_DATABASE_URL: postgres://vx:${POSTGRES_PASSWORD:-vx}@postgres:5432/vx?sslmode=disable
+      VX_GITHUB_TOKEN: ${VX_GITHUB_TOKEN:-}
+    ports:
+      - "127.0.0.1:7070:7070"
+    volumes:
+      - data:/data
+
+volumes:
+  pg:
+  data:

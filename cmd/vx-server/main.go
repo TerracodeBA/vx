@@ -17,6 +17,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/server"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
+	"github.com/TerracodeBA/vx/internal/version"
 )
 
 func env(key, def string) string {
@@ -52,6 +53,7 @@ func root() *cobra.Command {
 		Short: "Run the server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+			log.Info("starting vx-server", "version", version.String())
 			srv, err := server.New(cmd.Context(), server.Config{
 				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream,
 			})
@@ -129,7 +131,12 @@ func root() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(serve, migrate, userAdd, tokenCreate)
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print the vx-server version",
+		Run:   func(*cobra.Command, []string) { fmt.Println("vx-server " + version.String()) },
+	}
+	cmd.AddCommand(serve, migrate, userAdd, tokenCreate, versionCmd)
 	return cmd
 }
 
@@ -150,4 +157,3 @@ func upstream(st *store.Store, blobs blob.Store, dataDir string) (service.Upstre
 	token := func() string { return os.Getenv("VX_GITHUB_TOKEN") }
 	return gitbridge.New(st, blobs, filepath.Join(dataDir, "git"), token), nil
 }
-

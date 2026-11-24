@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,11 +75,17 @@ func (a *App) whoamiCmd() *cobra.Command {
 
 func (a *App) agentCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "agent", Short: "Manage agents that act for you"}
-	var display string
+	var display, envFile string
 	add := &cobra.Command{
 		Use:   "add NAME",
-		Short: "Create an agent and print its token",
-		Args:  cobra.ExactArgs(1),
+		Short: "Create an agent that acts for you",
+		Long: `Create an agent identity that acts for you, with its own token.
+
+With --env-file, the token is written to a private file (mode 600) instead
+of being printed, together with the server address and a separate config
+path. An agent then only needs:
+  source FILE && vx clone REPO EFFORT DIR`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -88,6 +95,19 @@ func (a *App) agentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if envFile != "" {
+				path := envFile
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(a.dir(), path)
+				}
+				if err := writeAgentEnv(path, a.settings().Server, resp.Msg.Token); err != nil {
+					return err
+				}
+				a.printf("Created %s, acting for %s.\nIts environment is in %s (mode 600). Use it with:\n  source %s\n",
+					resp.Msg.Agent.Ref, resp.Msg.Agent.OnBehalfOf, path, path)
+				a.emit(map[string]any{"agent": resp.Msg.Agent, "env_file": path})
+				return nil
+			}
 			a.printf("Created %s, acting for %s.\n\nToken (shown once):\n  %s\n\nGive it to the agent as:\n  export VX_TOKEN=%s\n",
 				resp.Msg.Agent.Ref, resp.Msg.Agent.OnBehalfOf, resp.Msg.Token, resp.Msg.Token)
 			a.emit(resp.Msg)
@@ -95,6 +115,7 @@ func (a *App) agentCmd() *cobra.Command {
 		},
 	}
 	add.Flags().StringVar(&display, "display-name", "", "name shown in logs and PRs")
+	add.Flags().StringVar(&envFile, "env-file", "", "write the agent's environment (server, token) to this file instead of printing the token")
 	cmd.AddCommand(add)
 	return cmd
 }
@@ -218,4 +239,26 @@ func currentGitBranch(dir string) string {
 		return ""
 	}
 	return strings.TrimPrefix(head.Name().String(), "refs/heads/")
+}
+
+// writeAgentEnv writes a shell environment file for an agent, readable only
+// by the owner, with its own vx config path next to it.
+func writeAgentEnv(path, server, token string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	config := strings.TrimSuffix(path, filepath.Ext(path)) + ".config.json"
+	body := fmt.Sprintf("# vx agent environment. Keep this file private.\nexport VX_SERVER=%q\nexport VX_TOKEN=%q\nexport VX_CONFIG=%q\n", server, token, config)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%s already exists; choose another path or remove it", path)
+		}
+		return err
+	}
+	if _, err := f.WriteString(body); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

@@ -974,7 +974,7 @@ func restLines(s string) string {
 	return strings.TrimSpace(r)
 }
 
-// principalName shows "admir/limiter" for "agent:admir/limiter".
+// principalName shows "alice/backend" for "agent:alice/backend".
 func principalName(ref string) string {
 	if _, rest, ok := strings.Cut(ref, ":"); ok {
 		return rest

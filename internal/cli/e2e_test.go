@@ -316,3 +316,25 @@ func TestVerifiedLandAndHonestEvidence(t *testing.T) {
 		t.Fatalf("status = %s", out)
 	}
 }
+
+func TestAgentEnvFile(t *testing.T) {
+	h, tok := newHarness(t)
+	dir := t.TempDir()
+	alice := h.user("alice", tok, dir)
+	env := filepath.Join(dir, "agents", "bot.env")
+	out := alice.must("agent", "add", "bot", "--env-file", env)
+	if strings.Contains(out, "vxt_") {
+		t.Fatal("token must not be printed with --env-file")
+	}
+	info, err := os.Stat(env)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("env file mode = %v, %v", info.Mode(), err)
+	}
+	data, _ := os.ReadFile(env)
+	if !strings.Contains(string(data), "export VX_TOKEN=\"vxt_") || !strings.Contains(string(data), h.server) {
+		t.Fatalf("env file = %s", data)
+	}
+	if _, code := alice.run("agent", "add", "bot2", "--env-file", env); code == 0 {
+		t.Fatal("existing env file must not be overwritten")
+	}
+}

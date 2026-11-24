@@ -1,0 +1,14 @@
+{
+  "name": "vx",
+  "description": "Claude Code plugin for vx: set up the workbench, work in efforts as an agent, run several agents at once, deploy for a team.",
+  "owner": { "name": "TerracodeBA", "url": "https://github.com/TerracodeBA" },
+  "plugins": [
+    {
+      "name": "vx",
+      "source": "./plugins/vx",
+      "description": "Set up vx, work in vx efforts, run multi-agent efforts and deploy vx for a team.",
+      "category": "development",
+      "tags": ["version-control", "multi-agent", "git", "github"]
+    }
+  ]
+}

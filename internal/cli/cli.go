@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/TerracodeBA/vx/internal/client"
+	"github.com/TerracodeBA/vx/internal/version"
 	"github.com/TerracodeBA/vx/internal/workcopy"
 )
 
@@ -90,6 +91,14 @@ Start here:
 		a.repoCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(),
+		&cobra.Command{
+			Use:   "version",
+			Short: "Print the vx version",
+			Run: func(cmd *cobra.Command, _ []string) {
+				a.printf("vx %s\n", version.String())
+				a.emit(map[string]string{"version": version.Version, "build": version.String()})
+			},
+		},
 	)
 	return root
 }

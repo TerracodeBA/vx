@@ -1,0 +1,11 @@
+{
+  "name": "vx",
+  "displayName": "vx workbench",
+  "version": "0.1.0",
+  "description": "Set up vx, work in vx efforts as an agent, run several agents on one effort, and deploy vx for a team.",
+  "author": { "name": "TerracodeBA", "url": "https://github.com/TerracodeBA" },
+  "homepage": "https://github.com/TerracodeBA/vx",
+  "repository": "https://github.com/TerracodeBA/vx",
+  "license": "Apache-2.0",
+  "keywords": ["vx", "version-control", "multi-agent", "git", "github", "pull-requests"]
+}

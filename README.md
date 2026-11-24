@@ -1,150 +1,129 @@
-# vx
+<p align="center"><img src="docs/images/vx-icon.png" width="96" alt="vx"></p>
 
-A workbench where agents from many people build together before the code goes to git.
+<h1 align="center">vx</h1>
 
-Teams keep GitHub, GitLab or any git host as the place code officially lives. vx sits in front of it. Agents work in a shared **effort**, each in its own **workspace**, and land small changes into the effort. The server merges concurrent work automatically and only stops on real conflicts. When the work is ready, vx ships it to the git host as clean pull requests.
+<p align="center"><strong>A workbench where coding agents build together before the code goes to git.</strong></p>
 
-Design: [vx design draft](https://claude.ai/artifact/8AJCAZHN14rYS4uRgkauBL)
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://github.com/TerracodeBA/vx/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/TerracodeBA/vx/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Status: early" src="https://img.shields.io/badge/status-early-orange">
+</p>
 
-## Status
+---
 
-Phase 1 done. Phase 2 (shared context board, leases, MCP) is next.
+Coding agents are fast, but they work alone. Give three agents one feature and each opens its own branch; they find out about each other at review time, through merge conflicts and broken builds, and reviewers wade through every retry.
 
-| Step | What | State |
-|---|---|---|
-| 0 | Project setup, Postgres, migrations, CI | done |
-| 1 | Storage core: blobs, trees, changesets, BLAKE3, three-way merge | done |
-| 2 | Server and CLI: efforts, workspaces, land with compare-and-swap, sync | done |
-| 3 | Git import: follow any branch of a git or GitHub repo, chosen on the fly | done |
-| 4 | Shipping: replay onto the target, clean commits, `vx/` branch, pull request | done |
-| 5 | Three Claude Code agents build one feature through vx | done: [sandbox PR #1](https://github.com/TerracodeBA/vx-sandbox/pull/1) |
+**vx sits in front of git.** Agents, from one person or many, work in a shared **effort** and land small changes into it all day. The server merges concurrent work automatically and stops only on real conflicts. Every change records which agent made it, for whom, with which model and what evidence. When the work is ready, vx replays it onto the latest target branch as clean commits and opens a pull request on GitHub or any git host. Git stays the source of truth; vx never pushes to `main` and never merges.
 
-## Quick start
-
-```sh
-make db                                   # Postgres in Docker on 127.0.0.1:54329
-make build                                # bin/vx and bin/vx-server
-
-bin/vx-server user-add alice --name "Alice" --email alice@example.com
-bin/vx-server serve &                     # listens on 127.0.0.1:7070
-
-bin/vx login --server http://127.0.0.1:7070 --token <token from user-add>
-bin/vx repo create shop-api
-bin/vx effort new "Rate limiting" --repo shop-api
-bin/vx clone shop-api rate-limiting
-cd rate-limiting
-vx new "Add limiter middleware"
-# ...edit files...
-vx land --check "go test ./...=pass:142"
+```
+GitHub main ──import──▶ effort "Rate limiting" ◀── land ── agent A (alice)
+                              ▲                ◀── land ── agent B (alice)
+                              │                ◀── land ── agent C (bob)
+                              ▼
+                     vx ship open ──▶ vx/rate-limiting ──▶ pull request
 ```
 
-Give each agent its own identity, so every change records who made it and for whom:
+## Set it up by asking Claude
 
-```sh
-vx agent add backend          # prints a token for agent:alice/backend
-export VX_TOKEN=<that token>  # in the agent's environment
-export VX_MODEL=claude-opus-5-5
+vx ships a [Claude Code](https://claude.com/claude-code) plugin. Install it, then just ask.
+
+```
+/plugin marketplace add TerracodeBA/vx
+/plugin install vx@vx
 ```
 
-## Web UI
+On Claude Code 2.1.275 or later, one line does both:
 
-`vx-server` serves a web UI at its address, for example http://127.0.0.1:7070. Sign in with your token.
+```
+/plugin install vx --marketplace TerracodeBA/vx
+```
 
-- **Efforts:** every repository and effort, with who is working right now.
-- **Effort:** a live timeline of every land (agent, person, model, files, evidence, merged or not), the open workspaces, per-agent activity and shipments. It updates by itself as agents land.
-- **Change:** the full diff of one change with its provenance and evidence.
-- **Ship:** the commits that would go to the git host, the pull request description, and a button to push.
+Then, in any directory:
 
-## Connecting GitHub
+- *"Set up vx for me and connect my repo acme/shop-api."* (skill `vx:setup`)
+- *"Run three agents on vx to add rate limiting and an audit log to the login endpoint."* (skill `vx:team`)
+- *"Deploy vx on my server vx.example.com for my team."* (skill `vx:deploy`)
+
+Agents working inside a vx working copy pick up the `vx:work` skill: open a workspace, land with checks vx runs itself, sync, resolve conflicts.
+
+## Or set it up yourself
+
+You need Docker with the compose plugin.
+
+```sh
+git clone https://github.com/TerracodeBA/vx && cd vx/deploy
+docker compose up -d
+docker compose exec vx vx-server user-add alice --name "Alice"   # prints a token
+```
+
+Install the CLI from the [latest release](https://github.com/TerracodeBA/vx/releases) or with Go 1.26+:
+
+```sh
+go install github.com/TerracodeBA/vx/cmd/vx@latest
+vx login --server http://127.0.0.1:7070 --token <token>
+```
+
+Connect a repository, start an effort and work in it:
 
 ```sh
 vx repo create acme/shop-api --github acme/shop-api
-vx effort new "Rate limiting" --repo acme/shop-api            # starts on the default branch
-vx effort new "Hotfix" --repo acme/shop-api --from release/1.4 # any branch, imported on first use
+vx effort new "Rate limiting" --repo acme/shop-api --goal "Limit login attempts per IP"
+vx clone acme/shop-api rate-limiting && cd rate-limiting
+
+vx new "Add limiter middleware"
+# ...edit files...
+vx land --run "go test ./..."          # vx runs the check, then lands exactly what it checked
 ```
 
-The server talks to GitHub in one of two ways:
-
-- **With `VX_GITHUB_TOKEN`** set for `vx-server`: fetch and push over HTTPS, and pull requests are opened and updated through the API.
-- **Without a token**: fetch and push over SSH with the server user's SSH agent and `known_hosts`, exactly like `git`. `vx ship open` pushes the branch and prints the link where you open the pull request with one click.
-
-vx only ever pushes branches under `vx/`. It never pushes to `main` and never merges.
-
-## Shipping
+Give each agent its own identity, so every change says who made it and for whom:
 
 ```sh
-vx ship plan            # the commits this effort would ship, replayed onto the latest target
-vx ship open --draft    # push vx/<effort>, open or update the pull request
-vx ship list
+vx agent add backend --env-file ~/.vx-agents/backend.env
+source ~/.vx-agents/backend.env && vx clone acme/shop-api rate-limiting ~/work/backend
 ```
 
-Each landed change becomes one commit with its intent as the message and provenance in trailers:
+Open the web UI at http://127.0.0.1:7070 to watch agents land live, read every change as a GitHub-style diff, and ship.
 
-```
-Add rate limit middleware
+Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
-Vx-Change-Id: kxqr-7m2p
-Vx-Effort: rate-limiting
-Vx-Agent: agent:alice/backend
-Vx-On-Behalf-Of: user:alice
-Vx-Model: claude-opus-5-5
-Vx-Evidence: go test ./... pass (142 passed, 0 failed)
-```
+## What you get
 
-The commit author is the person the agent works for. If the target branch moved since the effort started, every change is merged onto its new head first, so the pull request is up to date with no extra step.
-
-## Commands
-
-| Command | What it does |
+| | |
 |---|---|
-| `vx login --server URL --token T` | Save server and token |
-| `vx whoami` | Show who the token belongs to |
-| `vx agent add NAME` | Create an agent that acts for you |
-| `vx repo create NAME [--github owner/repo \| --git URL]` | Register a repository |
-| `vx repo sync [--branch B]` | Import new upstream commits |
-| `vx effort new NAME [--from BRANCH]` | Start an effort on a branch |
-| `vx effort list` / `vx effort show` | Inspect efforts and who works in them |
-| `vx clone REPO EFFORT [DIR]` | Check out an effort |
-| `vx new INTENT` | Open a workspace for one task |
-| `vx status` / `vx diff` | Local changes, effort drift, others at work |
-| `vx land [--check NAME=pass:N]` | Land into the effort, merging onto others' work |
-| `vx sync` | Bring in others' changes, keeping your edits |
-| `vx abandon` | Close a workspace without landing |
-| `vx log [--files]` / `vx show REF` | History with intent, agent and evidence |
-| `vx ship plan` / `vx ship open [--draft] [--to BRANCH]` | Ship the effort as a pull request |
+| **Landing that never loses work** | Concurrent lands merge file by file, then line by line. The effort head moves with a compare-and-swap; a land that loses the race merges again and retries. |
+| **Honest evidence** | `vx land --run "go test ./..."` runs checks on exactly what lands. Changes the server merged are marked, so nobody mistakes pre-merge results for verified ones. |
+| **Provenance** | Each change records agent, person, model, session, intent and checks, and carries them into git as commit trailers. |
+| **Any branch, on the fly** | Efforts start from any branch; vx imports it on first use and follows it. |
+| **Clean pull requests** | `vx ship open` replays every landed change onto the latest target as one commit each and opens or updates the PR. |
+| **Built for agents** | Every command has `--json`, exit code 2 means conflicts, `vx wait` blocks until someone lands, and a Claude Code plugin teaches agents the workflow. |
+| **Web UI** | Live effort timeline, who is working on what, per-agent activity, GitHub-style unified and split diffs, shipping. |
 
-Every command accepts `--json` for agents. Exit code 2 means a land or sync stopped on conflicts.
+## How it works
 
-## How landing works
+| Step | What happens |
+|---|---|
+| Snapshot | The CLI scans the working copy (with `.gitignore` support and a stat cache) and stores files and trees content-addressed with BLAKE3 and zstd. Only objects the server lacks are uploaded. |
+| Land | If the effort has not moved since the workspace's base, the snapshot becomes the new head. Otherwise the server runs a three-way merge onto the current head and returns only real conflicts. |
+| Sync | `vx sync` merges others' work into your local files; overlapping edits get diff3-style markers. |
+| Import | The git bridge keeps a bare mirror per repo, fetches only branches in use (shallow at first) and maps git objects to vx objects, so re-syncs touch only what changed. |
+| Ship | Each landed change is replayed onto the latest target head, written as a git commit with provenance trailers, pushed to `vx/<effort>`, and the PR is opened or updated. |
 
-1. The CLI snapshots the working copy into trees and blobs (BLAKE3, zstd) and uploads only what the server lacks.
-2. If the effort has not moved since the workspace's base, the snapshot becomes the new head.
-3. If it has, the server runs a three-way merge of the snapshot onto the current head: file by file, then line by line. Only real conflicts are sent back.
-4. The effort head moves with a compare-and-swap on one Postgres row. A land that loses the race merges again and retries, so concurrent lands never lose work.
+More in [docs/architecture.md](docs/architecture.md).
 
-## Layout
+## Documentation
 
-```
-cmd/vx, cmd/vx-server   binaries
-proto/                  API definition (buf, connect-go)
-internal/hash           BLAKE3 object hashes
-internal/blob           content-addressed object store
-internal/object         trees, manifests, changesets
-internal/merge          line diff, unified diff, three-way text merge
-internal/engine         tree-level three-way merge
-internal/store          Postgres metadata and migrations
-internal/service        application logic (land, efforts, workspaces)
-internal/api            connect-go handlers
-internal/client         Go client with batched object transfer
-internal/workcopy       working copy: scan, stat index, apply
-internal/cli            the vx command line
-```
+- [Getting started](docs/getting-started.md): one person, one machine
+- [Working with agents](docs/agents.md): the workflow agents follow, evidence, conflicts
+- [Deploying for a team](docs/deploy.md): one shared server with HTTPS, users, backups
+- [Organizations](docs/organizations.md): what larger organizations need, and the roadmap
+- [Architecture](docs/architecture.md): data model, landing, the git bridge, shipping
+- [Contributing](CONTRIBUTING.md)
 
-## Development
+## Status
 
-```sh
-make test        # full suite with Postgres and the race detector
-make test-short  # without a database
-make generate    # after editing proto/
-make lint
-```
+vx is early. It works end to end (it was built and tested with three Claude Code agents landing into one effort on GitHub), and it is ready for individuals and small teams who trust each other. It is not yet ready for large organizations: see [docs/organizations.md](docs/organizations.md) for the gaps and the plan.
+
+## License
+
+[Apache-2.0](LICENSE)
