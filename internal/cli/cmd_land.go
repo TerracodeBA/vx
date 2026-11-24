@@ -295,6 +295,9 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if evidence != nil && len(evidence.NewTests) > 0 {
 		a.printf("New tests: %s\n", strings.Join(evidence.NewTests, ", "))
 	}
+	if notesDropped(evidence, cs.Evidence) {
+		a.printf("Warning: the server did not record the check notes (it may run an older vx); the landed evidence lacks them.\n")
+	}
 	a.printWarnings(r.Warnings)
 	a.emit(r)
 	return nil

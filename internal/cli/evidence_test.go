@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
+)
 
 func TestGoTestCache(t *testing.T) {
 	for _, tc := range []struct {
@@ -54,5 +58,15 @@ func TestTestFuncRe(t *testing.T) {
 	}
 	if len(names) != 3 || names[0] != "TestA" || names[1] != "TestB" || names[2] != "FuzzC" {
 		t.Fatalf("test funcs = %v", names)
+	}
+}
+
+func TestNotesDropped(t *testing.T) {
+	sent := &vxv1.Evidence{Checks: []*vxv1.Check{{Name: "go test ./...", Notes: "1 of 2 packages from the Go test cache"}}}
+	if !notesDropped(sent, &vxv1.Evidence{Checks: []*vxv1.Check{{Name: "go test ./..."}}}) || !notesDropped(sent, nil) {
+		t.Fatal("dropped notes not detected")
+	}
+	if notesDropped(sent, sent) || notesDropped(nil, nil) || notesDropped(&vxv1.Evidence{Checks: []*vxv1.Check{{Name: "x"}}}, nil) {
+		t.Fatal("false alarm")
 	}
 }

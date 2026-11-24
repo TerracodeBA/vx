@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/workcopy"
 )
@@ -140,4 +141,20 @@ func verifyNewTests(ctx context.Context, wc *workcopy.WorkingCopy, changes []obj
 	}
 	b.WriteString("\nFix the name, add the test, or pass --allow-unverified-tests to land anyway.")
 	return fmt.Errorf("%s", b.String())
+}
+
+// notesDropped reports whether the server stored fewer check notes than
+// the CLI sent, which happens when the server runs an older vx that does
+// not know the field.
+func notesDropped(sent, stored *vxv1.Evidence) bool {
+	count := func(e *vxv1.Evidence) int {
+		n := 0
+		for _, ch := range e.GetChecks() {
+			if ch.Notes != "" {
+				n++
+			}
+		}
+		return n
+	}
+	return count(stored) < count(sent)
 }
