@@ -132,10 +132,4 @@ func githubNotImplemented() error {
 	return errf(CodeUnavailable, "this part of GitHub sign-in is not implemented yet")
 }
 
-// SyncInstallation reads an installation's account and repositories from
-// GitHub and creates or updates the matching vx organization and repos.
-func (s *Service) SyncInstallation(ctx context.Context, installationID int64) error {
-	return githubNotImplemented()
-}
-
-// GitHubRole is in github_roles.go.
+// SyncInstallation is in github_sync.go, GitHubRole in github_roles.go.

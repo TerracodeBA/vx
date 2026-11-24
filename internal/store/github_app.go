@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,4 +60,54 @@ func (q Q) RecordGitHubDelivery(ctx context.Context, id, event string, keep time
 func (q Q) ForgetGitHubDelivery(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, `delete from github_deliveries where id = $1`, id)
 	return err
+}
+
+// RepoByGitHubID looks a repo up by its GitHub repository id.
+func (q Q) RepoByGitHubID(ctx context.Context, githubRepoID int64) (Repo, error) {
+	r, err := scanRepo(q.db.QueryRow(ctx, repoSelect+` where r.github_repo_id = $1`, githubRepoID))
+	return r, notFound(err, fmt.Sprintf("repo with GitHub id %d", githubRepoID))
+}
+
+// ReposOfGitHubInstallation lists the repos linked to an installation.
+func (q Q) ReposOfGitHubInstallation(ctx context.Context, installationID int64) ([]Repo, error) {
+	rows, err := q.db.Query(ctx, repoSelect+` where r.github_installation_id = $1 order by r.name`, installationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Repo
+	for rows.Next() {
+		r, err := scanRepo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// SetRepoUpstream changes a repo's remote and default branch, for example
+// after the repository was renamed or transferred on GitHub.
+func (q Q) SetRepoUpstream(ctx context.Context, repoID uuid.UUID, remote, defaultBranch string) error {
+	tag, err := q.db.Exec(ctx, `update upstreams set remote = $2, default_branch = $3 where repo_id = $1`, repoID, remote, defaultBranch)
+	if err == nil && tag.RowsAffected() == 0 {
+		return fmt.Errorf("repo %s: %w", repoID, ErrNotFound)
+	}
+	return err
+}
+
+// CreateOrgWithoutOwner inserts an organization nobody owns yet: one that
+// mirrors a GitHub organization, whose members come from GitHub.
+func (q Q) CreateOrgWithoutOwner(ctx context.Context, handle, displayName string) (Org, error) {
+	if err := ValidateHandle(KindHuman, handle); err != nil {
+		return Org{}, fmt.Errorf("organization %s", err)
+	}
+	if displayName == "" {
+		displayName = handle
+	}
+	o, err := scanOrg(q.db.QueryRow(ctx, `insert into orgs as o (handle, display_name, default_repo_role) values ($1, $2, 'none') returning `+orgCols, handle, displayName))
+	if isUniqueViolation(err) {
+		return Org{}, fmt.Errorf("organization %q: %w", handle, ErrExists)
+	}
+	return o, err
 }
