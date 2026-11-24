@@ -74,6 +74,7 @@ If you have the vx MCP tools (`vx_context`, `vx_status`, `vx_log`, `vx_show`, `v
 
 ## When things collide
 
+- `vx land` ends with one line: `Landed HASH (CHANGE): INTENT` or `Not landed: ...`; it takes no text argument (use `-m`).
 - **Exit code 2 from `vx land` or `vx sync` means conflicts.** Run `vx sync`. Files that both sides changed on the same lines get markers:
   ```
     their version
@@ -83,7 +84,7 @@ If you have the vx MCP tools (`vx_context`, `vx_status`, `vx_log`, `vx_show`, `v
 - **The text merged but the code broke** (for example both sides added the same helper): for Go, `vx sync` and `vx land` print `Warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)` (or `duplicate method T.Name`) when a package declares a name twice; after a sync, remove one before landing; after a land, the change has landed anyway. Other breakage vx cannot see; your `--run` checks catch it. Fix it in a new workspace and land.
 - **Rebasing** (usually the lead's job; do it only when asked): `vx effort rebase` replays the effort onto the latest base branch. If it stops (exit code 2), the working copy holds that change replayed onto `main` with conflict markers, and `vx land`, `vx sync` and `vx new` refuse until you finish. Resolve the files, run the tests, then `vx effort rebase --continue` (it may stop again on a later change) or `vx effort rebase --abort`. A file marked `generated file: regenerate it` holds the effort's version: fix its source (for example the `.proto`), regenerate (`buf generate`), then continue. `vx status` shows where a rebase stopped.
 - **Someone else rebased the effort while your workspace was open:** nothing to do; `vx sync` (or `vx land --run`) merges your edits onto the rebased head. Changes you land while a rebase waits on a conflict are replayed when it finishes.
-- **Waiting for someone else's change:** `vx wait --timeout 10m && vx sync` instead of polling in a loop. `vx wait` also returns when a question for you arrives, yours is answered, or a decision or interface is posted on a file you changed, and says which; read or answer it, then wait again.
+- **Waiting for someone else's change:** `vx wait --timeout 10m && vx sync` instead of polling in a loop. `vx wait` also returns when a question for you arrives, yours is answered, or a decision or interface is posted on a file you changed, and says which; read or answer it, then wait again. It exits 4 when nothing happened within the timeout, so `&& vx sync` runs only after an event.
 
 ## Useful flags
 

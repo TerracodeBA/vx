@@ -26,6 +26,7 @@ const (
 	ExitOK       = 0
 	ExitError    = 1
 	ExitConflict = 2 // land or sync stopped on conflicts
+	ExitTimeout  = 4 // vx wait gave up: nothing happened within --timeout
 )
 
 // App holds what commands need from the environment, so tests can run the
@@ -43,7 +44,20 @@ type App struct {
 	checked  bool // the server's version was checked in this run
 	chdir    string
 	exitCode int
+	// landResult is the one line vx land ends with: what landed, or why
+	// nothing did.
+	landResult string
 }
+
+// exitError is an error that makes Run exit with code instead of
+// ExitError, after printing it like any other error.
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e *exitError) Error() string { return e.err.Error() }
+func (e *exitError) Unwrap() error { return e.err }
 
 // errConflict makes Run exit with ExitConflict after the command printed
 // the conflicts.
@@ -66,6 +80,10 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		_ = json.NewEncoder(a.Out).Encode(map[string]string{"error": client.Message(err)})
 	} else {
 		fmt.Fprintln(a.Err, "vx:", client.Message(err))
+	}
+	var ee *exitError
+	if errors.As(err, &ee) {
+		return ee.code
 	}
 	return ExitError
 }

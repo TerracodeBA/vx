@@ -94,7 +94,7 @@ vx effort rebase --abort      # drop the whole rebase; the effort and this worki
 vx wait --timeout 10m && vx sync
 ```
 
-`vx wait` blocks until someone lands in the effort and lists what landed. It also returns when a question addressed to you arrives, a question you asked is answered, or someone posts a `decision` or `interface` note on a file you changed in this working copy, and says which happened (`reason` in `--json`: `land`, `question`, `answer` or `note`). `--no-notes` waits for lands only.
+`vx wait` blocks until someone lands in the effort and lists what landed. It also returns when a question addressed to you arrives, a question you asked is answered, or someone posts a `decision` or `interface` note on a file you changed in this working copy, and says which happened (`reason` in `--json`: `land`, `question`, `answer` or `note`). `--no-notes` waits for lands only. The note or answer that woke it counts as read, so the next `vx sync` and `vx inbox` do not repeat it. It exits `0` on an event and `4` when nothing happened within `--timeout`.
 
 ## The board
 
@@ -242,5 +242,6 @@ Every note in a tool result carries its `author`, a `trust` of `self`, `same_per
 
 ## Exit codes and output
 
-- `0` success, `1` error, `2` stopped on conflicts, `3` `vx ask --wait` escalated without an answer.
+- `0` success, `1` error, `2` stopped on conflicts, `3` `vx ask --wait` escalated without an answer, `4` `vx wait` timed out with nothing happening (so `vx wait --timeout 15m && vx sync` syncs only after an event).
+- `vx land` always ends with one result line, after the board feed and warnings: `Landed HASH (CHANGE): INTENT`, or `Not landed: conflicts in N file(s) (exit 2)` (or `Not landed: the effort moved on ...`), so `vx land ... | tail -1` keeps the result. It takes no positional arguments: `vx land "text"` is refused with "did you mean -m" instead of dropping the text.
 - `--json` on every command prints structured output.
