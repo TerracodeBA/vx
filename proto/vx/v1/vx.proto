@@ -159,6 +159,16 @@ service AuthService {
   // agents. Only people can create tokens: a leaked agent token must not be
   // able to mint replacements that outlive its revocation.
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {}
+  // CreateLoginCode returns a one-time code that signs the caller in to the
+  // web UI (vx ui). It expires after two minutes and works once.
+  rpc CreateLoginCode(CreateLoginCodeRequest) returns (CreateLoginCodeResponse) {}
+}
+
+message CreateLoginCodeRequest {}
+
+message CreateLoginCodeResponse {
+  string code = 1;
+  string expires_at = 2;
 }
 
 // Token describes an API token. The secret itself is only shown once, when

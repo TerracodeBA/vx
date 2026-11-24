@@ -78,7 +78,7 @@ func TestPages(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 	// Signed out: redirected to the login page.
-	if code, body := get("/ui"); code != 200 || !strings.Contains(body, "Paste a vx token") {
+	if code, body := get("/ui"); code != 200 || !(strings.Contains(body, "Paste a vx token") && strings.Contains(body, "<code>vx ui</code>")) {
 		t.Fatalf("login redirect = %d", code)
 	}
 	resp, err := postForm(c, srv.URL, "/ui/login", url.Values{"token": {"vxt_wrong"}})

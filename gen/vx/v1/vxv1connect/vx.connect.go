@@ -55,6 +55,9 @@ const (
 	AuthServiceRevokeTokenProcedure = "/vx.v1.AuthService/RevokeToken"
 	// AuthServiceCreateTokenProcedure is the fully-qualified name of the AuthService's CreateToken RPC.
 	AuthServiceCreateTokenProcedure = "/vx.v1.AuthService/CreateToken"
+	// AuthServiceCreateLoginCodeProcedure is the fully-qualified name of the AuthService's
+	// CreateLoginCode RPC.
+	AuthServiceCreateLoginCodeProcedure = "/vx.v1.AuthService/CreateLoginCode"
 	// ObjectServiceMissingObjectsProcedure is the fully-qualified name of the ObjectService's
 	// MissingObjects RPC.
 	ObjectServiceMissingObjectsProcedure = "/vx.v1.ObjectService/MissingObjects"
@@ -128,6 +131,9 @@ type AuthServiceClient interface {
 	// agents. Only people can create tokens: a leaked agent token must not be
 	// able to mint replacements that outlive its revocation.
 	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
+	// CreateLoginCode returns a one-time code that signs the caller in to the
+	// web UI (vx ui). It expires after two minutes and works once.
+	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the vx.v1.AuthService service. By default, it uses
@@ -177,17 +183,24 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("CreateToken")),
 			connect.WithClientOptions(opts...),
 		),
+		createLoginCode: connect.NewClient[v1.CreateLoginCodeRequest, v1.CreateLoginCodeResponse](
+			httpClient,
+			baseURL+AuthServiceCreateLoginCodeProcedure,
+			connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	whoAmI      *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
-	createAgent *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
-	listAgents  *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
-	listTokens  *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createToken *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	whoAmI          *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
+	createAgent     *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
+	listAgents      *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
+	listTokens      *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
+	revokeToken     *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	createToken     *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	createLoginCode *connect.Client[v1.CreateLoginCodeRequest, v1.CreateLoginCodeResponse]
 }
 
 // WhoAmI calls vx.v1.AuthService.WhoAmI.
@@ -220,6 +233,11 @@ func (c *authServiceClient) CreateToken(ctx context.Context, req *connect.Reques
 	return c.createToken.CallUnary(ctx, req)
 }
 
+// CreateLoginCode calls vx.v1.AuthService.CreateLoginCode.
+func (c *authServiceClient) CreateLoginCode(ctx context.Context, req *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error) {
+	return c.createLoginCode.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the vx.v1.AuthService service.
 type AuthServiceHandler interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
@@ -238,6 +256,9 @@ type AuthServiceHandler interface {
 	// agents. Only people can create tokens: a leaked agent token must not be
 	// able to mint replacements that outlive its revocation.
 	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
+	// CreateLoginCode returns a one-time code that signs the caller in to the
+	// web UI (vx ui). It expires after two minutes and works once.
+	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -283,6 +304,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("CreateToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceCreateLoginCodeHandler := connect.NewUnaryHandler(
+		AuthServiceCreateLoginCodeProcedure,
+		svc.CreateLoginCode,
+		connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceWhoAmIProcedure:
@@ -297,6 +324,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceRevokeTokenHandler.ServeHTTP(w, r)
 		case AuthServiceCreateTokenProcedure:
 			authServiceCreateTokenHandler.ServeHTTP(w, r)
+		case AuthServiceCreateLoginCodeProcedure:
+			authServiceCreateLoginCodeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -328,6 +357,10 @@ func (UnimplementedAuthServiceHandler) RevokeToken(context.Context, *connect.Req
 
 func (UnimplementedAuthServiceHandler) CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.CreateToken is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.CreateLoginCode is not implemented"))
 }
 
 // ObjectServiceClient is a client for the vx.v1.ObjectService service.
