@@ -27,8 +27,12 @@ To let vx open pull requests on GitHub, add `VX_GITHUB_TOKEN=...` to `.env`: a f
 With a GitHub App, people sign in with GitHub, roles on installed repositories come from GitHub, and webhooks keep repositories, renames and pushes in sync.
 
 1. Set `VX_PUBLIC_URL` (for example `https://vx.example.com`) and `VX_SECRET_KEY` (`openssl rand -hex 32`, once) in `.env`, and restart. `deploy/production/install.sh` does both.
-2. As a site admin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents and pull requests write, checks read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
+2. As a site admin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents, pull requests and checks write, commit statuses read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
 3. Click **Install the App on GitHub** and pick the organizations and repositories. They show up in vx at once; their roles come from GitHub.
+
+The App subscribes to these webhook events: repository, member, membership, organization, team, team_add, push, pull_request (roles, renames, pushes and merges), and pull_request_review, pull_request_review_comment, issue_comment, check_run, check_suite, status (review comments and CI results reach the agents, see docs/agents.md).
+
+**An App created before v0.4** lacks some of these. Admin > GitHub then says what is missing, for example "Grant Checks: Write in the App's settings". In the App's settings on GitHub (Settings > Developer settings > GitHub Apps > the App > Permissions & events): set **Checks** to Read and write and **Commit statuses** to Read-only, tick the events **Pull request review**, **Pull request review comment**, **Issue comment**, **Check run**, **Check suite** and **Status**, and save. GitHub then asks each installation's owners to accept the new permissions (Settings > GitHub Apps > the App > Review request); until they do, vx skips the `vx evidence` check run on their repositories and their review and CI events do not arrive. Nothing else changes: shipping keeps working.
 
 Repositories of an installation fetch, push `vx/` branches and open pull requests with the App's installation token, so they need neither `VX_GITHUB_TOKEN` nor an SSH key. The App's private key, client secret and webhook secret are stored encrypted with `VX_SECRET_KEY`. Webhooks need `https://vx.example.com/hooks/github` reachable from GitHub; nothing else has to be open.
 
@@ -59,7 +63,7 @@ Deliveries are matched to vx repositories by the project path in the payload (`g
 
 **Roles.** These repositories use vx's own roles: grants (`vx repo grant`), teams and the organization's default role, as for repositories without a host. Permissions on GitLab, Gitea or Bitbucket are not read; give the people who work there the vx roles they need. Roles from the host, like GitHub-backed repositories have, are a later step.
 
-**Not yet:** review comments and CI results (pipelines, commit statuses) from these hosts do not reach the board, and vx does not read the host's permissions.
+**Not yet:** review comments and CI results (pipelines, commit statuses) from these hosts do not reach the board yet (the host-neutral `service.ApplyReview` and `service.ApplyCI` are ready for their webhooks), and vx does not read the host's permissions. Pushes and merges from them already rebase open efforts automatically.
 
 ## HTTPS
 
