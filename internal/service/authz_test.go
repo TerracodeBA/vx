@@ -228,6 +228,21 @@ var authzOps = []authzOp{
 		_, _, err := e.svc.AnswerNote(e.ctx, a, e.question.ID.String(), "Pricing is mine")
 		return err
 	}},
+	{"GetRules", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.GetRules(e.ctx, a, "acme/shop", e.eff.Slug)
+		return err
+	}},
+	{"ListReservations", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListReservations(e.ctx, a, "acme/shop", "")
+		return err
+	}},
+	{"Reserve", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, _, err := e.svc.Reserve(e.ctx, a, "acme/shop", e.eff.Slug, "migration")
+		if isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: acme/shop has no vx.toml
+		}
+		return err
+	}},
 	{"PlanShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.PlanShipment(e.ctx, a, "acme/shop", e.eff.Slug, "")
 		if isCode(err, service.CodeFailedPrecondition) {

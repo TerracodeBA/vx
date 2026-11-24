@@ -78,11 +78,6 @@ func (s *Service) CheckRules(ctx context.Context, r Rules, base, tree hash.Hash)
 	return rules.Check(ctx, s.Blobs, r, base, tree)
 }
 
-// Reserve hands out the next free value of a unique rule (write).
-func (s *Service) Reserve(ctx context.Context, actor Actor, repo, effort, rule string) (value, example string, err error) {
-	return "", "", v03NotImplemented()
-}
-
 // MarkNotesRead records that actor was shown notes. Notes in repositories
 // the caller cannot read, and ids of no note, are skipped silently, so the
 // call never tells whether a note exists.
