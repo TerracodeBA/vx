@@ -56,7 +56,18 @@ sync, fix the conflicting files and land again.
 
 If a land stops (conflicts, failing checks), vx keeps its evidence flags
 (--run, --check, --new-test, --depends-on). A later vx land without any of
-them in the same workspace reuses them and says so; --fresh ignores them.`,
+them in the same workspace reuses them and says so; --fresh ignores them.
+
+vx land always ends with one line saying what happened, after the board
+feed: "Landed HASH (CHANGE): INTENT", or "Not landed: ..." with the exit
+code (2: conflicts or the effort moved on), so vx land ... | tail -1 keeps
+the result.`,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("vx land takes no arguments, got %q; did you mean -m %q? (-m sets the intent; without it the open workspace's intent is used)", strings.Join(args, " "), strings.Join(args, " "))
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -141,6 +152,7 @@ them in the same workspace reuses them and says so; --fresh ignores them.`,
 						out := res.json()
 						out["board"] = a.syncFeed(ctx, c, wc)
 						a.emit(out)
+						a.landResult = notLandedConflicts(len(res.conflicts))
 						return errConflict
 					}
 					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
@@ -159,6 +171,14 @@ them in the same workspace reuses them and says so; --fresh ignores them.`,
 			}
 			return errors.New("the effort keeps moving; try again in a moment")
 		},
+	}
+	land := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		err := land(cmd, args)
+		if err == nil || errors.Is(err, errConflict) {
+			a.printLandResult()
+		}
+		return err
 	}
 	cmd.Flags().StringVarP(&intent, "intent", "m", "", "what this change does (default: the workspace intent)")
 	cmd.Flags().StringArrayVar(&runs, "run", nil, `command for vx to run as evidence, e.g. "go test ./..." (repeatable)`)
@@ -276,6 +296,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		}
 		a.printf("Not landed: the effort moved on to %s since your last sync.\nRun `vx sync`, check your work again, then %s.\n", short(r.EffortHead), landAgain(wc))
 		a.emit(r)
+		a.landResult = fmt.Sprintf("Not landed: the effort moved on to %s since your last sync (exit 2)", short(r.EffortHead))
 		return errConflict
 	}
 	if !r.Landed {
@@ -285,6 +306,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		}
 		a.printf("\nRun `vx sync` to bring in those changes and mark the conflicts, fix them, then %s again.\n", landAgain(wc))
 		a.emit(r)
+		a.landResult = notLandedConflicts(len(r.Conflicts))
 		return errConflict
 	}
 	cs := r.Changeset
@@ -345,7 +367,20 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	a.printLandedOverClaims(r.OverlappingClaims)
 	board := a.landFeed(ctx, c, wc, r) // the board comes last
 	a.emit(protoWithBoard(r, board))
+	a.landResult = fmt.Sprintf("Landed %s (%s): %s", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent))
 	return nil
+}
+
+func notLandedConflicts(n int) string {
+	return fmt.Sprintf("Not landed: conflicts in %d file(s) (exit 2)", n)
+}
+
+// printLandResult ends vx land with its one-line result, set by the land.
+func (a *App) printLandResult() {
+	if a.landResult != "" {
+		a.printf("\n%s\n", a.landResult)
+		a.landResult = ""
+	}
 }
 
 // printWarnings shows problems the server found in a landed or planned
@@ -726,7 +761,13 @@ print the new changes. Use it instead of polling vx log in a loop:
 vx wait also returns when a question addressed to you arrives, a question
 you asked is answered, or someone posts a decision or interface note on a
 file you changed here, and says which happened ("reason" in --json: land,
-question, answer or note). --no-notes waits for lands only.`,
+question, answer or note). --no-notes waits for lands only. The note or
+answer that woke it counts as read, so vx sync and vx inbox do not repeat it.
+
+Exit codes: 0 when something happened, 4 when nothing did within
+--timeout, 1 on errors. So vx wait --timeout 15m && vx sync syncs only
+after an event.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -772,13 +813,16 @@ question, answer or note). --no-notes waits for lands only.`,
 					return nil
 				}
 				if time.Now().After(deadline) {
-					if watch != nil {
-						return fmt.Errorf("nothing landed in %s, no question or answer arrived for you and no decision or interface was posted on your changed files within %s", wc.Config.Effort, timeout)
+					var err error
+					switch {
+					case watch != nil:
+						err = fmt.Errorf("timed out: nothing landed in %s, no question or answer arrived for you and no decision or interface was posted on your changed files within %s", wc.Config.Effort, timeout)
+					case seen != nil:
+						err = fmt.Errorf("timed out: nothing landed in %s and no question or answer arrived for you within %s", wc.Config.Effort, timeout)
+					default:
+						err = fmt.Errorf("timed out: nothing landed in %s within %s", wc.Config.Effort, timeout)
 					}
-					if seen != nil {
-						return fmt.Errorf("nothing landed in %s and no question or answer arrived for you within %s", wc.Config.Effort, timeout)
-					}
-					return fmt.Errorf("nothing landed in %s within %s", wc.Config.Effort, timeout)
+					return &exitError{code: ExitTimeout, err: err}
 				}
 				select {
 				case <-ctx.Done():

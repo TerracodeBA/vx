@@ -169,7 +169,7 @@ func TestWaitWakesOnDecisionNote(t *testing.T) {
 	}()
 	time.Sleep(200 * time.Millisecond)
 	a.must("post", "decision", "Ignored by --no-notes", "--on", "x.go")
-	if out := <-waited; !strings.HasPrefix(out, "exit 1") || !strings.Contains(out, "nothing landed") {
+	if out := <-waited; !strings.HasPrefix(out, "exit 4") || !strings.Contains(out, "nothing landed") {
 		t.Errorf("wait --no-notes = %q", out)
 	}
 }
