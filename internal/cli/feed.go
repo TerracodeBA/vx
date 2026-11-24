@@ -340,7 +340,9 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 	if len(cl.Targets) > 0 {
 		b.WriteString("  on " + strings.Join(cl.Targets, ", "))
 	}
-	if cl.ExpiresAt != "" {
+	if cl.WorkspaceId != "" {
+		b.WriteString("  while its workspace is open")
+	} else if cl.ExpiresAt != "" {
 		b.WriteString("  until " + clock(cl.ExpiresAt) + " (" + expiresIn(cl.ExpiresAt) + ")")
 	}
 	b.WriteString("  id " + noteID(cl.Id))
@@ -356,7 +358,9 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 func claimLine(cl *vxv1.Claim) string {
 	trust := trustLabel(cl.Trust)
 	s := "[" + trust + "] " + cl.Owner.GetRef() + " on " + strings.Join(cl.Targets, ", ")
-	if cl.ExpiresAt != "" {
+	if cl.WorkspaceId != "" {
+		s += " while its workspace is open"
+	} else if cl.ExpiresAt != "" {
 		s += " until " + clock(cl.ExpiresAt)
 	}
 	if r := oneLine(cleanBody(cl.Reason)); r != "" {

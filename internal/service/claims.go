@@ -190,20 +190,31 @@ func (s *Service) activeClaims(ctx context.Context, q store.Q, effortID uuid.UUI
 }
 
 // landedOverClaims returns the active claims of principals other than the
-// caller whose targets match a file the land changed.
+// caller that the land touched: a path target matching a changed file, or
+// a symbol target whose lines the land changed (symbols.go).
 func (s *Service) landedOverClaims(ctx context.Context, tx *store.Tx, actor Actor, effortID uuid.UUID, files []store.FileChange) ([]Claim, error) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	paths := make([]string, 0, len(files))
-	for _, f := range files {
-		paths = append(paths, f.Path)
-	}
-	rows, err := s.activeClaims(ctx, tx.Q, effortID, paths, actor.ID)
+	rows, err := s.activeClaims(ctx, tx.Q, effortID, nil, actor.ID)
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	return s.newNoteCache().claims(ctx, rows)
+	lt := newLandTouches(ctx, s.Blobs, files)
+	hit := rows[:0]
+	for _, c := range rows {
+		ok, err := lt.touches(c.Targets)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			hit = append(hit, c)
+		}
+	}
+	if len(hit) == 0 {
+		return nil, nil
+	}
+	return s.newNoteCache().claims(ctx, hit)
 }
 
 // releaseWorkspaceClaims releases a workspace's active claims inside tx and
@@ -293,6 +304,13 @@ func (c *noteCache) claim(ctx context.Context, r store.Claim) (Claim, error) {
 	out := Claim{
 		ID: r.ID, RepoName: r.RepoName, EffortSlug: r.EffortSlug, EffortID: r.EffortID, Targets: r.Targets,
 		WorkspaceID: r.WorkspaceID, Reason: r.Reason, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, ReleasedAt: r.ReleasedAt,
+	}
+	// A claim tied to an open workspace lasts as long as the workspace: it
+	// is renewed, always at least DefaultClaimTTL ahead, while it is open.
+	if r.WorkspaceOpen && r.ReleasedAt == nil {
+		if renewed := c.s.Now().Add(DefaultClaimTTL); renewed.After(out.ExpiresAt) {
+			out.ExpiresAt = renewed
+		}
 	}
 	var err error
 	if out.Owner, err = c.principal(ctx, r.OwnerID); err != nil {
