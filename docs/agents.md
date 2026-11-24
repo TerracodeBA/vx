@@ -22,6 +22,34 @@ vx token revoke 1a2b3c4d                                       # stops working a
 
 Only people create tokens, for themselves or their own agents. An agent can list and revoke its own tokens but not create one, so a leaked agent token cannot mint replacements that survive its revocation.
 
+## Scopes and budgets
+
+A person can limit each of their agents to the paths its task needs and give it budgets. vx checks them on the server, so an agent cannot get around them by using another CLI:
+
+```sh
+vx agent scope backend --allow 'internal/api/**' --allow docs/api.md --deny 'internal/api/gen/**'
+vx agent scope backend --max-lands-per-day 20 --max-lines 400 --max-files 15 --max-workspaces 2
+vx agent show backend          # scope, budgets and what is left of them today; --json too
+vx agent scope backend --clear # back to no limits
+```
+
+| Limit | Default | Checked |
+|---|---|---|
+| `--allow GLOB` (repeatable) | none: every path the person may change | every land, every file the land changes (added, modified or deleted) |
+| `--deny GLOB` (repeatable) | none | as `--allow`; a deny glob wins over every allow glob |
+| `--max-lands-per-day N` | no limit | every land; the day is the UTC day, so the budget resets at midnight UTC |
+| `--max-lines N` | no limit | every land: added plus deleted lines of the agent's own change |
+| `--max-files N` | no limit | every land: files the agent's own change touches |
+| `--max-workspaces N` | no limit | `vx new`: open workspaces in open efforts at once |
+
+Globs are the ones `vx.toml` uses: `*` and `?` within one path segment, `**` for any number of segments (`internal/api/**`, `**/*_test.go`). `--allow` and `--deny` replace their whole list (`--deny ''` empties it); budgets of 0 mean no limit; flags you leave out keep their value; `--clear` removes every limit before the other flags apply. The Settings page of the web UI shows and edits the same, per agent.
+
+- **What is checked.** The agent's own change: its snapshot against the base it worked on. When a land merges onto newer work, what others landed meanwhile never counts against the agent, and a file outside the scope is refused even when the merge would go through. When the agent resolves a rebase conflict (`vx effort rebase --continue`), the files it wrote itself (content that is neither the replayed change's nor the rebased branch's) must be in its scope; taking one side as it is passes. A lands budget counts each change once, also after a rebase replays it.
+- **What a refusal says.** Which paths are outside and who can widen it, with the command: `permission denied: agent:alice/backend may only change internal/api/**; internal/store/x.go is outside. Ask user:alice to widen it: vx agent scope backend --allow 'internal/api/**' --allow 'internal/store/**'`. A spent budget says what is left and when it resets: `agent:alice/backend has used all 20 of its lands for today (0 left); the budget resets at 2026-11-25 00:00 UTC (in 6h12m)`. Nothing lands and the workspace stays open: revert the files, or split the land.
+- **Seeing your own.** An agent sees its scope and remaining budget in `vx whoami`, `vx status` (which also lists local changes outside the scope, before you try to land them), `vx agent show` and the MCP tool `vx_whoami`. `vx land` refuses out-of-scope files before running `--run` checks, so a long test run is not wasted; the server checks again either way.
+- **Who sets them.** The agent's person, and site admins (with the agent's handle, `vx agent scope alice/backend ...`). Never an agent, not even for itself: a scope an agent could widen would limit nothing. Every change is in the operation log (`agent.scope`).
+- **Scopes never widen a role.** The agent still needs write on the repository (from vx grants or, on GitHub-backed repositories, from GitHub). A scope that allows `**` gives nothing its person lacks.
+
 ## The loop
 
 ```sh
@@ -257,6 +285,8 @@ Plan the split before launching:
 1. Parts that touch mostly different files, one per agent.
 2. The interfaces between parts, written down exactly (package names, signatures, file owners).
 3. Which part lands a shared file first.
+
+Give each agent the narrowest scope its part needs (`vx agent scope NAME --allow ...`), so an agent that wanders into another part's files is stopped at land, not in review.
 
 Write the plan as tasks (`vx task add`, with `--after` for contracts that must land first), so agents pick their next task with `vx tasks --open` instead of reading long briefs. Then create one identity and working copy per agent and launch them in parallel. The `vx:team` plugin skill walks Claude through all of it, including the briefs.
 

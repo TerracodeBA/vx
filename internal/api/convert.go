@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -178,4 +179,33 @@ func parseHash(field, s string) (hash.Hash, error) {
 		return hash.Zero, fmt.Errorf("%s: %w", field, err)
 	}
 	return h, nil
+}
+
+// agentInfoPB converts an agent with its scope and usage.
+func (h *Handlers) agentInfoPB(ctx context.Context, v service.AgentView) *vxv1.AgentInfo {
+	a := service.Actor{Principal: v.Agent}
+	if v.Owner.ID != uuid.Nil {
+		owner := v.Owner
+		a.Parent = &owner
+	}
+	sc := v.Scope
+	updated := ""
+	if sc.UpdatedBy != nil {
+		updated = ts(sc.UpdatedAt)
+	}
+	return &vxv1.AgentInfo{
+		Agent: h.principal(ctx, a),
+		Scope: &vxv1.AgentScope{
+			Allow: sc.Allow, Deny: sc.Deny,
+			MaxLandsPerDay: int32(sc.MaxLandsPerDay), MaxLines: int32(sc.MaxLines),
+			MaxFiles: int32(sc.MaxFiles), MaxWorkspaces: int32(sc.MaxWorkspaces),
+			UpdatedBy: v.UpdatedBy, UpdatedAt: updated,
+		},
+		Unlimited:      sc.Unlimited(),
+		LandsToday:     int32(v.LandsToday),
+		LandsLeft:      int32(v.LandsLeft()),
+		OpenWorkspaces: int32(v.OpenWorkspaces),
+		WorkspacesLeft: int32(v.WorkspacesLeft()),
+		ResetsAt:       ts(v.ResetsAt),
+	}
 }

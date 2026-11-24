@@ -8,6 +8,7 @@
 </div>
 {{with .Revoked}}<p class="note ok">Revoked token <span class="mono">{{.Short}}</span> ({{.Name}}) of {{principal $.RevokedOwner}}.</p>{{end}}
 {{if .AlreadyRevoked}}<p class="note warn">That token was already revoked.</p>{{end}}
+{{with .Scoped}}<p class="note ok">Saved the scope of {{principal (printf "agent:%s" .)}}.</p>{{end}}
 
 <div class="settings">
 <section class="panel">
@@ -37,6 +38,13 @@
 </section>
 {{end}}
 
+{{with .OwnScope}}
+<section class="panel" id="scope">
+  <div class="panel-head"><h2>Your scope and budgets</h2><span class="muted small">set by {{principal $.Actor.Parent.Ref}}; ask them to change it</span></div>
+  {{template "scope-summary" .}}
+</section>
+{{end}}
+
 <section class="panel">
   <div class="panel-head"><h2>Your tokens</h2>
     <span class="panel-tools"><span class="muted small">{{len .Own}} token{{if ne (len .Own) 1}}s{{end}}</span>
@@ -48,13 +56,37 @@
 {{if .IsHuman}}
 <h2 class="sec settings-sec">Agents</h2>
 {{range .Agents}}
-<section class="panel">
+<section class="panel" id="agent-{{.Name}}">
   <div class="panel-head">
     <h2 class="mono">{{.Agent.Handle}}</h2>
     <span class="panel-tools"><span class="muted small">{{if ne .Agent.DisplayName .Name}}{{.Agent.DisplayName}} · {{end}}{{.Active}} active{{if .Revoked}}, {{.Revoked}} revoked{{end}} · created {{ago .Agent.CreatedAt}}</span>
     {{template "create-token" .Agent.Handle}}</span>
   </div>
   {{template "token-table" .Tokens}}
+  <div class="panel-head scope-head"><h3>Scope and budgets</h3>
+    {{if not .Scope.Scope.Unlimited}}<span class="panel-tools"><form method="post" action="/ui/settings/scope" class="inline-form">
+      <input type="hidden" name="agent" value="{{.Agent.Handle}}"><input type="hidden" name="clear" value="yes">
+      <button class="btn ghost small-btn" type="submit">Remove all limits</button>
+    </form></span>{{end}}
+  </div>
+  {{template "scope-summary" .}}
+  <form method="post" action="/ui/settings/scope" class="admin-form">
+    <input type="hidden" name="agent" value="{{.Agent.Handle}}">
+    <div class="field field-wide"><label for="allow-{{.Name}}">Allowed paths</label>
+      <input id="allow-{{.Name}}" name="allow" type="text" maxlength="4000" autocomplete="off" placeholder="internal/api/** docs/api.md" value="{{.AllowText}}"></div>
+    <div class="field field-wide"><label for="deny-{{.Name}}">Denied paths</label>
+      <input id="deny-{{.Name}}" name="deny" type="text" maxlength="4000" autocomplete="off" placeholder="internal/api/gen/**" value="{{.DenyText}}"></div>
+    <div class="field field-num"><label for="lands-{{.Name}}">Lands per day</label>
+      <input id="lands-{{.Name}}" name="max_lands_per_day" type="number" min="0" max="1000000" value="{{with .Scope.Scope.MaxLandsPerDay}}{{.}}{{end}}" placeholder="no limit"></div>
+    <div class="field field-num"><label for="lines-{{.Name}}">Lines per land</label>
+      <input id="lines-{{.Name}}" name="max_lines" type="number" min="0" max="1000000" value="{{with .Scope.Scope.MaxLines}}{{.}}{{end}}" placeholder="no limit"></div>
+    <div class="field field-num"><label for="files-{{.Name}}">Files per land</label>
+      <input id="files-{{.Name}}" name="max_files" type="number" min="0" max="1000000" value="{{with .Scope.Scope.MaxFiles}}{{.}}{{end}}" placeholder="no limit"></div>
+    <div class="field field-num"><label for="ws-{{.Name}}">Open workspaces</label>
+      <input id="ws-{{.Name}}" name="max_workspaces" type="number" min="0" max="1000000" value="{{with .Scope.Scope.MaxWorkspaces}}{{.}}{{end}}" placeholder="no limit"></div>
+    <button class="btn primary" type="submit">Save scope</button>
+    <p class="field-hint">Globs work as in vx.toml (*, ? and **), separated by spaces. No allowed paths: every path you may change. Denied paths win. Empty or 0: no limit. A scope never gives the agent more than your own role on a repository; the agent cannot change it.</p>
+  </form>
 </section>
 {{else}}
 <div class="panel empty">
@@ -98,3 +130,11 @@
   <input type="hidden" name="agent" value="{{.}}">
   <button class="btn ghost small-btn" type="submit">Create token</button>
 </form>{{end}}
+
+{{define "scope-summary"}}<dl class="kv">
+  <dt>Paths</dt><dd>{{if .Scope.Scope.Allow}}only <span class="mono">{{.AllowText}}</span>{{else}}every path {{if .Scope.Owner.Handle}}{{principal .Scope.Owner.Ref}}{{else}}its person{{end}} may change{{end}}{{if .Scope.Scope.Deny}}, except <span class="mono">{{.DenyText}}</span>{{end}}</dd>
+  <dt>Lands today</dt><dd>{{.Scope.LandsToday}}{{with .Scope.Scope.MaxLandsPerDay}} of {{.}}{{end}}{{if .Scope.Scope.MaxLandsPerDay}} ({{.Scope.LandsLeft}} left, resets {{.Scope.ResetsAt.Format "2 Jan 15:04 UTC"}}){{else}} <span class="muted">(no limit)</span>{{end}}</dd>
+  <dt>Open workspaces</dt><dd>{{.Scope.OpenWorkspaces}}{{with .Scope.Scope.MaxWorkspaces}} of {{.}}{{else}} <span class="muted">(no limit)</span>{{end}}</dd>
+  <dt>Per land</dt><dd>{{with .Scope.Scope.MaxLines}}at most {{.}} changed lines{{else}}<span class="muted">any number of lines</span>{{end}}, {{with .Scope.Scope.MaxFiles}}at most {{.}} files{{else}}<span class="muted">any number of files</span>{{end}}</dd>
+  {{with .Scope.UpdatedBy}}<dt>Set by</dt><dd>{{principal .}}</dd>{{end}}
+</dl>{{end}}

@@ -185,6 +185,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/settings", u.auth(u.settings))
 	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
+	mux.HandleFunc("POST /ui/settings/scope", u.auth(u.scopePost))
 	u.mountAdmin(mux)
 	u.mountGitHub(mux)
 	if err := u.mountGitHubApp(mux); err != nil {
@@ -1310,6 +1311,13 @@ type agentPanel struct {
 	Name            string
 	Tokens          []tokenRow
 	Active, Revoked int
+	Scope           service.AgentView
+	// The scope's globs as the form shows them, space-separated.
+	AllowText, DenyText string
+}
+
+func (p *agentPanel) setScope(v service.AgentView) {
+	p.Scope, p.AllowText, p.DenyText = v, strings.Join(v.Scope.Allow, " "), strings.Join(v.Scope.Deny, " ")
 }
 
 func tokenRows(tokens []store.Token, current uuid.UUID) []tokenRow {
@@ -1342,6 +1350,12 @@ func (u *UI) settings(w http.ResponseWriter, r *http.Request, actor service.Acto
 				return
 			}
 			p := agentPanel{Agent: a, Name: a.Handle[strings.LastIndex(a.Handle, "/")+1:], Tokens: tokenRows(toks, actor.TokenID)}
+			v, err := u.svc.GetAgent(ctx, actor, a.Handle)
+			if err != nil {
+				u.fail(w, err)
+				return
+			}
+			p.setScope(v)
 			for _, t := range toks {
 				if t.Active() {
 					p.Active++
@@ -1361,6 +1375,14 @@ func (u *UI) settings(w http.ResponseWriter, r *http.Request, actor service.Acto
 		}
 	}
 	data["AlreadyRevoked"] = r.URL.Query().Get("already") != ""
+	data["Scoped"] = r.URL.Query().Get("scoped")
+	if actor.Kind == store.KindAgent {
+		if v, err := u.svc.GetAgent(ctx, actor, ""); err == nil {
+			own := &agentPanel{Agent: actor.Principal, Name: agentName(actor.Handle)}
+			own.setScope(v)
+			data["OwnScope"] = own
+		}
+	}
 	u.settingsGitHub(r, actor, data)
 	u.render(w, r, "settings", data)
 }
@@ -1445,6 +1467,58 @@ func (u *UI) createTokenPost(w http.ResponseWriter, r *http.Request, actor servi
 	u.render(w, r, "token", map[string]any{"Actor": actor, "Title": "New token", "Owner": owner,
 		"Token": tokenRows([]store.Token{tok}, uuid.Nil)[0], "Secret": secret})
 }
+
+// scopePost saves an agent's path scope and budgets from the Settings
+// form. The form always carries the whole scope; clear=yes removes it.
+func (u *UI) scopePost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	if err := r.ParseForm(); err != nil {
+		u.fail(w, err)
+		return
+	}
+	if !u.checkOrigin(w, r) {
+		return
+	}
+	agent := strings.TrimSpace(r.PostForm.Get("agent"))
+	in := service.ScopeInput{Clear: r.PostForm.Get("clear") == "yes"}
+	if !in.Clear {
+		in.SetAllow, in.Allow = true, globList(r.PostForm.Get("allow"))
+		in.SetDeny, in.Deny = true, globList(r.PostForm.Get("deny"))
+		for _, f := range []struct {
+			name, label string
+			dst         **int
+		}{
+			{"max_lands_per_day", "Lands per day", &in.MaxLandsPerDay},
+			{"max_lines", "Lines per land", &in.MaxLines},
+			{"max_files", "Files per land", &in.MaxFiles},
+			{"max_workspaces", "Open workspaces", &in.MaxWorkspaces},
+		} {
+			v := 0
+			if raw := strings.TrimSpace(r.PostForm.Get(f.name)); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil {
+					u.fail(w, &service.Error{Code: service.CodeInvalid, Msg: fmt.Sprintf("%s: %q is not a whole number; leave it empty or 0 for no limit", f.label, raw)})
+					return
+				}
+				v = n
+			}
+			*f.dst = &v
+		}
+	}
+	v, err := u.svc.SetAgentScope(r.Context(), actor, agent, in)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/ui/settings?scoped="+url.QueryEscape(v.Agent.Handle)+"#agent-"+agentName(v.Agent.Handle), http.StatusSeeOther)
+}
+
+// globList splits a form field of globs separated by spaces, commas or
+// new lines.
+func globList(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\r' || r == '\t' })
+}
+
+func agentName(handle string) string { return handle[strings.LastIndex(handle, "/")+1:] }
 
 // ---------- helpers ----------
 

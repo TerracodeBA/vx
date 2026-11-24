@@ -33,6 +33,11 @@ func (a *App) whoamiCmd() *cobra.Command {
 				a.printf(" (acting for %s)", p.OnBehalfOf)
 			}
 			a.printf("\n")
+			if resp.Msg.Agent != nil {
+				for _, l := range scopeLines(resp.Msg.Agent) {
+					a.printf("  %s\n", l)
+				}
+			}
 			a.emit(resp.Msg)
 			return nil
 		},
@@ -88,7 +93,7 @@ path. An agent then only needs:
 	}
 	add.Flags().StringVar(&display, "display-name", "", "name shown in logs and PRs")
 	add.Flags().StringVar(&envFile, "env-file", "", "write the agent's environment (server, token) to this file instead of printing the token")
-	cmd.AddCommand(add, a.agentListCmd())
+	cmd.AddCommand(add, a.agentListCmd(), a.agentShowCmd(), a.agentScopeCmd())
 	return cmd
 }
 

@@ -33,6 +33,24 @@ type Principal struct {
 	Kind        string `json:"kind"`
 	DisplayName string `json:"display_name,omitempty"`
 	OnBehalfOf  string `json:"on_behalf_of,omitempty" jsonschema:"for agents: the person the agent acts for"`
+	Scope       *Scope `json:"scope,omitempty" jsonschema:"for agents: the paths it may change and its budgets, with what is left today"`
+}
+
+// Scope is an agent's path scope and budgets. Budgets of 0 and lists that
+// are empty mean no limit; *_left of -1 means no limit.
+type Scope struct {
+	Unlimited      bool     `json:"unlimited" jsonschema:"no scope and no budgets"`
+	Allow          []string `json:"allow,omitempty" jsonschema:"globs of paths it may change; empty: every path its person may change"`
+	Deny           []string `json:"deny,omitempty" jsonschema:"globs of paths it may not change, winning over allow"`
+	MaxLandsPerDay int      `json:"max_lands_per_day,omitempty"`
+	LandsToday     int      `json:"lands_today"`
+	LandsLeft      int      `json:"lands_left"`
+	ResetsAt       string   `json:"resets_at" jsonschema:"when the lands budget starts again (the next UTC midnight)"`
+	MaxLines       int      `json:"max_lines,omitempty" jsonschema:"changed lines per land"`
+	MaxFiles       int      `json:"max_files,omitempty" jsonschema:"changed files per land"`
+	MaxWorkspaces  int      `json:"max_workspaces,omitempty"`
+	OpenWorkspaces int      `json:"open_workspaces"`
+	WorkspacesLeft int      `json:"workspaces_left"`
 }
 
 // Effort is one effort in a listing.
@@ -206,7 +224,7 @@ func readOnly(title string) *sdk.ToolAnnotations {
 func (t *tools) register(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "vx_whoami",
-		Description: "Who the vx token belongs to: your principal and, for an agent, the person it acts for.",
+		Description: "Who the vx token belongs to: your principal and, for an agent, the person it acts for, the paths it may change and what is left of its budgets today.",
 		Annotations: readOnly("Who am I"),
 	}, t.whoami)
 	sdk.AddTool(srv, &sdk.Tool{
@@ -244,7 +262,19 @@ func (t *tools) whoami(ctx context.Context, req *sdk.CallToolRequest, _ noInput)
 	if err != nil {
 		return nil, Principal{}, err
 	}
-	return nil, Principal{Ref: a.Ref(), Kind: string(a.Kind), DisplayName: a.DisplayName, OnBehalfOf: a.OnBehalfOf()}, nil
+	out := Principal{Ref: a.Ref(), Kind: string(a.Kind), DisplayName: a.DisplayName, OnBehalfOf: a.OnBehalfOf()}
+	if a.Kind == store.KindAgent {
+		if v, err := t.svc.GetAgent(ctx, a, ""); err == nil {
+			sc := v.Scope
+			out.Scope = &Scope{
+				Unlimited: sc.Unlimited(), Allow: sc.Allow, Deny: sc.Deny,
+				MaxLandsPerDay: sc.MaxLandsPerDay, LandsToday: v.LandsToday, LandsLeft: v.LandsLeft(),
+				ResetsAt: v.ResetsAt.UTC().Format(time.RFC3339), MaxLines: sc.MaxLines, MaxFiles: sc.MaxFiles,
+				MaxWorkspaces: sc.MaxWorkspaces, OpenWorkspaces: v.OpenWorkspaces, WorkspacesLeft: v.WorkspacesLeft(),
+			}
+		}
+	}
+	return nil, out, nil
 }
 
 func (t *tools) efforts(ctx context.Context, req *sdk.CallToolRequest, in effortsInput) (*sdk.CallToolResult, effortsOutput, error) {

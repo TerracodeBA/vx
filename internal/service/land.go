@@ -93,6 +93,11 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 	if err := s.checkInRepo(ctx, v.Repo, base.Tree, in.Tree); err != nil {
 		return LandResult{}, err
 	}
+	// An agent's path scope and budgets, after the repository role and
+	// before the landing policies.
+	if err := s.checkAgentLand(ctx, actor, base.Tree, in.Tree); err != nil {
+		return LandResult{}, err
+	}
 	intent := strings.TrimSpace(in.Intent)
 	if intent == "" {
 		intent = v.Workspace.Intent
@@ -212,6 +217,9 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		}
 		if ws.State != store.WorkspaceOpen {
 			return errf(CodeFailedPrecondition, "workspace is already %s", ws.State)
+		}
+		if err := s.recheckLandsToday(ctx, tx, actor); err != nil {
+			return err
 		}
 		h, err := tx.InsertChangeset(ctx, v.Repo.ID, &eff.ID, cs, files)
 		if err != nil {

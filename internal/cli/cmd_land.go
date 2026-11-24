@@ -131,6 +131,9 @@ the result.`,
 			if opts.session == "" {
 				opts.session = a.Getenv("VX_SESSION")
 			}
+			if err := a.precheckScope(ctx, c, wc); err != nil {
+				return err
+			}
 			if len(runs) == 0 {
 				return a.landOnce(ctx, c, wc, opts)
 			}

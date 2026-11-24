@@ -301,6 +301,26 @@ func (a *App) statusCmd() *cobra.Command {
 			}
 			out["conflict_markers"] = marked
 			if c, err := a.client(); err == nil {
+				if ai := a.ownAgent(ctx, c); ai != nil {
+					if ai.Unlimited {
+						a.printf("\nYour scope (%s): no limits\n", ai.Agent.Ref)
+					} else {
+						a.printf("\nYour scope (%s):\n", ai.Agent.Ref)
+						for _, l := range scopeLines(ai) {
+							a.printf("  %s\n", l)
+						}
+					}
+					paths := make([]string, len(changes))
+					for i, ch := range changes {
+						paths[i] = ch.Path
+					}
+					outside := outsideScope(ai.Scope, paths)
+					if len(outside) > 0 {
+						a.printf("Outside your scope, vx land will refuse: %s\n", strings.Join(outside, ", "))
+					}
+					out["agent"] = ai
+					out["outside_scope"] = outside
+				}
 				if board := a.boardStatus(ctx, c, wc, changes); board != nil {
 					out["board"] = board
 				}

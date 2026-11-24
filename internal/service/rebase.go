@@ -136,6 +136,15 @@ func (s *Service) ContinueRebase(ctx context.Context, actor Actor, in ContinueIn
 	if err := s.checkInRepo(ctx, v.Repo, cur.Tree, in.Tree); err != nil {
 		return RebaseView{}, err
 	}
+	stopped, err := s.Store.GetChangeset(ctx, v.Repo.ID, r.Pending[0])
+	if err != nil {
+		return RebaseView{}, err
+	}
+	// What an agent wrote itself to resolve the conflict must be in its
+	// scope; taking either side unchanged is not its own change.
+	if err := s.checkRebaseResolution(ctx, actor, stopped.Tree, cur.Tree, in.Tree); err != nil {
+		return RebaseView{}, err
+	}
 	seen := r.Version
 	r.State, r.UpdatedBy = store.RebaseRunning, actor.ID
 	ok, err := s.Store.UpdateRebase(ctx, r, seen)
