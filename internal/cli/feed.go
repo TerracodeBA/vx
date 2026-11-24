@@ -3,7 +3,9 @@ package cli
 // The board feed: notes and claims brought to the agent in the commands it
 // already runs (vx sync, land, status, wait), so nobody has to poll vx
 // board. A working copy remembers when it was last shown the board
-// (Config.BoardSeenAt) and is shown each note once.
+// (Config.BoardSeenAt), and the server what each principal was shown
+// (Note.read), so each note is shown once: a note vx board, vx context or
+// vx wait already showed does not come back in the feed.
 
 import (
 	"context"
@@ -74,10 +76,10 @@ func after(a, b string) bool {
 }
 
 // forMe reports whether a note others wrote belongs in the agent's feed:
-// a decision or interface anywhere in the effort, a question to the agent,
-// or any note on one of paths.
+// one it was not shown yet that is a decision or interface anywhere in the
+// effort, a question to the agent, or any note on one of paths.
 func forMe(n *vxv1.Note, me string, paths []string) bool {
-	if n.Trust == "self" || (me != "" && n.Author.GetRef() == me) {
+	if n.Read || n.Trust == "self" || (me != "" && n.Author.GetRef() == me) {
 		return false
 	}
 	if n.Kind == "decision" || n.Kind == "interface" {
@@ -186,9 +188,12 @@ func (a *App) boardFeedFor(ctx context.Context, c *client.Client, wc *workcopy.W
 
 // printBoardFeed prints the board section that ends vx sync and vx land:
 // new notes for the agent, then others' claims on its files. It prints
-// nothing when there is nothing new.
-func (a *App) printBoardFeed(f boardFeed) {
+// nothing when there is nothing new. The notes it prints in full count as
+// read.
+func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed) {
 	me := f.me
+	var printed []*vxv1.Note
+	defer func() { a.markRead(ctx, c, printed...) }()
 	if len(f.notes) > 0 {
 		a.printf("\nNew on the board since your last sync (%d). %s\n", len(f.notes), boardFraming)
 		roots, replies := threads(f.notes)
@@ -198,12 +203,14 @@ func (a *App) printBoardFeed(f boardFeed) {
 				break
 			}
 			a.printNote(n, noteOpts{me: me, indent: "  "})
+			printed = append(printed, n)
 			shown++
 			for _, r := range replies[n.Id] {
 				if shown == feedShown {
 					break
 				}
 				a.printNote(r, noteOpts{me: me, indent: "      "})
+				printed = append(printed, r)
 				shown++
 			}
 		}
@@ -269,7 +276,7 @@ func (a *App) syncFeed(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		return boardFeed{}.json()
 	}
 	f := a.boardFeedFor(ctx, c, wc, changedPaths(changes), true)
-	a.printBoardFeed(f)
+	a.printBoardFeed(ctx, c, f)
 	return f.json()
 }
 
@@ -283,7 +290,7 @@ func (a *App) landFeed(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		paths = append(paths, fc.Path)
 	}
 	f := a.boardFeedFor(ctx, c, wc, paths, false)
-	a.printBoardFeed(f)
+	a.printBoardFeed(ctx, c, f)
 	for _, cl := range r.OverlappingClaims {
 		if cl.Trust != "self" && (f.me == "" || cl.Owner.GetRef() != f.me) {
 			f.claims = append(f.claims, cl)
@@ -362,7 +369,7 @@ func (a *App) waitBoardNote(ctx context.Context, c *client.Client, wc *workcopy.
 			continue
 		}
 		w.seen[n.Id] = true
-		if n.Trust == "self" || n.Author.GetRef() == w.me || !onPaths(n.Targets, w.paths) {
+		if n.Read || n.Trust == "self" || n.Author.GetRef() == w.me || !onPaths(n.Targets, w.paths) {
 			continue
 		}
 		hit = n
@@ -376,6 +383,7 @@ func (a *App) waitBoardNote(ctx context.Context, c *client.Client, wc *workcopy.
 	}
 	a.printf("%s %s on a file you changed arrived. %s\n", article, hit.Kind, boardFraming)
 	a.printNote(hit, noteOpts{me: w.me, indent: "  "})
+	a.markRead(ctx, c, hit)
 	a.printf("Read it before you continue; see the board with: vx board\n")
 	a.emit(map[string]any{"reason": "note", "note": json.RawMessage(mustProtoJSON(hit))})
 	return true

@@ -97,7 +97,32 @@ func (s *Service) Reserve(ctx context.Context, actor Actor, repo, effort, rule s
 	return "", "", v03NotImplemented()
 }
 
-// MarkNotesRead records that actor was shown notes.
+// MarkNotesRead records that actor was shown notes. Notes in repositories
+// the caller cannot read, and ids of no note, are skipped silently, so the
+// call never tells whether a note exists.
 func (s *Service) MarkNotesRead(ctx context.Context, actor Actor, ids []uuid.UUID) error {
-	return nil
+	if len(ids) == 0 {
+		return nil
+	}
+	if len(ids) > MaxMarkRead {
+		return errf(CodeInvalid, "%d notes at once; mark at most %d per call", len(ids), MaxMarkRead)
+	}
+	repos, err := s.Store.NoteRepos(ctx, ids)
+	if err != nil {
+		return err
+	}
+	readable, err := s.readableFilter(ctx, actor)
+	if err != nil {
+		return err
+	}
+	keep := make([]uuid.UUID, 0, len(repos))
+	for id, repo := range repos {
+		if readable(repo) {
+			keep = append(keep, id)
+		}
+	}
+	return s.Store.MarkNotesRead(ctx, actor.ID, keep)
 }
+
+// MaxMarkRead is the most notes one MarkNotesRead call takes.
+const MaxMarkRead = 1000

@@ -61,7 +61,7 @@ func (a *App) me(ctx context.Context, c *client.Client) string {
 // ---------- post ----------
 
 func (a *App) postCmd() *cobra.Command {
-	var repoFlag, effortFlag string
+	var repoFlag, effortFlag, supersedes string
 	var targets []string
 	cmd := &cobra.Command{
 		Use:   "post plan|decision|interface|blocker|handoff TEXT --on TARGET...",
@@ -74,10 +74,18 @@ func (a *App) postCmd() *cobra.Command {
   blocker    what you are waiting on
   handoff    work left for the next agent
 
-Targets are paths ("internal/http/limit.go", "internal/http/") or symbols
-("auth.Login"). Questions go through vx ask.`,
+Targets (--on) can be file paths ("internal/http/limit.go"), directories
+("internal/http/", covering every file under it) or symbols ("pkg.Func",
+"auth.Login", "service.Note.Read"). Questions go through vx ask.
+
+When a plan or decision changes, replace your earlier note instead of
+posting a contradicting one: --supersedes ID. The old note then shows
+"replaced by" the new one and drops out of vx context, the sync feed and
+MCP; vx board --all still lists it. You can replace your own notes and
+those of your person's other agents.`,
 		Example: `  vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/ --on internal/api/limit.go
-  vx post interface "func Allow(key string) (bool, time.Duration)" --on limit.Allow`,
+  vx post interface "func Allow(key string) (bool, time.Duration)" --on limit.Allow
+  vx post decision "Limits are per user id, not per IP" --on limit.Allow --supersedes 1a2b3c4d`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kind := strings.ToLower(args[0])
@@ -96,19 +104,43 @@ Targets are paths ("internal/http/limit.go", "internal/http/") or symbols
 				return err
 			}
 			resp, err := c.Board.PostNote(ctxOf(cmd), connect.NewRequest(&vxv1.PostNoteRequest{
-				Repo: repo, Effort: slug, Kind: kind, Targets: targets, Body: args[1],
+				Repo: repo, Effort: slug, Kind: kind, Targets: targets, Body: args[1], Supersedes: supersedes,
 			}))
 			if err != nil {
 				return a.boardErr(err)
 			}
-			a.printf("Posted %s %s on the board of %s.\n", kind, noteID(resp.Msg.Note.Id), slug)
+			replaces := ""
+			if old := resp.Msg.Note.GetSupersedes(); old != "" {
+				replaces = ", replacing " + noteID(old)
+			} else if supersedes != "" {
+				// An older server ignored the field.
+				a.printf("This server cannot replace notes; %s stays on the board as it was.\n", supersedes)
+			}
+			a.printf("Posted %s %s on the board of %s%s.\n", kind, noteID(resp.Msg.Note.Id), slug, replaces)
 			a.emit(resp.Msg)
 			return nil
 		},
 	}
 	boardScopeFlags(cmd, &repoFlag, &effortFlag)
-	cmd.Flags().StringSliceVar(&targets, "on", nil, "path or symbol the note is about (repeatable)")
+	cmd.Flags().StringSliceVar(&targets, "on", nil, "file path, directory (dir/) or symbol (pkg.Func) the note is about (repeatable)")
+	cmd.Flags().StringVar(&supersedes, "supersedes", "", "id (or 8+ character prefix) of your earlier note this one replaces")
 	return cmd
+}
+
+// markRead tells the server the caller was shown notes. It is best effort:
+// a server without read state, or an error, only means a note may be shown
+// again.
+func (a *App) markRead(ctx context.Context, c *client.Client, notes ...*vxv1.Note) {
+	ids := make([]string, 0, len(notes))
+	for _, n := range notes {
+		if n != nil && !n.Read && n.Id != "" {
+			ids = append(ids, n.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	_, _ = c.Board.MarkRead(ctx, connect.NewRequest(&vxv1.MarkReadRequest{NoteIds: ids}))
 }
 
 // ---------- ask / answer ----------
@@ -165,6 +197,7 @@ answer is printed) or escalates without an answer (exit 3).`,
 			if answer != nil {
 				a.printf("\n")
 				a.printNote(answer, noteOpts{})
+				a.markRead(ctx, c, answer)
 				a.emit(map[string]any{"question": q, "answer": answer, "escalated": false})
 				return nil
 			}
@@ -246,9 +279,14 @@ func (a *App) boardCmd() *cobra.Command {
 	var repoFlag, effortFlag string
 	var targets, kinds []string
 	var limit int
+	var all bool
 	cmd := &cobra.Command{
-		Use:   "board [--on TARGET...] [--kind K...] [-n N]",
+		Use:   "board [--on TARGET...] [--kind K...] [-n N] [--all]",
 		Short: "List the effort's board: notes and questions, newest first",
+		Long: `List the effort's board: notes and questions, newest first, answers under
+their question. Notes a newer note replaced (vx post --supersedes) are left
+out; --all lists them too, marked "replaced by". The notes shown count as
+read: vx status, vx inbox and the sync feed do not bring them up again.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -260,7 +298,7 @@ func (a *App) boardCmd() *cobra.Command {
 			}
 			ctx := ctxOf(cmd)
 			resp, err := c.Board.ListNotes(ctx, connect.NewRequest(&vxv1.ListNotesRequest{
-				Repo: repo, Effort: slug, Targets: targets, Kinds: kinds, Limit: int32(limit),
+				Repo: repo, Effort: slug, Targets: targets, Kinds: kinds, Limit: int32(limit), IncludeSuperseded: all,
 			}))
 			if err != nil {
 				return a.boardErr(err)
@@ -281,6 +319,7 @@ func (a *App) boardCmd() *cobra.Command {
 					a.printNote(r, noteOpts{me: o.me, indent: "    "})
 				}
 			}
+			a.markRead(ctx, c, notes...)
 			// The whole board was shown, back to the last time this working
 			// copy saw it: sync, land and status need not show it again.
 			if len(targets) == 0 && len(kinds) == 0 {
@@ -302,6 +341,7 @@ func (a *App) boardCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&targets, "on", nil, "only notes about this path or symbol (repeatable)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "only notes of this kind (repeatable): plan, decision, interface, question, answer, blocker, handoff")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 0, "number of notes (default 100)")
+	cmd.Flags().BoolVar(&all, "all", false, "also list notes a newer note replaced")
 	return cmd
 }
 
@@ -332,9 +372,17 @@ func threads(notes []*vxv1.Note) ([]*vxv1.Note, map[string][]*vxv1.Note) {
 }
 
 func (a *App) inboxCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "inbox",
+	var all bool
+	cmd := &cobra.Command{
+		Use:   "inbox [--all]",
 		Short: "Questions for you, answers to your questions, and escalated questions",
+		Long: `What needs your attention across efforts: open questions for you, answers to
+your questions and, for people, escalated questions.
+
+Answers and escalated questions you were already shown (here, by vx wait,
+vx ask --wait or the sync feed) are left out and counted as "N read";
+--all lists them too. Open questions for you stay until they are answered.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -346,32 +394,65 @@ func (a *App) inboxCmd() *cobra.Command {
 				return a.boardErr(err)
 			}
 			in := resp.Msg
-			if len(in.Questions)+len(in.Answers)+len(in.Escalated) == 0 {
-				a.printf("Nothing needs your attention: no open questions for you, no answers to your questions.\n")
+			unread := func(notes []*vxv1.Note) ([]*vxv1.Note, int) {
+				if all {
+					return notes, 0
+				}
+				var out []*vxv1.Note
+				for _, n := range notes {
+					if !n.Read {
+						out = append(out, n)
+					}
+				}
+				return out, len(notes) - len(out)
+			}
+			answers, readAnswers := unread(in.Answers)
+			escalated, readEscalated := unread(in.Escalated)
+			read := readAnswers + readEscalated
+			readHint := ""
+			if read > 0 {
+				readHint = fmt.Sprintf("%d read (vx inbox --all).", read)
+			}
+			if !all {
+				a.emit(&vxv1.InboxResponse{Questions: in.Questions, Answers: answers, Escalated: escalated})
+			} else {
 				a.emit(in)
+			}
+			if len(in.Questions)+len(answers)+len(escalated) == 0 {
+				if read > 0 {
+					a.printf("Nothing new: no open questions for you, no unread answers. %s\n", readHint)
+				} else {
+					a.printf("Nothing needs your attention: no open questions for you, no answers to your questions.\n")
+				}
 				return nil
 			}
 			a.printf("%s\n", boardFraming)
-			o := noteOpts{me: a.me(ctx, c), where: true}
+			me := a.me(ctx, c)
 			section := func(title string, notes []*vxv1.Note, hint string) {
 				if len(notes) == 0 {
 					return
 				}
 				a.printf("\n%s (%d):\n", title, len(notes))
 				for _, n := range notes {
-					a.printNote(n, noteOpts{me: o.me, where: true, indent: "  "})
+					a.printNote(n, noteOpts{me: me, where: true, indent: "  "})
 				}
 				if hint != "" {
 					a.printf("  %s\n", hint)
 				}
 			}
 			section("Questions for you", in.Questions, `Answer with: vx answer ID "TEXT"`)
-			section("Answers to your questions", in.Answers, "")
-			section("Escalated: nobody answered in time", in.Escalated, `Answer with: vx answer ID "TEXT", or in the web UI's Board tab`)
-			a.emit(in)
+			section("Answers to your questions", answers, "")
+			section("Escalated: nobody answered in time", escalated, `Answer with: vx answer ID "TEXT", or in the web UI's Board tab`)
+			if readHint != "" {
+				a.printf("\n%s\n", readHint)
+			}
+			shown := append(append(append([]*vxv1.Note{}, in.Questions...), answers...), escalated...)
+			a.markRead(ctx, c, shown...)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "also list answers and escalated questions you were already shown")
+	return cmd
 }
 
 func (a *App) contextCmd() *cobra.Command {
@@ -416,6 +497,7 @@ separately, so their changes do not show up in vx sync.`,
 						a.printNote(r, noteOpts{me: me, indent: "      "})
 					}
 				}
+				a.markRead(ctx, c, m.Notes...)
 			}
 			if len(m.Claims) > 0 {
 				a.printf("\nClaimed now (%d). %s\n", len(m.Claims), claimFraming)
@@ -559,7 +641,13 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.Wo
 	repo, slug := wc.Config.Repo, wc.Config.Effort
 	paths := changedPaths(changes)
 	me := a.me(ctx, c)
-	claims, onFiles, contextOK := a.othersClaims(ctx, c, repo, slug, me, paths)
+	claims, notesOnFiles, contextOK := a.othersClaims(ctx, c, repo, slug, me, paths)
+	var onFiles []*vxv1.Note // unread notes by others: your own are never news
+	for _, n := range notesOnFiles {
+		if !n.Read && n.Trust != "self" && (me == "" || n.Author.GetRef() != me) {
+			onFiles = append(onFiles, n)
+		}
+	}
 	fresh, freshOK := a.statusFeed(ctx, c, wc, me, paths)
 	inbox, err := c.Board.Inbox(ctx, connect.NewRequest(&vxv1.InboxRequest{}))
 	if err != nil && !freshOK && (!contextOK || len(paths) == 0) {
@@ -578,9 +666,9 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.Wo
 		if len(shown) > 4 {
 			shown, more = shown[:4], " ..."
 		}
-		a.printf("  %d note(s) on files you changed. Read them: vx context %s%s\n", len(onFiles), strings.Join(shown, " "), more)
+		a.printf("  %d unread note(s) by others on files you changed. Read them: vx context %s%s\n", len(onFiles), strings.Join(shown, " "), more)
 	case len(paths) > 0:
-		a.printf("  No notes on files you changed.\n")
+		a.printf("  No unread notes by others on files you changed.\n")
 	}
 	if len(claims) > 0 {
 		a.printf("  Claimed by others (%d), coordinate before you land:\n", len(claims))
@@ -659,12 +747,12 @@ func seenOf(in *vxv1.InboxResponse) inboxSeen {
 // there when waiting started, and which it is.
 func (s inboxSeen) newNote(in *vxv1.InboxResponse) (*vxv1.Note, string) {
 	for _, n := range in.Questions {
-		if !s.questions[n.Id] {
+		if !s.questions[n.Id] && !n.Read {
 			return n, "question"
 		}
 	}
 	for _, n := range in.Answers {
-		if !s.answers[n.Id] {
+		if !s.answers[n.Id] && !n.Read {
 			return n, "answer"
 		}
 	}
@@ -686,6 +774,7 @@ func (a *App) waitNotes(ctx context.Context, c *client.Client, seen *inboxSeen) 
 		return false
 	}
 	me := a.me(ctx, c)
+	a.markRead(ctx, c, n)
 	if reason == "question" {
 		a.printf("A question for you arrived. %s\n", boardFraming)
 		a.printNote(n, noteOpts{me: me, where: true, indent: "  "})
@@ -746,6 +835,12 @@ func (a *App) printNote(n *vxv1.Note, o noteOpts) {
 	}
 	if n.Kind == "answer" && n.ThreadId != "" {
 		b.WriteString("  re " + noteID(n.ThreadId))
+	}
+	if n.Supersedes != "" {
+		b.WriteString("  replaces " + noteID(n.Supersedes))
+	}
+	if n.SupersededBy != "" {
+		b.WriteString("  replaced by " + noteID(n.SupersededBy))
 	}
 	b.WriteString("  id " + noteID(n.Id))
 	a.printf("%s%s\n", o.indent, b.String())

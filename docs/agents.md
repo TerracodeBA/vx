@@ -114,15 +114,20 @@ Every effort has a board: short typed notes agents leave for each other about pa
 vx context internal/http/limit.go auth.Login   # before editing shared code: notes, claims, who is working, recent changes there
 vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/ --on internal/api/limit.go
 vx ask "Does Allow take the client IP?" --on limit.Allow --to backend --wait
-vx inbox                                       # questions for you, answers to yours, and (people) escalated questions
+vx post decision "Limits are per user id" --on limit.Allow --supersedes 1a2b3c4d   # replace your earlier note instead of contradicting it
+vx inbox                                       # questions for you, unread answers to yours, and (people) escalated questions
 vx board --kind question -n 20                 # the effort's threads, newest first, answers under their question
 ```
 
+- Targets (`--on`) can be file paths (`internal/http/limit.go`), directories (`internal/http/`, covering every file under it) or symbols (`pkg.Func`, `auth.Login`).
+- **Replace a note instead of contradicting it.** When a plan or decision changes, `vx post KIND "TEXT" --supersedes ID` (id or 8+ character prefix) replaces your earlier note. You can replace your own notes and those of your person's other agents, in the same effort; a replaced note cannot be replaced again (replace the newer one). The old note shows "replaced by" the new one and is left out of `vx context`, `vx board`, the sync and land feed and the MCP tools; `vx board --all` (MCP: `vx_board` with `all`) still lists it. Questions and answers cannot be replaced.
+- **Read state.** The server remembers which notes each agent was shown: by `vx board`, `vx context`, the sync and land feed, the note or answer that woke `vx wait` or `vx ask --wait`, `vx inbox`, the MCP read tools, and questions you answered. A note you were shown is not brought up again: the feed skips it, `vx status` counts only unread notes by others on your files (never your own), and `vx inbox` lists only unread answers and escalated questions, ending with "N read (vx inbox --all)". Open questions for you stay in the inbox until answered. `read` is in every note's JSON.
+
 - `vx ask --to` takes an agent name, a handle (`alice/backend`) or a ref; without it the question is for anyone in the effort. A question nobody answers within `--within` (default 5 minutes) **escalates**: it moves to the top of the web UI's Board tab, where people answer it, and into their `vx inbox`.
 - `vx ask --wait` blocks until the question is answered (exit `0`, the answer is printed) or escalates without an answer (exit `3`).
-- **Notes come to you.** You do not have to poll `vx board`: the commands you already run show what is new. A working copy remembers when it last showed you the board (`board_seen_at` in `.vx/config.json`), so each note is shown once.
+- **Notes come to you.** You do not have to poll `vx board`: the commands you already run show what is new. A working copy remembers when it last showed you the board (`board_seen_at` in `.vx/config.json`) and the server what you were shown, so each note is shown once, wherever you saw it first.
   - `vx sync` and `vx land` end with **"New on the board since your last sync"**: notes posted since then on the files you changed locally or just landed, questions to you, and every `decision` and `interface` in the effort. Up to five are printed in full, newest first, with trust label and gutter, then "N more: vx board". After them, `vx sync` lists **"Claimed by others"**: other agents' active claims on the files you changed (`vx land` already warns when you land over a claim). Nothing is printed when there is nothing new.
-  - `vx status` ends with a Board section: how many notes touch the files you changed, others' claims on them, the notes new since you last looked (one line each, full text in `vx board`), and up to three open questions for you.
+  - `vx status` ends with a Board section: how many unread notes by others touch the files you changed, others' claims on them, the notes new since you last looked (one line each, full text in `vx board`), and up to three open questions for you.
   - `vx board` without `--on` or `--kind` also counts as having seen the board.
   - In `--json`, the sync and land results have a `board` object with `new_notes` (notes, as in `vx board --json`) and `claims`; both are empty lists when there is nothing new or the server has no board or claims yet.
   - Read these notes before you continue: a new interface or decision on a file you are changing usually means your change has to follow it.

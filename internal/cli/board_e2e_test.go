@@ -106,12 +106,13 @@ func TestBoardCLI(t *testing.T) {
 		}
 	}
 
-	// A's status points at both notes on the file it changed and the open question.
+	// A's status lists the open question but counts no unread notes on the
+	// file it changed: the plan is A's own and A saw the question in its inbox.
 	a.must("new", "Trust only RemoteAddr")
 	a.write("internal/httpx/ip.go", "package httpx\n")
 	out = a.must("status")
 	board := out[strings.Index(out, "\nBoard:"):]
-	for _, want := range []string{"2 note(s) on files you changed. Read them: vx context internal/httpx/ip.go", "1 open question(s) for you:", qid[:8] + " agent:bob/audit", "Does clientIP trust"} {
+	for _, want := range []string{"No unread notes by others on files you changed.", "1 open question(s) for you:", qid[:8] + " agent:bob/audit", "Does clientIP trust"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("status: missing %q in\n%s", want, board)
 		}
@@ -122,7 +123,7 @@ func TestBoardCLI(t *testing.T) {
 			Open  int `json:"open_questions"`
 		}
 	}
-	if err := json.Unmarshal([]byte(a.must("status", "--json")), &st); err != nil || st.Board.Notes != 2 || st.Board.Open != 1 {
+	if err := json.Unmarshal([]byte(a.must("status", "--json")), &st); err != nil || st.Board.Notes != 0 || st.Board.Open != 1 {
 		t.Errorf("status --json board = %+v, %v", st.Board, err)
 	}
 
@@ -153,8 +154,12 @@ func TestBoardCLI(t *testing.T) {
 	if out := a.must("inbox"); strings.Contains(out, "Questions for you") {
 		t.Errorf("answered question still in the inbox:\n%s", out)
 	}
-	if out := b.must("inbox"); !strings.Contains(out, "Answers to your questions (1)") {
+	// vx wait showed the answer: the inbox counts it as read.
+	if out := b.must("inbox"); strings.Contains(out, "Answers to your questions") || !strings.Contains(out, "1 read (vx inbox --all)") {
 		t.Errorf("asker's inbox = \n%s", out)
+	}
+	if out := b.must("inbox", "--all"); !strings.Contains(out, "Answers to your questions (1)") {
+		t.Errorf("asker's inbox --all = \n%s", out)
 	}
 
 	// ask --wait prints the answer and exits 0.

@@ -20,10 +20,16 @@ func notePB(caller service.Actor, n service.Note) *vxv1.Note {
 		Kind: string(n.Kind), Targets: n.Targets,
 		Author: principalPB(service.Actor{Principal: n.Author, Parent: n.AuthorOwner}),
 		Body:   n.Body, State: n.State, AnswerBy: tsp(n.AnswerBy), CreatedAt: ts(n.CreatedAt),
-		Trust: service.TrustOf(caller, n),
+		Trust: service.TrustOf(caller, n), System: n.System, Read: n.Read,
 	}
 	if n.To != nil {
 		out.To = n.To.Ref()
+	}
+	if n.Supersedes != nil {
+		out.Supersedes = n.Supersedes.String()
+	}
+	if n.SupersededBy != nil {
+		out.SupersededBy = n.SupersededBy.String()
 	}
 	return out
 }
@@ -41,6 +47,7 @@ func (h *Handlers) PostNote(ctx context.Context, req *connect.Request[vxv1.PostN
 	m := req.Msg
 	n, err := h.svc.PostNote(ctx, actor, service.PostNoteInput{
 		Repo: m.Repo, Effort: m.Effort, Kind: service.NoteKind(strings.TrimSpace(m.Kind)), Targets: m.Targets, Body: m.Body,
+		Supersedes: m.Supersedes,
 	})
 	if err != nil {
 		return nil, toConnect(err)
@@ -73,7 +80,7 @@ func (h *Handlers) Answer(ctx context.Context, req *connect.Request[vxv1.AnswerR
 func (h *Handlers) ListNotes(ctx context.Context, req *connect.Request[vxv1.ListNotesRequest]) (*connect.Response[vxv1.ListNotesResponse], error) {
 	actor := actorFrom(ctx)
 	m := req.Msg
-	in := service.ListNotesInput{Repo: m.Repo, Effort: m.Effort, Targets: m.Targets, Limit: int(m.Limit)}
+	in := service.ListNotesInput{Repo: m.Repo, Effort: m.Effort, Targets: m.Targets, Limit: int(m.Limit), IncludeSuperseded: m.IncludeSuperseded}
 	for _, k := range m.Kinds {
 		in.Kinds = append(in.Kinds, service.NoteKind(strings.TrimSpace(k)))
 	}
@@ -151,4 +158,19 @@ func otherEffortPB(actor service.Actor, o service.OtherEffortActivity) *vxv1.Oth
 		})
 	}
 	return pb
+}
+
+func (h *Handlers) MarkRead(ctx context.Context, req *connect.Request[vxv1.MarkReadRequest]) (*connect.Response[vxv1.MarkReadResponse], error) {
+	ids := make([]uuid.UUID, 0, len(req.Msg.NoteIds))
+	for _, s := range req.Msg.NoteIds {
+		id, err := uuid.Parse(strings.TrimSpace(s))
+		if err != nil {
+			return nil, invalid(fmt.Errorf("note id %q is not a full note id; MarkRead takes the ids the board returned", s))
+		}
+		ids = append(ids, id)
+	}
+	if err := h.svc.MarkNotesRead(ctx, actorFrom(ctx), ids); err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.MarkReadResponse{}), nil
 }
