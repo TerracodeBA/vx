@@ -25,6 +25,10 @@ const (
 	NoteAnswer    NoteKind = "answer"    // given with AnswerNote
 	NoteBlocker   NoteKind = "blocker"   // what I am waiting on
 	NoteHandoff   NoteKind = "handoff"   // work left for the next agent
+	// Posted by vx itself (Note.System), never through PostNote:
+	NoteOverlap NoteKind = "overlap" // a forecast collision with another effort
+	NoteReview  NoteKind = "review"  // a review comment from the git host (v0.4)
+	NoteCI      NoteKind = "ci"      // a CI result from the git host (v0.4)
 )
 
 // Note states.
@@ -67,6 +71,12 @@ type Note struct {
 	State       string
 	AnswerBy    *time.Time
 	CreatedAt   time.Time
+	// Supersedes is the author's earlier note this one replaces;
+	// SupersededBy is set on a note a newer one replaced.
+	Supersedes   *uuid.UUID
+	SupersededBy *uuid.UUID
+	System       bool // posted by vx itself
+	Read         bool // the caller has seen it (filled per caller)
 }
 
 // PostNoteInput is a non-question note.
@@ -75,6 +85,7 @@ type PostNoteInput struct {
 	Kind         NoteKind // plan, decision, interface, blocker, handoff
 	Targets      []string
 	Body         string
+	Supersedes   string // optional: id or 8+ character prefix of the author's own earlier note
 }
 
 // AskInput is a question.
@@ -113,8 +124,20 @@ type ContextWorkspace struct {
 type NoteContext struct {
 	Notes         []Note
 	Working       []ContextWorkspace
-	RecentChanges []LogEntry // landed changes touching the targets, newest first, with files
-	Claims        []Claim    // active claims on the targets (all when no targets)
+	RecentChanges []LogEntry            // landed changes touching the targets, newest first, with files
+	Claims        []Claim               // active claims on the targets (all when no targets)
+	OtherEfforts  []OtherEffortActivity // the targets in other open efforts the caller can read
+	Overlaps      []Overlap             // forecast collisions of this effort with others
+}
+
+// OtherEffortActivity is another open effort's activity on some targets.
+type OtherEffortActivity struct {
+	Effort       store.Effort
+	Owner        store.Principal
+	Claims       []Claim
+	Notes        []Note // interface and decision notes, newest first
+	Working      []ContextWorkspace
+	ChangedPaths []string // among the targets: changed in that effort, not shipped
 }
 
 // Reading a board needs read on its repository; posting, asking and
