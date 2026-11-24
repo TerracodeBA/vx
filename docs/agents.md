@@ -61,6 +61,34 @@ When an agent lands without `--run` and others landed first, the server merges t
 - A land that stops (conflicts or failing checks) keeps its `--run`, `--check`, `--new-test` and `--depends-on` flags. After fixing, a plain `vx land` in the same workspace runs them again and says so; `--fresh` lands without them.
 - Semantic conflicts (both sides add the same function in different files) merge as text but break the build. For Go, `vx sync` (also the one inside `vx land --run`) and `vx land` warn when a package now declares a function, method, type, var or const twice, including in `_test.go` files: `Warning: duplicate method App.printClaim in internal/cli (cmd_claim.go, feed.go)`, and `warnings` in `vx sync --json`. Other breakage vx cannot see; `--run` catches it.
 
+## Repository rules (vx.toml)
+
+Some collisions merge as text and still break: two efforts each add migration 008, both regenerate `gen/` and the text merge mixes two generator runs, a change lands without the checks the project always runs. A repository says what vx should watch for in `vx.toml` at its root:
+
+```toml
+# Two migrations may not share a number.
+[[unique]]
+name = "migration"                         # vx reserve migration
+glob = "internal/store/migrations/*.sql"
+key  = '^(\d+)_'                           # first group, matched on the file name
+
+# Generated code: never text-merged; regenerate it instead.
+[[generated]]
+glob    = "gen/**"
+command = "buf generate"
+
+[checks]
+required = ['test -z "$(gofmt -l cmd internal)"', "go vet ./...", "go test -count=1 ./..."]
+```
+
+- **Globs** match paths from the repository root: `*` and `?` within one path segment, a `**` segment across any number of them (`gen/**`, `**/*_string.go`, `api/**/types.go`). Character classes and braces are not supported.
+- **`[[unique]]`**: files matching `glob` may not share `key`, the first group of a regular expression matched on the file's name. When a land, `vx sync` or a ship plan produces two files with one key and at least one of them is new or changed, vx warns (kind `rule`): `Warning: migration 008 is used by 008_effort_rebases.sql and 008_orgs.sql (rule migration in vx.toml)`. A clash that predates the change is not repeated on every land. The overlap forecast reports the same clash between two efforts before either ships.
+- **`vx reserve RULE`** hands out the next free key before you add the file: one more than the largest used on the target branch, in any open effort or reserved before, with the same zero padding. Concurrent calls get different values. `Reserved migration 017 for this effort: name it internal/store/migrations/017_<name>.sql`. Reservations are listed by `vx rules` and on the repository page.
+- **`[[generated]]`**: a file matching `glob` is never text-merged. When both sides changed it (a land merging onto newer work, `vx sync`, a ship plan, a rebase), vx keeps the side being brought in (your working copy or workspace on land and sync, the effort's change on ship and rebase), writes no markers and warns (kind `generated`): `` Warning: generated file gen/vx/v1/vx.pb.go: regenerate with `buf generate` ``. Regenerate from the merged sources and land the result. Files whose first lines say `// Code generated ... DO NOT EDIT.` are treated the same way without a rule. A rebase that stops on another file lists the generated ones too, holding the change's version.
+- **`[checks] required`**: commands every land should run. `vx land` without a `--run` of exactly that command (spaces trimmed) prints `` Not verified: required check `go vet ./...` (vx.toml) was not run by vx ``; the change's evidence keeps it (`not_verified`), shown by `vx log`, the web UI and the pull request body. A check you report with `--check` does not count. It never blocks a land.
+- Warnings never block a land; they are stored with the change and shown by `vx land`, `vx log`, `vx show`, `--json` (`warnings`, kinds `rule` and `generated`) and the web UI. A `vx.toml` that does not parse is an error naming the line (`vx.toml line 4: [[unique]] "migration": key "^\d+_" has no group: ...`); a land that breaks it gets one warning and its rules are not applied until it is fixed. Unknown keys are errors too, so a typo never silently disables a rule.
+- `vx rules` shows the rules (at the effort head in a working copy, else the default branch), where they came from and the reservations; `--json` too. MCP: `vx_rules`, `vx_reserve`.
+
 ## Rebasing an effort
 
 An effort starts from its base branch (usually `main`) at some commit. When `main` moves on (another effort shipped, someone merged a pull request), `vx ship plan` may stop with `Change 42nv-gptt conflicts with main: ...`. Bring the effort up to date inside vx:
@@ -257,6 +285,8 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_inbox` | Open questions to you, answers to your questions, escalated questions |
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
 | `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
+| `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks), their source, and the keys reserved so far |
+| `vx_reserve` | Reserve the next free key of a `[[unique]]` rule for an effort, e.g. the next migration number |
 | `vx_tasks` | An effort's tasks: open, taken (with owner) and done, blocked ones with `depends_on` |
 | `vx_task_add` | Add a task, optionally waiting for others (`depends_on`) or assigned at once (`owner`) |
 | `vx_task_update` | Take, release, finish (`done`, which returns the tasks it unblocked), reopen or assign a task |
