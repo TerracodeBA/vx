@@ -326,6 +326,9 @@ type effortRow struct {
 	Open    int
 	Changes int
 	Agents  int
+	// Overlaps is how many other open efforts this one collides with
+	// (forecast); OverlapConflicts how many of those would conflict.
+	Overlaps, OverlapConflicts int
 }
 
 func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
@@ -347,8 +350,9 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 			u.fail(w, err)
 			return
 		}
+		counts := u.overlapCounts(r, actor, repo.Name)
 		for _, e := range effs {
-			rr.Efforts = append(rr.Efforts, u.effortRow(r, repo.Repo, e))
+			rr.Efforts = append(rr.Efforts, u.effortRow(r, repo.Repo, e, counts))
 		}
 		rows = append(rows, rr)
 	}
@@ -365,9 +369,20 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	u.render(w, r, "home", map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts"})
 }
 
-func (u *UI) effortRow(r *http.Request, repo store.Repo, e store.Effort) effortRow {
+// overlapCounts is the forecast badge data of a repository's efforts; on
+// an error the badges are left out.
+func (u *UI) overlapCounts(r *http.Request, actor service.Actor, repo string) map[uuid.UUID][2]int {
+	counts, err := u.svc.OverlapCounts(r.Context(), actor, repo)
+	if err != nil {
+		return nil
+	}
+	return counts
+}
+
+func (u *UI) effortRow(r *http.Request, repo store.Repo, e store.Effort, overlaps map[uuid.UUID][2]int) effortRow {
 	ctx := r.Context()
 	row := effortRow{Effort: e, Repo: repo.Name, Owner: u.ref(r, e.OwnerID)}
+	row.Overlaps, row.OverlapConflicts = overlaps[e.ID][0], overlaps[e.ID][1]
 	if ws, err := u.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen); err == nil {
 		row.Open = len(ws)
 	}
@@ -403,8 +418,9 @@ func (u *UI) repo(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		return
 	}
 	var rows []effortRow
+	counts := u.overlapCounts(r, actor, repo.Name)
 	for _, e := range effs {
-		rows = append(rows, u.effortRow(r, repo.Repo, e))
+		rows = append(rows, u.effortRow(r, repo.Repo, e, counts))
 	}
 	u.render(w, r, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name})
 }
@@ -524,6 +540,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	}
 	claims := u.claimRows(r, actor, repoName, slug, color)
 	shipments, _ := u.svc.ListShipments(ctx, actor, repoName, slug)
+	overlaps, _ := u.svc.EffortOverlaps(ctx, actor, repoName, slug)
 	baseRow, _ := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
 	changesView := param(r, "view") == "changes"
 	boardView := param(r, "view") == "board"
@@ -544,7 +561,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
-		"Claims": claims, "Rebase": u.rebaseBanner(ctx, actor, v),
+		"Claims": claims, "Rebase": u.rebaseBanner(ctx, actor, v), "Overlaps": overlaps,
 		"OtherEfforts": u.otherEfforts(r, actor, repoName, slug),
 	})
 }

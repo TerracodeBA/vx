@@ -60,6 +60,7 @@ Launch one subagent per part, in parallel (one message with several Agent tool c
 - Web UI: the effort page updates live (who is working, every land, diffs). Share the link with the user. Its Board tab shows the agents' plans and questions; questions nobody answered in time escalate to the top, where the user answers them.
 - `vx tasks --all` (or the effort page's Tasks tab) shows what is open, who has what, what is blocked and what is done. Add tasks as new work turns up; `vx task assign ID NAME` hands one to a specific agent.
 - `vx inbox` as the user lists escalated questions; answer with `vx answer ID "TEXT"`.
+- Other efforts of the same repository: `vx overlaps --effort SLUG --repo REPO` (or the badge in the web UI's efforts list) says which other open efforts change the same files and whether shipping both would conflict or break a rule such as migration numbers. vx also posts it on both boards. Settle who changes what before both ship.
 - CLI: `vx effort show SLUG --repo REPO`, `vx log --files --repo REPO SLUG`.
 
 Wait for each agent's report rather than polling its transcript.

@@ -153,6 +153,17 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		s.log.Error("vx server did not shut down cleanly", "err", err)
 		return err
 	}
+	if s.Service != nil {
+		// Let overlap forecasts finish within the grace period; one cut
+		// short is recomputed when someone next asks for it.
+		done := make(chan struct{})
+		go func() { s.Service.WaitForecasts(); close(done) }()
+		select {
+		case <-done:
+		case <-shutdown.Done():
+			s.log.Warn("overlap forecasts still running at shutdown; they are recomputed on demand")
+		}
+	}
 	s.log.Info("vx server stopped")
 	return nil
 }

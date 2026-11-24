@@ -1,0 +1,87 @@
+package cli_test
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// Two efforts change the same lines of x.go: vx overlaps, vx status and the
+// next vx land tell both sides, and the boards get a system note.
+func TestOverlapsCLI(t *testing.T) {
+	alice, a, b := boardPair(t)
+	alice.must("effort", "new", "Auth", "--repo", "shop-api")
+	work := filepath.Dir(b.dir)
+	b.dir = work
+	b.must("clone", "shop-api", "auth", "b2")
+	b.dir = filepath.Join(work, "b2")
+
+	a.must("new", "Add Func")
+	a.write("x.go", "package pkg\n\nfunc Func() int { return 1 }\n")
+	a.must("land")
+	b.must("new", "Add Func too")
+	b.write("x.go", "package pkg\n\nfunc Func() int { return 2 }\n")
+	b.must("land")
+
+	out := b.must("overlaps")
+	for _, want := range []string{
+		"Overlaps of auth with other efforts (1 of 1):\n",
+		"  conflict  rate-limiting (user:alice): conflicts in x.go\n",
+		"Agree with the other effort's owner",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("vx overlaps: missing %q in\n%s", want, out)
+		}
+	}
+	var resp struct {
+		Overlaps []struct {
+			Effort      string   `json:"effort"`
+			OtherEffort string   `json:"other_effort"`
+			Status      string   `json:"status"`
+			Conflicts   []string `json:"conflicts"`
+		}
+	}
+	if err := json.Unmarshal([]byte(b.must("overlaps", "--json")), &resp); err != nil || len(resp.Overlaps) != 1 ||
+		resp.Overlaps[0].OtherEffort != "rate-limiting" || resp.Overlaps[0].Status != "conflict" {
+		t.Fatalf("vx overlaps --json = %+v %v", resp, err)
+	}
+	if out := a.must("status"); !strings.Contains(out, "Overlaps with other efforts (details: vx overlaps):\n  conflict  auth (user:alice): conflicts in x.go\n") {
+		t.Errorf("vx status lacks the overlap:\n%s", out)
+	}
+	if out := b.must("context", "x.go"); !strings.Contains(out, "Overlaps with other efforts (details: vx overlaps):\n  conflict  rate-limiting (user:alice): conflicts in x.go\n") {
+		t.Errorf("vx context lacks the overlap:\n%s", out)
+	}
+	if out := b.must("context", "README.md"); strings.Contains(out, "Overlaps with other efforts") {
+		t.Errorf("vx context on another file lists the overlap:\n%s", out)
+	}
+	// The next land in either effort prints the stored forecast after the
+	// result and warnings, before the board feed.
+	a.must("new", "More")
+	a.write("y.go", "package pkg\n")
+	out = a.must("land")
+	i, j := strings.Index(out, "Landed "), strings.Index(out, "Overlaps with other efforts:\n  conflict  auth (user:alice): conflicts in x.go\n")
+	if i < 0 || j < i {
+		t.Errorf("vx land output order:\n%s", out)
+	}
+	if k := strings.Index(out, "New on the board"); k >= 0 && k < j {
+		t.Errorf("the board feed must come after the overlaps:\n%s", out)
+	}
+	if !strings.Contains(a.must("board"), "Shipping both conflicts in x.go") {
+		t.Errorf("no overlap note on the board:\n%s", a.must("board"))
+	}
+	// b moves to its own file: no collision any more.
+	b.must("new", "Back off")
+	if err := os.Remove(filepath.Join(b.dir, "x.go")); err != nil {
+		t.Fatal(err)
+	}
+	b.write("z.go", "package pkg\n\nfunc Other() int { return 2 }\n")
+	b.must("land")
+	if out := b.must("overlaps"); !strings.Contains(out, "No overlaps: auth shares no files with the 1 other open effort(s)") {
+		t.Errorf("after moving away:\n%s", out)
+	}
+	if out := b.must("overlaps", "--all"); !strings.Contains(out, "  clean     rate-limiting (user:alice): no shared files\n") {
+		t.Errorf("vx overlaps --all:\n%s", out)
+	}
+}

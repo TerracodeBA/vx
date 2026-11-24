@@ -143,6 +143,7 @@ func (h *Handlers) Context(ctx context.Context, req *connect.Request[vxv1.Contex
 	for _, o := range c.OtherEfforts {
 		out.OtherEfforts = append(out.OtherEfforts, otherEffortPB(actor, o))
 	}
+	out.Overlaps = overlapsPB(c.Overlaps)
 	return connect.NewResponse(out), nil
 }
 

@@ -216,6 +216,7 @@ func (s *Service) applyGitHubPush(ctx context.Context, p hookPayload) error {
 	}
 	if n > 0 {
 		_ = s.Store.LogOp(ctx, &r.ID, nil, "branch.sync", branch, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n, "by": "github push"})
+		s.scheduleBranchForecast(r, branch)
 	}
 	return nil
 }
