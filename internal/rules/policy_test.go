@@ -68,7 +68,6 @@ func TestParsePolicyErrors(t *testing.T) {
 		{"bad glob", "[[policy]]\npaths = [\"a/**\", \"b/\"]\nmode = \"fast\"\n", 2, `[[policy]] "a/**": glob "b/" ends with /: globs match files, write "b/**" for everything under it`},
 		{"missing mode", "[[policy]]\npaths = [\"a/**\"]\n", 1, `[[policy]] "a/**": mode is missing: "fast", "gated" or "human"`},
 		{"unknown mode", "[[policy]]\npaths = [\"a/**\"]\nmode = \"slow\"\n", 3, `[[policy]] "a/**": mode "slow" is not one of "fast", "gated" or "human"`},
-		{"unknown key", "[[policy]]\npaths = [\"a/**\"]\nmode = \"fast\"\nreviewers = [\"user:bob\"]\n", 4, `unknown key "reviewers" in [[policy]] (known: paths, mode, require, approvers)`},
 		{"require on fast", "[[policy]]\npaths = [\"a/**\"]\nmode = \"fast\"\nrequire = [\"go test ./...\"]\n", 4, `require has no effect with mode = "fast"`},
 		{"empty require command", "[[policy]]\npaths = [\"a/**\"]\nmode = \"gated\"\nrequire = [\"go vet ./...\", \"\"]\n", 4, "require has an empty command"},
 		{"gated without checks", "[[policy]]\npaths = [\"a/**\"]\nmode = \"gated\"\n", 1, `mode = "gated" needs checks: set require = ["go test ./..."] in the policy, or required in [checks]`},

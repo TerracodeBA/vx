@@ -29,12 +29,20 @@ func (s *Service) ruleWarnings(ctx context.Context, base, tree hash.Hash) []engi
 		return []engine.Warning{{Path: rules.File, Kind: rules.WarningRule, Name: rules.File,
 			Detail: fmt.Sprintf("vx.toml does not parse, so its rules are not applied: %v", err)}}
 	}
+	var out []engine.Warning
+	if len(r.Ignored) > 0 && s.rulesFileChanged(ctx, base, tree) {
+		// Written for a newer vx: say what this one leaves out, once, on
+		// the change that wrote it.
+		for _, msg := range r.Ignored {
+			out = append(out, engine.Warning{Path: rules.File, Kind: rules.WarningRule, Name: rules.File, Detail: msg})
+		}
+	}
 	ws, err := rules.Check(ctx, s.Blobs, r, base, tree)
 	if err != nil {
 		slog.Warn("vx.toml rules could not be checked", "tree", tree.Short(), "err", err)
-		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check the vx.toml rules: %v", err)}}
+		return append(out, engine.Warning{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check the vx.toml rules: %v", err)})
 	}
-	return ws
+	return append(out, ws...)
 }
 
 // withRequiredChecks returns the evidence to store for a snapshot: ev with

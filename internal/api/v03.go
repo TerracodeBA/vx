@@ -37,7 +37,7 @@ func (h *Handlers) ListOverlaps(ctx context.Context, req *connect.Request[vxv1.L
 
 // rulesPB converts a repository's vx.toml rules.
 func rulesPB(r service.Rules) *vxv1.RepoRules {
-	out := &vxv1.RepoRules{RequiredChecks: r.RequiredChecks, Source: r.Source}
+	out := &vxv1.RepoRules{RequiredChecks: r.RequiredChecks, Source: r.Source, Ignored: r.Ignored}
 	for _, u := range r.Unique {
 		out.Unique = append(out.Unique, &vxv1.UniqueRule{Name: u.Name, Glob: u.Glob, Key: u.Key, Content: u.Content, Scope: u.Scope})
 	}

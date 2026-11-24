@@ -1393,6 +1393,9 @@ message RepoRules {
   repeated string required_checks = 3;
   string source = 4; // where they came from, e.g. "vx.toml at 3f2a1c9d0e7b"; empty: no vx.toml
   repeated LandingPolicy policies = 5;
+  // What of vx.toml this server does not know (keys or tables of a newer
+  // vx), left out: a rule with an unknown key is ignored as a whole.
+  repeated string ignored = 6;
 }
 
 // LandingPolicy is a [[policy]] of vx.toml: how changes to its paths land.

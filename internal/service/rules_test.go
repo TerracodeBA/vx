@@ -241,3 +241,20 @@ func TestReserveFormatsAndConcurrency(t *testing.T) {
 		}
 	}
 }
+
+// A vx.toml with a rule for a newer vx: the land that writes it warns once
+// that the rule is ignored, and the other rules still apply.
+func TestLandVXTomlFromNewerVX(t *testing.T) {
+	e := newEnv(t)
+	repo, eff := e.setup()
+	toml := rulesToml + "\n[[unique]]\nname = \"proto-field\"\nglob = \"proto/*.proto\"\nkey = '^(\\w+)'\nper_message = true\n"
+	cs := e.land(repo, eff, "Rules", map[string]*string{"vx.toml": s(toml), "db/migrations/001_a.sql": s("a")}, nil)
+	if len(cs.Warnings) != 1 || !strings.Contains(cs.Warnings[0].Detail, `rule [[unique]] "proto-field" uses key "per_message", which this vx does not know; the rule is ignored`) {
+		t.Fatalf("warnings of the land that wrote vx.toml: %+v", cs.Warnings)
+	}
+	eff = e.effort(eff)
+	cs = e.land(repo, eff, "Clash", map[string]*string{"db/migrations/001_b.sql": s("b")}, nil)
+	if len(cs.Warnings) != 1 || !strings.Contains(cs.Warnings[0].Detail, "migration 001 is used by 001_a.sql and 001_b.sql") {
+		t.Fatalf("the migration rule must still apply, once: %+v", cs.Warnings)
+	}
+}
