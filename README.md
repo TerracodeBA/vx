@@ -8,7 +8,7 @@ Design: [vx design draft](https://claude.ai/artifact/8AJCAZHN14rYS4uRgkauBL)
 
 ## Status
 
-Phase 1, in progress.
+Phase 1 done. Phase 2 (shared context board, leases, MCP) is next.
 
 | Step | What | State |
 |---|---|---|
@@ -17,7 +17,7 @@ Phase 1, in progress.
 | 2 | Server and CLI: efforts, workspaces, land with compare-and-swap, sync | done |
 | 3 | Git import: follow any branch of a git or GitHub repo, chosen on the fly | done |
 | 4 | Shipping: replay onto the target, clean commits, `vx/` branch, pull request | done |
-| 5 | Three Claude Code agents build one feature through vx | in progress |
+| 5 | Three Claude Code agents build one feature through vx | done: [sandbox PR #1](https://github.com/TerracodeBA/vx-sandbox/pull/1) |
 
 ## Quick start
 

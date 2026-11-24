@@ -26,7 +26,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 	if b.githubToken() == "" {
 		// Without an API token vx can push but not open the PR. Hand back
 		// the page where a person opens it with one click.
-		return provider.OpenedPR{URL: fmt.Sprintf("https://github.com/%s/compare/%s...%s?expand=1", repo.Remote, url.PathEscape(pr.Base), url.PathEscape(pr.Head))},
+		return provider.OpenedPR{URL: fmt.Sprintf("https://github.com/%s/compare/%s...%s?expand=1", repo.Remote, compareRef(pr.Base), compareRef(pr.Head))},
 			provider.ErrNoPullRequests
 	}
 	if !strings.HasPrefix(pr.Head, BranchPrefix) {
@@ -122,4 +122,10 @@ func trimBody(s string) string {
 		s = s[:300] + "..."
 	}
 	return s
+}
+
+// compareRef escapes a branch name for a GitHub compare URL, keeping the
+// slashes GitHub expects in names like vx/rate-limiting.
+func compareRef(branch string) string {
+	return strings.ReplaceAll(url.PathEscape(branch), "%2F", "/")
 }
