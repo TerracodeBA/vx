@@ -11,7 +11,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/google/uuid"
 
@@ -378,13 +377,8 @@ func (s *Service) DataDisk() (DiskSpace, bool) {
 	if dir == "" {
 		return DiskSpace{}, false
 	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
-		return DiskSpace{}, false
-	}
-	total := int64(st.Blocks) * int64(st.Bsize)
-	free := int64(st.Bavail) * int64(st.Bsize)
-	if total <= 0 {
+	free, total, ok := diskSpace(dir)
+	if !ok || total <= 0 {
 		return DiskSpace{}, false
 	}
 	warn := s.Quotas.DiskWarnPercent
