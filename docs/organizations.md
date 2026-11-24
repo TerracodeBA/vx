@@ -100,6 +100,7 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 
 | Page | Who sees it | What it shows and does |
 |---|---|---|
+| **Reviews** (`/ui/reviews`, in the sidebar for everyone) | Every signed-in person, for the repositories they can read | Changes waiting for a person under a human landing policy, with who landed them and the files under the policy, and the recently decided ones. Each links to its change page, where people who may decide it Approve (it lands) or Reject with a reason. |
 | **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Site admins can switch to every organization on the server. |
 | **An organization** (`/ui/orgs/ORG`) | Its members, and site admins | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners, admins and site admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
 | **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, ...). People who can read the repository get 403; everyone else gets 404. |
@@ -115,6 +116,17 @@ vx ui
 ```
 
 (or `vx login --server https://vx.example.com` without a token: it opens the browser, where they sign in with that token once and approve), and can then create more tokens and their own agents from Settings, and revoke the first token.
+
+## Landing policies: who approves
+
+A `[[policy]]` with `mode = "human"` in a repository's `vx.toml` keeps changes to its paths out of the effort until a person approves them (see [docs/agents.md](agents.md#landing-policies)). Who may approve or reject such a review:
+
+- **A person.** Agents never decide reviews, not even for their own person: `vx review approve` with an agent token and the web UI signed in as an agent are refused (`only people approve or reject reviews`).
+- **With write on the repository.** On a GitHub-backed repository that is write (or more) on GitHub; vx grants do not count there. Someone who cannot read the repository does not see the review at all.
+- **In every `approvers` list** of the matching human policies, when they name approvers: `user:HANDLE` is the person with that vx handle (with GitHub sign-in, the GitHub login), `team:ORG/TEAM` a member of that vx team. GitHub-linked organizations have no vx teams, so on them use `user:` entries.
+- **Not the change's author.** A person who landed the change by hand needs another person. A person may approve the changes of their own agents: the policy asks for a person to look, and agents act for their person. If you need four eyes on agent work too, name approvers who are not the agents' owners.
+
+Approving lands the change onto the effort head as it is then, authored by the agent, with the approver in its evidence. Rejecting needs a reason, which the author reads in a note addressed to them. The web UI's **Reviews** page lists what waits, marks what you can decide, and links each review to its change page with Approve and Reject (form posts, same-origin only).
 
 ## Upgrading from v0.1
 
@@ -149,7 +161,7 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 
 - Path scopes per agent (`internal/http/**`), checked on every land: done, `vx agent scope` (see [agents.md](agents.md#scopes-and-budgets)).
 - Budgets per agent: lands per day, lines and files per land, open workspaces: done. Still to come: budgets per person, check minutes, storage.
-- Landing policies per path: `fast`, `gated` (checks before landing) and `human` (approval from an owner).
+- Landing policies per path: `fast`, `gated` (checks before landing) and `human` (a person approves): done, `[[policy]]` in vx.toml and `vx review` (see [Landing policies: who approves](#landing-policies-who-approves)).
 - Trust levels: new agents land gated until they have a track record.
 
 ### 3. GitHub App and other hosts
@@ -208,6 +220,8 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Close an effort (merged or abandoned) | `vx effort close` | write |
 | Reserve the next key of a vx.toml `[[unique]]` rule for an effort | `vx reserve`, `vx_reserve` | write |
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
+| List and show changes waiting for a person (landing policies) | `vx review list`, `vx review show`, `vx status`, Reviews and the effort page | read |
+| Approve or reject a pending review (a person, not the change's author, in the policy's approvers when it names them; never an agent) | `vx review approve`, `vx review reject`, Approve and Reject on the change page | write |
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |

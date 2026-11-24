@@ -51,11 +51,24 @@ type Evidence struct {
 	// NotVerified are the commands vx.toml [checks] required that vx did
 	// not run for this change (set by the server when it lands).
 	NotVerified []string `json:"not_verified,omitempty"`
+	// Approvals are the people who approved the change before it landed,
+	// under a "human" landing policy of vx.toml (set by the server).
+	Approvals []Approval `json:"approvals,omitempty"`
+}
+
+// Approval records that a person approved a change under a "human"
+// landing policy.
+type Approval struct {
+	By     string    `json:"by"`               // e.g. "user:alice"
+	At     time.Time `json:"at"`               // UTC, microseconds
+	Review string    `json:"review,omitempty"` // the review's id
+	// Paths are the files under the policy that made the review necessary.
+	Paths []string `json:"paths,omitempty"`
 }
 
 // IsEmpty reports whether there is no evidence.
 func (e Evidence) IsEmpty() bool {
-	return len(e.Checks) == 0 && len(e.NewTests) == 0 && len(e.NotVerified) == 0
+	return len(e.Checks) == 0 && len(e.NewTests) == 0 && len(e.NotVerified) == 0 && len(e.Approvals) == 0
 }
 
 // Changeset is one change: a snapshot (tree) on top of its parents, with the

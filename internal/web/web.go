@@ -154,7 +154,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people"} {
+	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people", "reviews"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -179,6 +179,8 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/effort/head", u.auth(u.effortHead))
 	mux.HandleFunc("POST /ui/board/answer", u.auth(u.answerPost))
 	mux.HandleFunc("GET /ui/change", u.auth(u.change))
+	mux.HandleFunc("GET /ui/reviews", u.auth(u.reviews))
+	mux.HandleFunc("POST /ui/review", u.auth(u.reviewPost))
 	mux.HandleFunc("GET /ui/diff", u.auth(u.diff))
 	mux.HandleFunc("GET /ui/ship", u.auth(u.ship))
 	mux.HandleFunc("POST /ui/ship", u.auth(u.shipPost))
@@ -585,7 +587,19 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
 		"Claims": claims, "Rebase": u.rebaseBanner(ctx, actor, v), "Overlaps": overlaps,
 		"OtherEfforts": u.otherEfforts(r, actor, repoName, slug),
+		"Reviews":      u.effortReviews(r, actor, repoName, slug),
 	})
+}
+
+// effortReviews are the effort's changes waiting for a person; nil when
+// they cannot be listed (the page still renders).
+func (u *UI) effortReviews(r *http.Request, actor service.Actor, repo, slug string) []service.Review {
+	rs, err := u.svc.ListReviews(r.Context(), actor, service.ReviewQuery{Repo: repo, Effort: slug})
+	if err != nil {
+		u.log.Warn("effort reviews", "repo", repo, "effort", slug, "err", err)
+		return nil
+	}
+	return rs
 }
 
 // rebaseBanner is the effort page's notice of a rebase in progress.
@@ -1014,6 +1028,10 @@ type fileDiff struct {
 func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, ref := param(r, "repo"), param(r, "ref")
+	if id := param(r, "review"); id != "" {
+		u.reviewChange(w, r, actor, id)
+		return
+	}
 	repo, e, err := u.svc.GetChangeset(ctx, actor, repoName, ref)
 	if err != nil {
 		u.fail(w, err)

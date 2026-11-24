@@ -1,0 +1,53 @@
+{{define "crumbs"}}<span>Reviews</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Reviews</h1>
+    <p class="muted">Changes waiting for a person. A <span class="mono">human</span> landing policy in a repository's <span class="mono">vx.toml</span> keeps changes to its paths out of the effort until someone with write on the repository approves them. Agents never approve.</p>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Waiting</span><span class="kpi-value">{{len .Pending}}</span></div>
+  <div class="kpi"><span class="kpi-label">You can decide</span><span class="kpi-value">{{.Mine}}</span></div>
+</div>
+{{if not .Pending}}
+<div class="panel empty">
+  <h2>Nothing waits for a person</h2>
+  <p class="muted">Changes appear here when an agent lands a file under a human policy, for example:</p>
+  <pre class="code">[[policy]]
+paths = ["internal/store/migrations/**"]
+mode  = "human"</pre>
+</div>
+{{else}}
+<div class="panel">
+  <div class="panel-head"><h2>Waiting for a person</h2></div>
+  <div class="table-wrap">
+  <table class="table" id="review-table">
+    <thead><tr><th>Change</th><th>Effort</th><th>By</th><th>Files under the policy</th><th>Waiting</th><th>You</th></tr></thead>
+    <tbody>
+    {{range .Pending}}
+      <tr>
+        <td class="cell-main"><a class="row-link" href="/ui/change?repo={{.RepoName}}&amp;review={{.ID}}">{{first .Intent}}</a><div class="cell-sub mono">{{.ChangeID}}</div>{{if .Conflicts}}<div class="cell-sub"><span class="pill warn">conflicts</span> back with the author</div>{{end}}</td>
+        <td class="small"><a href="/ui/effort?repo={{.RepoName}}&amp;slug={{.EffortSlug}}">{{.RepoName}} / {{.EffortSlug}}</a></td>
+        <td class="small">{{principal .Author.Ref}}</td>
+        <td class="small mono">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</td>
+        <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+        <td class="small">{{if .CanDecide}}<span class="pill ok">can approve</span>{{else}}<span class="muted" title="{{.CannotDecide}}">cannot decide</span>{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</div>
+{{end}}
+{{if .Decided}}
+<div class="panel">
+  <div class="panel-head"><h2>Recently decided</h2></div>
+  <ul class="plain-list">
+  {{range .Decided}}
+    <li><span class="pill {{if eq .State "approved"}}ok{{else}}bad{{end}}">{{.State}}</span><a href="/ui/change?repo={{.RepoName}}&amp;review={{.ID}}">{{first .Intent}}</a> <span class="muted small">{{.RepoName}} / {{.EffortSlug}} · {{if .DecidedBy}}by {{principal .DecidedBy.Ref}}{{end}}{{if .DecidedAt}} {{ago .DecidedAt}}{{end}}</span></li>
+  {{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}

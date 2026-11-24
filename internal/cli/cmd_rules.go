@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
@@ -24,6 +26,9 @@ every land, sync and ship:
                  changed one, vx keeps yours and says to run the command
   [checks]       required commands: vx land says "Not verified" for each
                  one it did not run with --run
+  [[policy]]     how changes to some paths land: fast (default), gated
+                 (required checks run by vx and passing) or human (a
+                 person approves first; see vx review)
 
 Inside a working copy the rules come from the effort's head; outside one
 from the default branch (or --effort).`,
@@ -80,6 +85,18 @@ from the default branch (or --effort).`,
 					a.printf("\nRequired checks (vx land --run each):\n")
 					for _, c := range r.RequiredChecks {
 						a.printf("  %s\n", c)
+					}
+				}
+				if len(r.Policies) > 0 {
+					a.printf("\nLanding policies (the strictest matching one applies):\n")
+					for _, p := range r.Policies {
+						a.printf("  %-6s %s\n", p.Mode, strings.Join(p.Paths, ", "))
+						if p.Mode != "fast" && len(p.Require) > 0 {
+							a.printf("         needs, run by vx: %s\n", strings.Join(p.Require, "; "))
+						}
+						if len(p.Approvers) > 0 {
+							a.printf("         approvers: %s\n", strings.Join(p.Approvers, ", "))
+						}
 					}
 				}
 			}

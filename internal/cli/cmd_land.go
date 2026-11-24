@@ -54,6 +54,14 @@ changes onto theirs. The change is then marked as merged, and its evidence
 as gathered before the merge. Only real conflicts stop a land: run vx
 sync, fix the conflicting files and land again.
 
+Landing policies. vx.toml [[policy]] may make some paths "gated" (the
+land is refused unless every required check ran with --run and passed) or
+"human" (a person approves first). A human land prints "Waiting for a
+person to review: PATHS (policy in vx.toml)" and exits 0 with "status":
+"pending_review" in --json: nothing is in the effort yet and the workspace
+stays open. vx wait returns when a person decides; landing again from the
+workspace replaces the snapshot under review.
+
 If a land stops (conflicts, failing checks), vx keeps its evidence flags
 (--run, --check, --new-test, --depends-on). A later vx land without any of
 them in the same workspace reuses them and says so; --fresh ignores them.
@@ -77,6 +85,9 @@ the result.`,
 				return errRebasing(wc)
 			}
 			ctx := ctxOf(cmd)
+			if _, err := a.settleReview(ctx, c, wc); err != nil {
+				return err
+			}
 			if wc.Config.Workspace == "" {
 				if intent == "" {
 					return errors.New(`no workspace open: run vx new "INTENT" first, or pass -m "INTENT"`)
@@ -298,6 +309,9 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	}
 	r := resp.Msg
 	if r.EffortMoved {
+		if r.Status == "" {
+			r.Status = "effort_moved"
+		}
 		if len(o.ran) > 0 {
 			return errEffortMoved
 		}
@@ -306,7 +320,13 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		a.landResult = fmt.Sprintf("Not landed: the effort moved on to %s since your last sync (exit 2)", short(r.EffortHead))
 		return errConflict
 	}
+	if r.Review != nil {
+		return a.landPending(ctx, c, wc, r)
+	}
 	if !r.Landed {
+		if r.Status == "" {
+			r.Status = "conflicts"
+		}
 		a.printf("Not landed: your changes conflict with changes already in the effort (now at %s).\n\n", short(r.EffortHead))
 		for _, cf := range r.Conflicts {
 			a.printf("  %-14s %s %s\n", cf.Kind, cf.Path, cf.Detail)
@@ -316,6 +336,10 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		a.landResult = notLandedConflicts(len(r.Conflicts))
 		return errConflict
 	}
+	if r.Status == "" {
+		r.Status = "landed"
+	}
+	wc.Config.Review = ""
 	cs := r.Changeset
 	newTree, err := hash.Parse(cs.Tree)
 	if err != nil {
@@ -383,6 +407,36 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	board := a.landFeed(ctx, c, wc, r) // the board comes last
 	a.emit(protoWithBoard(r, board))
 	a.landResult = fmt.Sprintf("Landed %s (%s): %s", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent))
+	return nil
+}
+
+// landPending reports a land that waits for a person (a "human" landing
+// policy): nothing landed, the workspace stays open, and the working copy
+// remembers the review so vx wait, vx status and vx sync follow it.
+func (a *App) landPending(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, r *vxv1.LandResponse) error {
+	rv := r.Review
+	if r.Status == "" {
+		r.Status = "pending_review"
+	}
+	wc.Config.Review = rv.Id
+	if err := wc.Save(); err != nil {
+		return err
+	}
+	a.printf("Not in the effort yet: %s\n", rv.Waiting)
+	for _, p := range rv.Policies {
+		a.printf("  policy: %s\n", p)
+	}
+	for _, l := range rv.Approvers {
+		a.printf("  approvers: %s\n", strings.Join(l.Approvers, ", "))
+	}
+	a.printf("  Review %s. People with write on %s approve it in the web UI (Reviews) or with vx review approve %s.\n", noteID(rv.Id), wc.Config.Repo, noteID(rv.Id))
+	a.printf("  Your workspace stays open; `vx wait` returns when a person decides. Landing again from here replaces the snapshot under review.\n")
+	for _, c := range rv.GetEvidence().GetNotVerified() {
+		a.printf("Not verified: %s\n", rules.NotVerified(c))
+	}
+	board := a.landFeed(ctx, c, wc, r)
+	a.emit(protoWithBoard(r, board))
+	a.landResult = rv.Waiting
 	return nil
 }
 
@@ -763,9 +817,16 @@ edit them away, then land. vx land refuses files that still have markers.`,
 				return errRebasing(wc)
 			}
 			ctx := ctxOf(cmd)
+			pending, err := a.settleReview(ctx, c, wc)
+			if err != nil {
+				return err
+			}
 			res, err := a.syncWorkingCopy(ctx, c, wc)
 			if err != nil {
 				return err
+			}
+			if pending != nil {
+				a.printWaiting(pending)
 			}
 			if res.upToDate {
 				a.printf("Up to date at %s.\n", short(res.head))
@@ -799,7 +860,9 @@ print the new changes. Use it instead of polling vx log in a loop:
 vx wait also returns when a question addressed to you arrives, a question
 you asked is answered, or someone posts a decision or interface note on a
 file you changed here, and says which happened ("reason" in --json: land,
-question, answer or note). --no-notes waits for lands only. The note or
+question, answer, note or review). When your last land waits for a person
+(a "human" landing policy in vx.toml), it returns as soon as they approve
+or reject it (reason review). --no-notes waits for lands only. The note or
 answer that woke it counts as read, so vx sync and vx inbox do not repeat it.
 
 Exit codes: 0 when something happened, 4 when nothing did within
@@ -823,6 +886,24 @@ after an event.`,
 				watch = a.startNoteWatch(ctx, c, wc)
 			}
 			for {
+				if wc.Config.Review != "" {
+					id := wc.Config.Review
+					pending, err := a.settleReview(ctx, c, wc)
+					if err != nil {
+						return err
+					}
+					if pending == nil {
+						r, err := c.Reviews.GetReview(ctx, connect.NewRequest(&vxv1.GetReviewRequest{Id: id}))
+						if err != nil {
+							return err
+						}
+						if r.Msg.Review.State == "approved" {
+							a.printf("Run `vx sync` to bring it in.\n")
+						}
+						a.emit(map[string]any{"reason": "review", "review": r.Msg.Review})
+						return nil
+					}
+				}
 				eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
 				if err != nil {
 					return err

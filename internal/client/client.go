@@ -32,6 +32,7 @@ type Client struct {
 	Coord      vxv1connect.CoordinationServiceClient
 	Orgs       vxv1connect.OrgServiceClient
 	Rules      vxv1connect.RulesServiceClient
+	Reviews    vxv1connect.ReviewServiceClient
 	Public     vxv1connect.PublicServiceClient // needs no token
 }
 
@@ -70,6 +71,7 @@ func New(baseURL, token string) *Client {
 		Coord:      vxv1connect.NewCoordinationServiceClient(httpClient, baseURL, opts...),
 		Orgs:       vxv1connect.NewOrgServiceClient(httpClient, baseURL, opts...),
 		Rules:      vxv1connect.NewRulesServiceClient(httpClient, baseURL, opts...),
+		Reviews:    vxv1connect.NewReviewServiceClient(httpClient, baseURL, opts...),
 		Public:     vxv1connect.NewPublicServiceClient(httpClient, baseURL, opts...),
 	}
 }

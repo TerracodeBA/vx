@@ -14,7 +14,16 @@ type Rules struct {
 	Unique         []UniqueRule    `json:"unique" jsonschema:"files matching glob may not share the key; reserve a key with vx_reserve"`
 	Generated      []GeneratedRule `json:"generated" jsonschema:"files vx never text-merges; regenerate them with command"`
 	RequiredChecks []string        `json:"required_checks" jsonschema:"commands to run with vx land --run; others are recorded as not verified"`
+	Policies       []LandingPolicy `json:"policies" jsonschema:"how changes to some paths land; the strictest matching policy applies, fast for paths no policy covers"`
 	Reservations   []Reservation   `json:"reservations" jsonschema:"keys handed out by vx_reserve, newest first"`
+}
+
+// LandingPolicy is a [[policy]] of vx.toml.
+type LandingPolicy struct {
+	Paths     []string `json:"paths"`
+	Mode      string   `json:"mode" jsonschema:"fast: lands at once; gated: vx land refuses unless every check of require ran with --run and passed; human: also waits for a person to approve (vx land prints Waiting for a person to review); agents cannot approve"`
+	Require   []string `json:"require,omitempty" jsonschema:"checks a gated or human land must run with vx land --run"`
+	Approvers []string `json:"approvers,omitempty" jsonschema:"human: who may approve (user:HANDLE, team:ORG/TEAM); empty: people with write"`
 }
 
 // UniqueRule is a [[unique]] rule.
@@ -91,7 +100,7 @@ func (t *tools) rules(ctx context.Context, req *sdk.CallToolRequest, in rulesInp
 }
 
 func rulesOf(r service.Rules, res []service.Reservation) Rules {
-	out := Rules{Source: r.Source, Unique: []UniqueRule{}, Generated: []GeneratedRule{}, RequiredChecks: r.RequiredChecks, Reservations: []Reservation{}}
+	out := Rules{Source: r.Source, Unique: []UniqueRule{}, Generated: []GeneratedRule{}, RequiredChecks: r.RequiredChecks, Policies: []LandingPolicy{}, Reservations: []Reservation{}}
 	if out.RequiredChecks == nil {
 		out.RequiredChecks = []string{}
 	}
@@ -100,6 +109,9 @@ func rulesOf(r service.Rules, res []service.Reservation) Rules {
 	}
 	for _, g := range r.Generated {
 		out.Generated = append(out.Generated, GeneratedRule{Glob: g.Glob, Command: g.Command})
+	}
+	for _, p := range r.Policies {
+		out.Policies = append(out.Policies, LandingPolicy{Paths: p.Paths, Mode: string(p.Mode), Require: p.Require, Approvers: p.Approvers})
 	}
 	for _, x := range res {
 		out.Reservations = append(out.Reservations, Reservation{Rule: x.Rule, Value: x.Value, Effort: x.EffortSlug, ReservedBy: x.ReservedBy, CreatedAt: ts(x.CreatedAt)})

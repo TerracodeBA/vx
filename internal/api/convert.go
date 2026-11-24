@@ -84,6 +84,9 @@ func evidencePB(e *object.Evidence) *vxv1.Evidence {
 	for _, c := range e.Checks {
 		out.Checks = append(out.Checks, &vxv1.Check{Name: c.Name, Result: c.Result, Passed: int32(c.Passed), Failed: int32(c.Failed), RanByVx: c.RanByVX, DurationMs: c.DurationMs, Notes: c.Notes})
 	}
+	for _, a := range e.Approvals {
+		out.Approvals = append(out.Approvals, &vxv1.Approval{By: a.By, At: ts(a.At), Review: a.Review, Paths: a.Paths})
+	}
 	return out
 }
 
@@ -91,7 +94,8 @@ func evidenceFromPB(e *vxv1.Evidence) (*object.Evidence, error) {
 	if e == nil {
 		return nil, nil
 	}
-	// not_verified is the server's to fill (Land); what a client sends is ignored.
+	// not_verified and approvals are the server's to fill (Land, approving
+	// a review); what a client sends is ignored.
 	out := &object.Evidence{NewTests: e.NewTests}
 	for _, c := range e.Checks {
 		if c.Result != "pass" && c.Result != "fail" {

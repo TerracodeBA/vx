@@ -238,6 +238,9 @@ func (s *Service) Abandon(ctx context.Context, actor Actor, id uuid.UUID) (Works
 		if err := tx.FinishWorkspace(ctx, id, store.WorkspaceAbandoned, hash.Zero); err != nil {
 			return err
 		}
+		if err := tx.WithdrawReviews(ctx, id); err != nil {
+			return err
+		}
 		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, id, nil, s.Now()); err != nil {
 			return err
 		}

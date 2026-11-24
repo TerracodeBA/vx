@@ -15,6 +15,7 @@
     <a class="side-link{{if eq .Path "/ui"}} on{{end}}" href="/ui"><span class="ico ico-grid" aria-hidden="true"></span>All efforts</a>
     <a class="side-link{{if or (eq .Path "/ui/repos") .ActiveRepo}} on{{end}}" href="/ui/repos"><span class="ico ico-repo" aria-hidden="true"></span>Repositories</a>
     {{if .NavWelcome}}<a class="side-link{{if eq .Path "/ui/welcome"}} on{{end}}" href="/ui/welcome"><span class="ico ico-start" aria-hidden="true"></span>Set up vx</a>{{end}}
+    <a class="side-link{{if eq .Section "reviews"}} on{{end}}" href="/ui/reviews"><span class="ico ico-review" aria-hidden="true"></span>Reviews</a>
     <a class="side-link{{if eq .Section "orgs"}} on{{end}}" href="/ui/orgs"><span class="ico ico-org" aria-hidden="true"></span>Organizations</a>
     {{if .NavAdmin}}<a class="side-link{{if eq .Section "admin"}} on{{end}}" href="/ui/admin/people"><span class="ico ico-admin" aria-hidden="true"></span>Admin</a>{{end}}
   </nav>

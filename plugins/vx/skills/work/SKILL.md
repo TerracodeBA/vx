@@ -78,6 +78,7 @@ If you have the vx MCP tools (`vx_context`, `vx_status`, `vx_log`, `vx_show`, `v
 ## When things collide
 
 - `vx land` ends with one line: `Landed HASH (CHANGE): INTENT` or `Not landed: ...`; it takes no text argument (use `-m`).
+- **Landing policies** (`[[policy]]` in `vx.toml`, listed by `vx rules`). A `gated` path refuses the land unless every required check ran with `--run` and passed; the error prints the exact `vx land --run ...` to use. A `human` path makes `vx land` print `Waiting for a person to review: PATHS (policy in vx.toml)` and exit 0 (`"status": "pending_review"` in `--json`): nothing is in the effort yet. Do not try to approve it (agents cannot) and do not work around the policy; tell your person, then `vx wait`. Approved: `vx sync` brings it in. Conflicts on approval or rejected: a note addressed to you says why; fix, `vx land` again (the same workspace), or `vx abandon`.
 - **Exit code 2 from `vx land` or `vx sync` means conflicts.** Run `vx sync`. Files that both sides changed on the same lines get markers:
   ```
     their version

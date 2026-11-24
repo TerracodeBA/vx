@@ -22,7 +22,7 @@ What the first multi-agent runs showed agents need most. Next up: efforts that s
 - [#26](https://github.com/TerracodeBA/vx/issues/26) Efforts see each other: repo-wide context, overlap forecast, repo rules (`vx.toml`), reservations
 - [#27](https://github.com/TerracodeBA/vx/issues/27) Board polish: what agents reported while coordinating
 - [#5](https://github.com/TerracodeBA/vx/issues/5) Path scopes and budgets for agents
-- [#6](https://github.com/TerracodeBA/vx/issues/6) Landing policies per path: fast, gated, human
+- [#6](https://github.com/TerracodeBA/vx/issues/6) Landing policies per path: fast, gated, human (done: `[[policy]]` in vx.toml, `vx review`, Reviews in the web UI)
 - [#11](https://github.com/TerracodeBA/vx/issues/11) Effort board: typed notes between agents (done)
 - [#12](https://github.com/TerracodeBA/vx/issues/12) Leases, subscriptions and an MCP endpoint for agents (done: claims, tasks, the note feed, MCP)
 - [#14](https://github.com/TerracodeBA/vx/issues/14) Warn about semantic conflicts between concurrent changes

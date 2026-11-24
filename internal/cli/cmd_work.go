@@ -112,10 +112,15 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 			if wc.Config.Rebase != nil {
 				return errRebasing(wc)
 			}
+			ctx := ctxOf(cmd)
+			if r, err := a.settleReview(ctx, c, wc); err != nil {
+				return err
+			} else if r != nil {
+				return errWaitingForReview(r)
+			}
 			if wc.Config.Workspace != "" {
 				return fmt.Errorf("workspace %q is still open: land it with `vx land` or close it with `vx abandon`", wc.Config.Intent)
 			}
-			ctx := ctxOf(cmd)
 			task, intent, err := a.taskOnNew(ctx, c, taskID, args)
 			if err != nil {
 				return err
@@ -214,10 +219,20 @@ func (a *App) statusCmd() *cobra.Command {
 				return err
 			}
 			out := map[string]any{"repo": wc.Config.Repo, "effort": wc.Config.Effort, "base": wc.Config.Base}
+			var mine *vxv1.Review
+			if c, err := a.client(); err == nil && wc.Config.Review != "" {
+				if mine, err = a.settleReview(ctx, c, wc); err != nil {
+					a.printf("Could not check your pending review: %v\n", err)
+				}
+			}
 			a.printf("Effort %s in %s, files at %s\n", wc.Config.Effort, wc.Config.Repo, short(wc.Config.Base))
 			if wc.Config.Workspace != "" {
 				a.printf("Workspace %s: %s\n", wc.Config.ChangeID, wc.Config.Intent)
 				out["workspace"] = map[string]string{"id": wc.Config.Workspace, "change_id": wc.Config.ChangeID, "intent": wc.Config.Intent}
+				if mine != nil {
+					a.printWaiting(mine)
+					out["review"] = mine
+				}
 			} else if wc.Config.Rebase == nil {
 				a.printf("No workspace open. Start one with: vx new \"INTENT\"\n")
 			}
@@ -272,6 +287,13 @@ func (a *App) statusCmd() *cobra.Command {
 				}
 				if ov := a.overlapStatus(ctx, c, wc.Config.Repo, wc.Config.Effort); ov != nil {
 					out["overlaps"] = ov
+				}
+				if rs, err := c.Reviews.ListReviews(ctx, connect.NewRequest(&vxv1.ListReviewsRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort})); err == nil && len(rs.Msg.Reviews) > 0 {
+					a.printf("\nWaiting for a person to review (not in the effort yet; vx review list):\n")
+					for _, r := range rs.Msg.Reviews {
+						a.printf("  %s %s  %-44s %s  %s\n", noteID(r.Id), r.ChangeId, firstLine(r.Intent), r.Author.GetRef(), strings.Join(r.Paths, ", "))
+					}
+					out["pending_reviews"] = rs.Msg.Reviews
 				}
 			}
 			var files []map[string]string
@@ -421,7 +443,10 @@ func (a *App) abandonCmd() *cobra.Command {
 				return err
 			}
 			a.printf("Abandoned workspace %s. Local files are unchanged.\n", wc.Config.ChangeID)
-			wc.Config.Workspace, wc.Config.Intent, wc.Config.ChangeID = "", "", ""
+			if wc.Config.Review != "" {
+				a.printf("Its pending review %s is withdrawn.\n", noteID(wc.Config.Review))
+			}
+			wc.Config.Workspace, wc.Config.Intent, wc.Config.ChangeID, wc.Config.Review = "", "", "", ""
 			wc.Config.PendingLand = nil
 			a.emit(resp.Msg)
 			return wc.Save()
@@ -584,6 +609,9 @@ func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
 		}
 		for _, c := range ev.NotVerified {
 			a.printf("%snot verified: %s\n", indent, rules.NotVerified(c))
+		}
+		for _, ap := range ev.Approvals {
+			a.printf("%sapproved by %s (%s, landing policy in vx.toml for %s)\n", indent, ap.By, ap.At, strings.Join(ap.Paths, ", "))
 		}
 	}
 	if len(cs.DependsOn) > 0 {

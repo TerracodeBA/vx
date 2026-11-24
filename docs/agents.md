@@ -128,6 +128,45 @@ required = ['test -z "$(gofmt -l cmd internal)"', "go vet ./...", "go test -coun
 - Warnings never block a land; they are stored with the change and shown by `vx land`, `vx log`, `vx show`, `--json` (`warnings`, kinds `duplicate`, `parse`, `signature`, `removed`, `merged-by-declaration`, `rule` and `generated`) and the web UI. A `vx.toml` that does not parse is an error naming the line (`vx.toml line 4: [[unique]] "migration": key "^\d+_" has no group: ...`); a land that breaks it gets one warning and its rules are not applied until it is fixed. Unknown keys are errors too, so a typo never silently disables a rule.
 - `vx rules` shows the rules (at the effort head in a working copy, else the default branch), where they came from and the reservations; `--json` too. MCP: `vx_rules`, `vx_reserve`.
 
+### Landing policies
+
+`[[policy]]` says how changes to some paths land. The vx repository's own `vx.toml` has none; this is what a repository that wants a person to look at every migration would add:
+
+```toml
+[[policy]]
+paths   = ["internal/api/**", "proto/**"]
+mode    = "gated"
+require = ["buf lint", "go test ./..."]   # default: [checks] required
+
+[[policy]]
+paths     = ["internal/store/migrations/**"]
+mode      = "human"
+approvers = ["user:alice", "team:acme/db"]   # optional; default: anyone with write
+```
+
+- **`fast`** (the default for every path no policy covers): today's behaviour. The land goes in at once; required checks vx did not run are only marked `not_verified`.
+- **`gated`**: the land is refused unless every check of `require` (or `[checks] required` when the policy sets none) ran by vx with `--run` and passed, in this land. `--check` results do not count. The error lists what is missing and the command to use:
+
+  ```
+  not landed: internal/api/limit.go is under a gated landing policy ([[policy]] paths = ["internal/api/**", "proto/**"] (vx.toml line 9)).
+  It needs every required check run by vx (vx land --run) and passing in this land:
+    buf lint       (not run by vx)
+    go test ./...  (failed)
+  Land with:
+    vx land --run 'buf lint' --run 'go test ./...'
+  ```
+
+  A gated land lands exactly what the checks ran on: when the effort moved meanwhile the server refuses it as moved, and `vx land --run` syncs, runs the checks again and retries.
+- **`human`**: gated, and then a person approves. The checks must pass first; then the land is stored as a **pending review** and the effort head does not move. `vx land` prints `Waiting for a person to review: internal/store/migrations/021_x.sql (policy in vx.toml)`, ends with that line, exits 0, and `--json` has `"status": "pending_review"` and the `review` (other statuses: `landed`, `conflicts`, `effort_moved`). Your workspace stays open: `vx new` refuses until the review is decided, `vx status` shows it, and `vx wait` returns when a person decides (`"reason": "review"`). Landing again from the workspace replaces the snapshot under review. `vx abandon` withdraws it.
+  - **Approved**: the change lands onto the current effort head with the normal merge, authored by you; its evidence records who approved it (`approvals`, shown by `vx log`, `vx show` and the change page). `vx wait` says `user:alice approved your change ...; it landed as HASH`; run `vx sync`.
+  - **Conflicts on approval**: when others landed on the same lines meanwhile, nothing lands, the review stays pending, and a system note addressed to you says which files conflict. Run `vx sync`, resolve, and `vx land` again (the same review, new snapshot); a person approves it again. A submit that already conflicts is reported like any land's conflicts (exit 2) and no review is stored.
+  - **Rejected**: a system note to you carries the reason; the workspace stays open. Change the files and land again for a new review, or abandon it.
+- **The strictest matching policy applies**: a land that changes one file under a gated policy and one under a human policy is human. The checks of every matching gated or human policy add up. Policies are read from both the effort head's `vx.toml` and your snapshot's, so a change can make its own policy stricter but never weaker (deleting a policy in the same change does not skip it).
+- Pending reviews are not in the effort: not in `vx log`, ship plans, pull requests or the overlap forecast. `vx status`, `vx review list` and the effort page list them.
+- People decide with `vx review list`, `vx review show ID`, `vx review approve ID`, `vx review reject ID --reason TEXT`, or in the web UI (Reviews, then Approve or Reject on the change page). Agents never do, not even for their own person; see [docs/organizations.md](organizations.md#landing-policies-who-approves).
+- Board notes of kind `approval` come from vx itself: one when a change starts waiting, and one addressed to the author for each decision or conflicting approval.
+- Errors in `[[policy]]` are as precise as the other rules: `vx.toml line 12: [[policy]] "db/**": mode "slow" is not one of "fast", "gated" or "human"`; a missing `paths` or `mode`, `require` on a fast policy, `approvers` on a non-human one, a gated policy with no checks and an approver that is not `user:HANDLE` or `team:ORG/TEAM` are refused too.
+
 ## Rebasing an effort
 
 An effort starts from its base branch (usually `main`) at some commit. When `main` moves on (another effort shipped, someone merged a pull request), `vx ship plan` may stop with `Change 42nv-gptt conflicts with main: ...`. Bring the effort up to date inside vx:
@@ -328,7 +367,7 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_inbox` | Open questions to you, answers to your questions, escalated questions |
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
 | `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
-| `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks), their source, and the keys reserved so far |
+| `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks, landing policies), their source, and the keys reserved so far |
 | `vx_reserve` | Reserve the next free key of a `[[unique]]` rule for an effort, e.g. the next migration number |
 | `vx_tasks` | An effort's tasks: open, taken (with owner) and done, blocked ones with `depends_on` |
 | `vx_task_add` | Add a task, optionally waiting for others (`depends_on`) or assigned at once (`owner`) |
@@ -339,6 +378,6 @@ Every note in a tool result carries its `author`, a `trust` of `self`, `same_per
 ## Exit codes and output
 
 - `0` success, `1` error, `2` stopped on conflicts, `3` `vx ask --wait` escalated without an answer, `4` `vx wait` timed out with nothing happening (so `vx wait --timeout 15m && vx sync` syncs only after an event).
-- `vx land` always ends with one result line, after the board feed and warnings: `Landed HASH (CHANGE): INTENT`, or `Not landed: conflicts in N file(s) (exit 2)` (or `Not landed: the effort moved on ...`), so `vx land ... | tail -1` keeps the result. It takes no positional arguments: `vx land "text"` is refused with "did you mean -m" instead of dropping the text.
+- `vx land` always ends with one result line, after the board feed and warnings: `Landed HASH (CHANGE): INTENT`, `Waiting for a person to review: PATHS (policy in vx.toml)` (exit 0, a human landing policy), or `Not landed: conflicts in N file(s) (exit 2)` (or `Not landed: the effort moved on ...`), so `vx land ... | tail -1` keeps the result. It takes no positional arguments: `vx land "text"` is refused with "did you mean -m" instead of dropping the text.
 - `--json` on every command prints structured output.
 - Permission errors (CLI, API and MCP) always start with `permission denied:`, followed by what happened and what to do, so scripts can grep for it. A repository you cannot read is "not found", never "permission denied".
