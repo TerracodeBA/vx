@@ -1,0 +1,30 @@
+{{define "linetext"}}{{if .Segs}}{{range .Segs}}{{if .Hi}}<span class="hi">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}{{else}}{{.Text}}{{end}}{{end}}
+
+{{define "diffbody"}}
+{{if .Binary}}<p class="muted small pad">Binary file not shown.</p>
+{{else if .Large}}<p class="muted small pad">Large diff not shown.</p>
+{{else if not .Lines}}<p class="muted small pad">No line changes (mode change or empty file).</p>
+{{else}}
+<div class="diff-scroll">
+<table class="diff-table diff-u">
+  {{range .Lines}}
+  {{if eq .Kind "hunk"}}<tr class="hunk"><td class="ln hunk-ln" colspan="2"></td><td colspan="2">{{.Text}}</td></tr>
+  {{else}}<tr class="{{.Kind}}"><td class="ln">{{if .Old}}{{.Old}}{{end}}</td><td class="ln">{{if .New}}{{.New}}{{end}}</td><td class="sign">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}-{{end}}</td><td class="txt">{{template "linetext" .}}</td></tr>{{end}}
+  {{end}}
+</table>
+<table class="diff-table diff-s">
+  {{range .Rows}}
+  {{if eq .Kind "hunk"}}<tr class="hunk"><td class="ln hunk-ln"></td><td colspan="3">{{.Text}}</td></tr>
+  {{else}}<tr>
+    {{with .Left}}<td class="ln {{.Kind}}">{{.Old}}</td><td class="txt half {{.Kind}}">{{template "linetext" .}}</td>{{else}}<td class="ln empty"></td><td class="txt half empty"></td>{{end}}
+    {{with .Right}}<td class="ln {{.Kind}}">{{.New}}</td><td class="txt half {{.Kind}}">{{template "linetext" .}}</td>{{else}}<td class="ln empty"></td><td class="txt half empty"></td>{{end}}
+  </tr>{{end}}
+  {{end}}
+</table>
+</div>
+{{end}}
+{{end}}
+
+{{define "stat"}}<span class="stat"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span> <span class="blocks" aria-hidden="true">{{range blocks .Added .Deleted}}<i class="b{{.}}"></i>{{end}}</span></span>{{end}}
+
+{{define "modeswitch"}}<div class="modeswitch" role="group" aria-label="Diff layout"><button type="button" data-diff-mode="unified">Unified</button><button type="button" data-diff-mode="split">Split</button></div>{{end}}

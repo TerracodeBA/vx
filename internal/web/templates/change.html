@@ -8,21 +8,20 @@
 
 <div class="cols">
   <section class="col-main">
-    <h2 class="sec">{{len .Diffs}} file{{if ne (len .Diffs) 1}}s{{end}} <span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></h2>
+    <div class="files-bar">
+      <h2 class="sec">{{len .Diffs}} file{{if ne (len .Diffs) 1}}s{{end}} changed <span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></h2>
+      {{template "modeswitch"}}
+    </div>
     {{range .Diffs}}
-    <article class="diff" id="f-{{.Path}}">
-      <header class="diff-head"><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span><span class="add">+{{.Added}}</span><span class="del">-{{.Deleted}}</span></header>
-      {{if .Binary}}<p class="muted small pad">Binary file.</p>
-      {{else if .Large}}<p class="muted small pad">Too large to show here.</p>
-      {{else}}
-      <div class="diff-scroll"><table class="diff-table">
-        {{range .Lines}}
-        {{if eq .Kind "hunk"}}<tr class="hunk"><td colspan="4">{{.Text}}</td></tr>
-        {{else}}<tr class="{{.Kind}}"><td class="ln">{{if .Old}}{{.Old}}{{end}}</td><td class="ln">{{if .New}}{{.New}}{{end}}</td><td class="sign">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}-{{end}}</td><td class="txt">{{.Text}}</td></tr>{{end}}
-        {{end}}
-      </table></div>
-      {{end}}
-    </article>
+    <details class="filecard" open data-key="{{.Key}}" id="f-{{.Path}}">
+      <summary class="file-head">
+        <span class="chev" aria-hidden="true"></span>
+        <span class="op op-{{.Op}}">{{.Op}}</span><span class="mono fd-path">{{.Path}}</span>
+        {{template "stat" .}}
+        <label class="viewed"><input type="checkbox" data-viewed> Viewed</label>
+      </summary>
+      {{template "diffbody" .}}
+    </details>
     {{end}}
   </section>
   <aside class="col-side">

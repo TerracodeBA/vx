@@ -22,6 +22,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
+	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -50,6 +51,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		"principal": principalName,
 		"pct":       func(a, b int) int { return pct(a, b) },
 		"color":     func(m map[string]int, k string) int { return m[k] },
+		"blocks":    diffBlocks,
 		"maxLines": func(as []*agentStat) int {
 			m := 0
 			for _, a := range as {
@@ -60,8 +62,13 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 			return m
 		},
 	}
+	frag, err := template.New("partials.html").Funcs(funcs).ParseFS(assets, "templates/partials.html")
+	if err != nil {
+		return fmt.Errorf("template partials: %w", err)
+	}
+	u.pages["partials"] = frag
 	for _, page := range []string{"login", "home", "repo", "effort", "change", "ship"} {
-		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+page+".html")
+		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
 		}
@@ -81,6 +88,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/effort", u.auth(u.effort))
 	mux.HandleFunc("GET /ui/effort/head", u.auth(u.effortHead))
 	mux.HandleFunc("GET /ui/change", u.auth(u.change))
+	mux.HandleFunc("GET /ui/diff", u.auth(u.diff))
 	mux.HandleFunc("GET /ui/ship", u.auth(u.ship))
 	mux.HandleFunc("POST /ui/ship", u.auth(u.shipPost))
 	return nil
@@ -373,12 +381,188 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	}
 	shipments, _ := u.svc.Store.ListShipments(ctx, v.Effort.ID)
 	baseRow, _ := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
+	changesView := param(r, "view") == "changes"
+	var allFiles []changedFile
+	if changesView {
+		if allFiles, err = u.allChanges(r, v.Repo, v.Effort, entries, color); err != nil {
+			u.fail(w, err)
+			return
+		}
+	}
 	u.render(w, "effort", map[string]any{
+		"ChangesView": changesView, "AllFiles": allFiles,
 		"Actor": actor, "Repo": v.Repo, "Effort": v.Effort, "Owner": u.ref(r, v.Effort.OwnerID),
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
 	})
+}
+
+// changedFile is one file of the effort's combined diff.
+type changedFile struct {
+	store.FileChange
+	Agents []*agentStat // who touched it, in landing order
+}
+
+// allChanges is the effort's combined diff from its base to its head.
+func (u *UI) allChanges(r *http.Request, repo store.Repo, e store.Effort, entries []service.LogEntry, color map[string]int) ([]changedFile, error) {
+	ctx := r.Context()
+	base, err := u.svc.Store.GetChangeset(ctx, repo.ID, e.Base)
+	if err != nil {
+		return nil, err
+	}
+	head, err := u.svc.Store.GetChangeset(ctx, repo.ID, e.Head)
+	if err != nil {
+		return nil, err
+	}
+	changes, err := object.DiffTrees(ctx, u.svc.Blobs, base.Tree, head.Tree)
+	if err != nil {
+		return nil, err
+	}
+	touched := map[string][]*agentStat{}
+	seen := map[string]bool{}
+	for i := len(entries) - 1; i >= 0; i-- {
+		for _, f := range entries[i].Files {
+			who := entries[i].Author.Principal
+			if seen[f.Path+"\x00"+who] {
+				continue
+			}
+			seen[f.Path+"\x00"+who] = true
+			touched[f.Path] = append(touched[f.Path], &agentStat{Principal: who, Color: color[who]})
+		}
+	}
+	out := make([]changedFile, 0, len(changes))
+	for _, c := range changes {
+		cf := changedFile{FileChange: store.FileChange{Change: c}, Agents: touched[c.Path]}
+		if len(changes) <= 300 {
+			a, _ := u.readBlob(r, c.Old.Hash)
+			b, _ := u.readBlob(r, c.New.Hash)
+			cf.Added, cf.Deleted = merge.LineStats(a, b)
+		}
+		out = append(out, cf)
+	}
+	return out, nil
+}
+
+func (u *UI) readBlob(r *http.Request, h hash.Hash) ([]byte, error) {
+	if h.IsZero() {
+		return nil, nil
+	}
+	return blob.GetKind(r.Context(), u.svc.Blobs, hash.KindBlob, h)
+}
+
+// diff renders one file's diff as an HTML fragment, either for one change
+// (ref) or for the effort as a whole (slug).
+func (u *UI) diff(w http.ResponseWriter, r *http.Request, _ service.Actor) {
+	ctx := r.Context()
+	repoName, path := param(r, "repo"), param(r, "path")
+	var fc store.FileChange
+	switch {
+	case param(r, "ref") != "":
+		_, e, err := u.svc.GetChangeset(ctx, repoName, param(r, "ref"))
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		found := false
+		for _, f := range e.Files {
+			if f.Path == path {
+				fc, found = f, true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "file not in this change", http.StatusNotFound)
+			return
+		}
+	default:
+		v, err := u.svc.GetEffort(ctx, repoName, param(r, "slug"))
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		base, err := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		head, err := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Head)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		old, okOld, err := object.Lookup(ctx, u.svc.Blobs, base.Tree, path)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		cur, okNew, err := object.Lookup(ctx, u.svc.Blobs, head.Tree, path)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		fc.Path = path
+		switch {
+		case okOld && okNew:
+			fc.Op = object.OpModify
+		case okNew:
+			fc.Op = object.OpAdd
+		case okOld:
+			fc.Op = object.OpDelete
+		default:
+			http.Error(w, "file not changed in this effort", http.StatusNotFound)
+			return
+		}
+		if okOld {
+			fc.Old = object.File{Hash: old.Hash, Mode: old.Mode}
+		}
+		if okNew {
+			fc.New = object.File{Hash: cur.Hash, Mode: cur.Mode}
+		}
+	}
+	fd, err := u.fileDiff(r, fc)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	if err := u.pages["partials"].ExecuteTemplate(w, "diffbody", fd); err != nil {
+		u.log.Error("render diff", "err", err)
+	}
+}
+
+// diffBlocks gives the five GitHub-style squares for a file's change size.
+func diffBlocks(added, deleted int) []string {
+	total := added + deleted
+	out := make([]string, 5)
+	if total == 0 {
+		for i := range out {
+			out[i] = "n"
+		}
+		return out
+	}
+	adds := (added*5 + total/2) / total
+	if added > 0 && adds == 0 {
+		adds = 1
+	}
+	dels := 5 - adds
+	if deleted == 0 {
+		dels = 0
+	} else if dels == 0 {
+		dels, adds = 1, 4
+	}
+	for i := range out {
+		switch {
+		case i < adds:
+			out[i] = "a"
+		case i < adds+dels:
+			out[i] = "d"
+		default:
+			out[i] = "n"
+		}
+	}
+	return out
 }
 
 // effortHead lets the page poll cheaply for changes.
@@ -400,18 +584,33 @@ func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, _ service.Actor)
 
 // ---------- change ----------
 
+type seg struct {
+	Text string
+	Hi   bool // the changed part of a line that was edited
+}
+
 type diffLine struct {
 	Kind string // ctx, add, del, hunk
 	Text string
 	Old  int
 	New  int
+	Segs []seg // set for edited lines; otherwise Text is shown whole
+}
+
+// splitRow is one row of the side-by-side view.
+type splitRow struct {
+	Kind        string // ctx, chg, hunk
+	Left, Right *diffLine
+	Text        string // hunk header
 }
 
 type fileDiff struct {
 	store.FileChange
 	Binary bool
 	Lines  []diffLine
+	Rows   []splitRow
 	Large  bool
+	Key    string // identifies this file version for the Viewed checkbox
 }
 
 func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor) {
@@ -473,7 +672,101 @@ func (u *UI) fileDiff(r *http.Request, f store.FileChange) (fileDiff, error) {
 	la, lb := merge.SplitLines(a), merge.SplitLines(b)
 	edits := merge.Diff(la, lb)
 	fd.Lines = renderHunks(edits, la, lb, 3)
+	markWords(fd.Lines)
+	fd.Rows = splitRows(fd.Lines)
+	fd.Key = f.Path + "@" + f.New.Hash.Short()
 	return fd, nil
+}
+
+// markWords pairs each run of deleted lines with the run of added lines
+// after it and highlights the part of each pair that differs, the way code
+// review tools show an edit inside a line.
+func markWords(lines []diffLine) {
+	for i := 0; i < len(lines); {
+		if lines[i].Kind != "del" {
+			i++
+			continue
+		}
+		d0 := i
+		for i < len(lines) && lines[i].Kind == "del" {
+			i++
+		}
+		a0 := i
+		for i < len(lines) && lines[i].Kind == "add" {
+			i++
+		}
+		n := min(a0-d0, i-a0)
+		for k := 0; k < n; k++ {
+			del, add := &lines[d0+k], &lines[a0+k]
+			if len(del.Text) > 1000 || len(add.Text) > 1000 {
+				continue
+			}
+			del.Segs, add.Segs = wordSegs(del.Text, add.Text)
+		}
+	}
+}
+
+// wordSegs splits two lines into a common prefix, the changed middle and a
+// common suffix. Lines with nothing in common are left unhighlighted.
+func wordSegs(a, b string) ([]seg, []seg) {
+	ra, rb := []rune(a), []rune(b)
+	p := 0
+	for p < len(ra) && p < len(rb) && ra[p] == rb[p] {
+		p++
+	}
+	q := 0
+	for q < len(ra)-p && q < len(rb)-p && ra[len(ra)-1-q] == rb[len(rb)-1-q] {
+		q++
+	}
+	if p+q == 0 {
+		return nil, nil
+	}
+	mk := func(r []rune) []seg {
+		out := []seg{{Text: string(r[:p])}}
+		if mid := string(r[p : len(r)-q]); mid != "" {
+			out = append(out, seg{Text: mid, Hi: true})
+		}
+		return append(out, seg{Text: string(r[len(r)-q:])})
+	}
+	return mk(ra), mk(rb)
+}
+
+// splitRows lays unified lines side by side: context on both sides, runs of
+// deletions and additions paired row by row.
+func splitRows(lines []diffLine) []splitRow {
+	var rows []splitRow
+	for i := 0; i < len(lines); {
+		l := &lines[i]
+		switch l.Kind {
+		case "hunk":
+			rows = append(rows, splitRow{Kind: "hunk", Text: l.Text})
+			i++
+		case "ctx":
+			rows = append(rows, splitRow{Kind: "ctx", Left: l, Right: l})
+			i++
+		default:
+			d0 := i
+			for i < len(lines) && lines[i].Kind == "del" {
+				i++
+			}
+			a0 := i
+			for i < len(lines) && lines[i].Kind == "add" {
+				i++
+			}
+			dels, adds := lines[d0:a0], lines[a0:i]
+			for k := 0; k < max(len(dels), len(adds)); k++ {
+				r := splitRow{Kind: "chg"}
+				if k < len(dels) {
+					r.Left = &dels[k]
+				}
+				if k < len(adds) {
+					r.Right = &adds[k]
+				}
+				rows = append(rows, r)
+			}
+		}
+	}
+	return rows
 }
 
 // renderHunks lays out a diff as lines with numbers, collapsing long
@@ -511,7 +804,11 @@ func renderHunks(edits []merge.Edit, a, b []string, context int) []diffLine {
 				out = append(out, diffLine{Kind: "ctx", Text: trim(a[e.A0+k]), Old: e.A0 + k + 1, New: e.B0 + k + 1})
 			}
 			skipped := n - keepHead - keepTail
-			out = append(out, diffLine{Kind: "hunk", Text: fmt.Sprintf("%d unchanged lines", skipped)})
+			text := fmt.Sprintf("@@ -%d +%d @@  %d unchanged lines", e.A0+n-keepTail+1, e.B0+n-keepTail+1, skipped)
+			if last {
+				text = fmt.Sprintf("%d unchanged lines to the end of the file", skipped)
+			}
+			out = append(out, diffLine{Kind: "hunk", Text: text})
 			for k := n - keepTail; k < n; k++ {
 				out = append(out, diffLine{Kind: "ctx", Text: trim(a[e.A0+k]), Old: e.A0 + k + 1, New: e.B0 + k + 1})
 			}

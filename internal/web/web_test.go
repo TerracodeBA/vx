@@ -124,6 +124,20 @@ func TestPages(t *testing.T) {
 			t.Fatalf("following %s: %d", m[1], code)
 		}
 	}
+	// Diff fragments: one change, and the effort as a whole.
+	code, frag := get("/ui/diff?repo=acme%2Fshop&ref=" + res.Changeset.Hash.String() + "&path=limit/limit.go")
+	if code != 200 || !strings.Contains(frag, "diff-u") || !strings.Contains(frag, "diff-s") || !strings.Contains(frag, "func Allow() bool") {
+		t.Fatalf("change diff = %d %s", code, frag)
+	}
+	if code, frag := get("/ui/diff?repo=acme%2Fshop&slug=" + eff.Slug + "&path=limit/limit.go"); code != 200 || !strings.Contains(frag, "func Allow() bool") {
+		t.Fatalf("effort diff = %d %s", code, frag)
+	}
+	if code, _ := get("/ui/diff?repo=acme%2Fshop&slug=" + eff.Slug + "&path=nope.go"); code != 404 {
+		t.Fatalf("diff of an unchanged file = %d", code)
+	}
+	if code, page := get("/ui/effort?repo=acme%2Fshop&view=changes&slug=" + eff.Slug); code != 200 || !strings.Contains(page, "limit/limit.go") || !strings.Contains(page, "Expand all") {
+		t.Fatalf("all changes = %d", code)
+	}
 	// A link encoded twice still works.
 	if code, _ := get("/ui/repo?name=acme%252Fshop"); code != 200 {
 		t.Fatalf("double-encoded link = %d", code)

@@ -28,7 +28,39 @@
 
 <div class="cols">
   <section class="col-main">
-    <h2 class="sec">Timeline</h2>
+    <div class="tabs-row">
+    <nav class="tabs" aria-label="Effort views">
+      <a class="tab{{if not .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="muted">{{len .Lands}}</span></a>
+      <a class="tab{{if .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=changes">All changes{{if .ChangesView}} <span class="muted">{{len .AllFiles}} files</span>{{end}}</a>
+    </nav>
+    {{if not .ChangesView}}{{template "modeswitch"}}{{end}}
+    </div>
+    {{if .ChangesView}}
+    <p class="muted small">Everything this effort changes, from <span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}} to the effort head. This is what the pull request will contain.</p>
+    {{if not .AllFiles}}<p class="muted">No changes yet.</p>{{else}}
+    <div class="files-bar">
+      <span class="small muted">{{len .AllFiles}} files</span>
+      <div class="files-bar-actions">{{template "modeswitch"}}<button class="btn ghost small-btn" type="button" data-expand-all>Expand all</button></div>
+    </div>
+    <ul class="jump">
+      {{range .AllFiles}}<li><a href="#f-{{.Path}}"><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span></a>{{template "stat" .}}</li>{{end}}
+    </ul>
+    {{end}}
+    <div class="all-files">
+      {{range .AllFiles}}
+      <details class="filecard fd" id="f-{{.Path}}" data-key="effort:{{.Path}}@{{short .New.Hash}}" data-src="/ui/diff?repo={{$repo}}&amp;slug={{$slug}}&amp;path={{.Path}}">
+        <summary class="file-head">
+          <span class="chev" aria-hidden="true"></span>
+          <span class="op op-{{.Op}}">{{.Op}}</span><span class="mono fd-path">{{.Path}}</span>
+          <span class="touch">{{range .Agents}}<span class="swatch a{{.Color}}" title="{{principal .Principal}}"></span>{{end}}</span>
+          {{template "stat" .}}
+          <label class="viewed"><input type="checkbox" data-viewed> Viewed</label>
+        </summary>
+        <div class="fd-body"><p class="muted small pad">Loading diff...</p></div>
+      </details>
+      {{end}}
+    </div>
+    {{else}}
     {{if not .Lands}}
     <div class="empty"><p>Nothing landed yet. Agents start with:</p>
       <pre class="code">vx clone {{$repo}} {{$slug}}
@@ -51,9 +83,16 @@ vx land --run "go test ./..."</pre></div>
             <span class="muted">· {{ago .CreatedAt}}</span>
             <span class="lines"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></span>
           </div>
-          <ul class="files">
-            {{range .Files}}<li><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span><span class="add">+{{.Added}}</span><span class="del">-{{.Deleted}}</span></li>{{end}}
-          </ul>
+          <div class="files">
+            {{$hash := .Hash}}{{$r := .Repo}}
+            {{range .Files}}
+            <details class="fd inline-fd" data-src="/ui/diff?repo={{$r}}&amp;ref={{$hash}}&amp;path={{.Path}}">
+              <summary><span class="chev" aria-hidden="true"></span><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono fd-path">{{.Path}}</span>{{template "stat" .}}</summary>
+              <div class="fd-body"><p class="muted small pad">Loading diff...</p></div>
+            </details>
+            {{end}}
+          </div>
+          <div class="land-actions"><button class="link-btn small" type="button" data-expand>Show code</button></div>
           <div class="pills">
             {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
             {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
@@ -66,6 +105,7 @@ vx land --run "go test ./..."</pre></div>
       </li>
     {{end}}
     </ol>
+    {{end}}
   </section>
 
   <aside class="col-side">
