@@ -412,6 +412,37 @@ func (r Rules) GeneratedMatcher() func(path string) (command string, ok bool) {
 	}
 }
 
+// MergeOptions are the engine options of a merge whose sides are trees:
+// the [[generated]] rules of every one of them, so a generated file is
+// never text-merged whichever side declared it. A vx.toml that does not
+// parse adds nothing (the land reports it).
+func MergeOptions(ctx context.Context, s blob.Store, trees ...hash.Hash) []engine.MergeOption {
+	var matchers []func(string) (string, bool)
+	seen := map[hash.Hash]bool{}
+	for _, t := range trees {
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		r, err := At(ctx, s, t)
+		if err != nil || len(r.Generated) == 0 {
+			continue
+		}
+		matchers = append(matchers, r.GeneratedMatcher())
+	}
+	if len(matchers) == 0 {
+		return nil
+	}
+	return []engine.MergeOption{engine.WithGenerated(func(path string) (string, bool) {
+		for _, m := range matchers {
+			if cmd, ok := m(path); ok {
+				return cmd, true
+			}
+		}
+		return "", false
+	})}
+}
+
 // Check reports [[unique]] violations in tree as warnings of kind
 // WarningRule, limited to keys used by a file that is new or changed
 // between base and tree, so a clash that predates the change is not

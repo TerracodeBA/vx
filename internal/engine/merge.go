@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
@@ -51,6 +52,53 @@ type MergeResult struct {
 	// different lines at the same place and the merge kept both (the side
 	// passed as theirs first). Worth a look: the order may matter.
 	KeptBoth []string
+	// Generated lists generated files both sides changed. They are never
+	// text-merged: the result has ours (the side being landed, synced,
+	// shipped or replayed), and the file has to be regenerated.
+	Generated []GeneratedFile
+}
+
+// GeneratedFile is a generated file both sides changed, kept from ours.
+type GeneratedFile struct {
+	Path string
+	// Command regenerates it, from a [[generated]] rule in vx.toml; empty
+	// when the rule has none or the file was recognised by its
+	// "Code generated ... DO NOT EDIT." line.
+	Command string
+}
+
+// MergeOption changes how MergeTrees treats some paths.
+type MergeOption func(*mergeConfig)
+
+type mergeConfig struct {
+	generated func(path string) (command string, ok bool)
+}
+
+// WithGenerated says which paths are generated (vx.toml [[generated]]
+// rules, see rules.Rules.GeneratedMatcher). Files that say "Code generated
+// ... DO NOT EDIT." are generated with or without this option.
+func WithGenerated(f func(path string) (command string, ok bool)) MergeOption {
+	return func(c *mergeConfig) { c.generated = f }
+}
+
+// WarningGenerated: both sides changed a generated file; the merge kept
+// ours and the file needs regenerating.
+const WarningGenerated WarningKind = "generated"
+
+// GeneratedWarnings turns generated files into warnings, sorted by path:
+//
+//	generated file gen/x.go: regenerate with `buf generate`
+func GeneratedWarnings(gs []GeneratedFile) []Warning {
+	out := make([]Warning, 0, len(gs))
+	for _, g := range gs {
+		d := fmt.Sprintf("generated file %s: regenerate with `%s`", g.Path, g.Command)
+		if g.Command == "" {
+			d = fmt.Sprintf("generated file %s: regenerate it (both sides changed it; vx kept one side instead of merging the text)", g.Path)
+		}
+		out = append(out, Warning{Path: g.Path, Kind: WarningGenerated, Name: g.Command, Detail: d})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }
 
 // Clean reports whether the merge has no conflicts.
@@ -59,19 +107,26 @@ func (r MergeResult) Clean() bool { return len(r.Conflicts) == 0 }
 // MergeTrees merges ours and theirs, which both descend from base. Paths
 // changed on one side take that side. Paths changed on both sides are merged
 // line by line when possible. With conflicts, the result has no tree.
-func MergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels) (MergeResult, error) {
-	return mergeTrees(ctx, s, base, ours, theirs, labels, false)
+//
+// Generated files (see WithGenerated) changed on both sides are not merged:
+// ours wins and the path is listed in Generated.
+func MergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels, opts ...MergeOption) (MergeResult, error) {
+	return mergeTrees(ctx, s, base, ours, theirs, labels, false, opts)
 }
 
 // MergeTreesKeepConflicts is MergeTrees for a working copy: it always
 // returns a tree. Text conflicts are written into the file with conflict
 // markers; other conflicts keep our side. The caller shows the conflicts and
 // the person or agent resolves them in place.
-func MergeTreesKeepConflicts(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels) (MergeResult, error) {
-	return mergeTrees(ctx, s, base, ours, theirs, labels, true)
+func MergeTreesKeepConflicts(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels, opts ...MergeOption) (MergeResult, error) {
+	return mergeTrees(ctx, s, base, ours, theirs, labels, true, opts)
 }
 
-func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels, keep bool) (MergeResult, error) {
+func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels, keep bool, opts []MergeOption) (MergeResult, error) {
+	var cfg mergeConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	var res MergeResult
 	if ours == theirs || ours == base {
 		res.Tree = theirs
@@ -106,6 +161,22 @@ func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 			continue
 		case o.Op != object.OpDelete && t.Op != object.OpDelete && o.New == t.New:
 			continue
+		}
+		if cmd, gen, err := cfg.isGenerated(ctx, s, o, t); err != nil {
+			return res, err
+		} else if gen {
+			res.Generated = append(res.Generated, GeneratedFile{Path: o.Path, Command: cmd})
+			switch {
+			case o.Op == object.OpDelete:
+				apply = append(apply, object.Change{Path: o.Path, Op: object.OpDelete, Old: t.New})
+			case t.Op == object.OpDelete:
+				apply = append(apply, object.Change{Path: o.Path, Op: object.OpAdd, New: o.New})
+			default:
+				apply = append(apply, object.Change{Path: o.Path, Op: object.OpModify, Old: t.New, New: o.New})
+			}
+			continue
+		}
+		switch {
 		case o.Op == object.OpDelete:
 			res.Conflicts = append(res.Conflicts, Conflict{Path: o.Path, Kind: ConflictDeleteModify, Base: o.Old, Theirs: t.New})
 			// Theirs keeps its edit (it is the tree we apply onto), so no
@@ -156,6 +227,30 @@ func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 	}
 	res.Tree = tree
 	return res, nil
+}
+
+// isGenerated reports whether a path both sides changed is generated: a
+// rule says so, or one of its versions says "Code generated ... DO NOT
+// EDIT.".
+func (c mergeConfig) isGenerated(ctx context.Context, s blob.Store, o, t object.Change) (string, bool, error) {
+	if c.generated != nil {
+		if cmd, ok := c.generated(o.Path); ok {
+			return cmd, true, nil
+		}
+	}
+	for _, f := range []object.File{o.New, t.New, o.Old} {
+		if f.Hash.IsZero() || f.Mode == object.ModeSymlink {
+			continue
+		}
+		data, err := blob.GetKind(ctx, s, hash.KindBlob, f.Hash)
+		if err != nil {
+			return "", false, err
+		}
+		if IsGenerated(data) {
+			return "", true, nil
+		}
+	}
+	return "", false, nil
 }
 
 // mergeFile merges one path changed on both sides (neither deleted it).

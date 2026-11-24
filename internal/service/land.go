@@ -42,7 +42,9 @@ type LandResult struct {
 	// EffortMoved is set when RequireUpToDate refused the land.
 	EffortMoved bool
 	// Warnings are problems found in the landed tree, such as a Go function
-	// declared twice in one package after a clean text merge. They never
+	// declared twice in one package after a clean text merge, a vx.toml
+	// [[unique]] key used twice (kind "rule"), or a generated file both
+	// sides changed, kept from the workspace (kind "generated"). They never
 	// stop a land.
 	Warnings []engine.Warning
 	// OverlappingClaims are active claims of other principals on files this
@@ -124,12 +126,13 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		res.EffortMoved = true
 		return res, nil
 	}
+	var generated []engine.GeneratedFile
 	if eff.Head != base.Hash {
 		mr, err := engine.MergeTrees(ctx, s.Blobs, base.Tree, in.Tree, head.Tree, merge.Labels{
 			Base:   "base " + base.Hash.Short(),
 			Ours:   "workspace",
 			Theirs: "effort " + eff.Head.Short(),
-		})
+		}, s.mergeOptions(ctx, in.Tree, head.Tree)...)
 		if err != nil {
 			return LandResult{}, err
 		}
@@ -146,6 +149,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		res.Rebased = true
 		res.AutoMerged = mr.AutoMerged
 		res.KeptBoth = mr.KeptBoth
+		generated = mr.Generated
 	}
 
 	changes, err := object.DiffTrees(ctx, s.Blobs, head.Tree, newTree)
@@ -160,6 +164,8 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		return LandResult{}, err
 	}
 	res.Warnings = s.treeWarnings(ctx, newTree, changes)
+	res.Warnings = append(res.Warnings, engine.GeneratedWarnings(generated)...)
+	res.Warnings = append(res.Warnings, s.ruleWarnings(ctx, head.Tree, newTree)...)
 
 	cs := &object.Changeset{
 		Version:  object.CurrentVersion,

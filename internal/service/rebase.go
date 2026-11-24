@@ -317,6 +317,7 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 	}
 	next := c.Tree
 	resolvedBy := ""
+	var generated []engine.GeneratedFile
 	switch {
 	case resolved != nil:
 		next, resolvedBy = *resolved, actor.Ref()
@@ -326,12 +327,18 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 			return hash.Zero, nil, err
 		}
 		if parent.Tree != cur.Tree {
-			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur.Tree, rebaseLabels(c, r))
+			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur.Tree, rebaseLabels(c, r), s.mergeOptions(ctx, c.Tree, cur.Tree)...)
 			if err != nil {
 				return hash.Zero, nil, err
 			}
 			if !mr.Clean() {
-				return hash.Zero, s.rebaseConflicts(ctx, mr.Conflicts), nil
+				conflicts := s.rebaseConflicts(ctx, mr.Conflicts)
+				// Generated files both sides changed are not conflicts, but
+				// whoever resolves this change should regenerate them too.
+				for _, w := range engine.GeneratedWarnings(mr.Generated) {
+					conflicts = append(conflicts, store.RebaseConflict{Path: w.Path, Kind: string(engine.WarningGenerated), Detail: w.Detail, Generated: true})
+				}
+				return hash.Zero, conflicts, nil
 			}
 			// Merged trees are new objects: make them part of the repo, as
 			// land and ship do, or nobody could fetch the rebased files.
@@ -339,6 +346,7 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 				return hash.Zero, nil, err
 			}
 			next = mr.Tree
+			generated = mr.Generated
 		}
 	}
 	changes, err := object.DiffTrees(ctx, s.Blobs, cur.Tree, next)
@@ -359,6 +367,8 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 	var warnings []engine.Warning
 	if len(changes) > 0 {
 		warnings = s.treeWarnings(ctx, next, changes)
+		warnings = append(warnings, engine.GeneratedWarnings(generated)...)
+		warnings = append(warnings, s.ruleWarnings(ctx, cur.Tree, next)...)
 	}
 	var h hash.Hash
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
