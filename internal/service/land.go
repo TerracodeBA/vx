@@ -41,6 +41,10 @@ type LandResult struct {
 	EffortHead hash.Hash
 	// EffortMoved is set when RequireUpToDate refused the land.
 	EffortMoved bool
+	// Warnings are problems found in the landed tree, such as a Go function
+	// declared twice in one package after a clean text merge. They never
+	// stop a land.
+	Warnings []engine.Warning
 }
 
 // ErrNothingToLand is returned when a snapshot has no changes.
@@ -143,6 +147,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 	if err != nil {
 		return LandResult{}, err
 	}
+	res.Warnings = s.treeWarnings(ctx, newTree, changes)
 
 	cs := &object.Changeset{
 		Version:  object.CurrentVersion,
@@ -201,6 +206,20 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 	res.Files = files
 	res.EffortHead = res.Changeset.Hash
 	return res, nil
+}
+
+// treeWarnings runs the semantic checks on the packages a change touches.
+// They only warn, so a failing check becomes a warning instead of an error.
+func (s *Service) treeWarnings(ctx context.Context, tree hash.Hash, changes []object.Change) []engine.Warning {
+	paths := make([]string, 0, len(changes))
+	for _, c := range changes {
+		paths = append(paths, c.Path)
+	}
+	ws, err := engine.CheckGo(ctx, s.Blobs, tree, paths)
+	if err != nil {
+		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check Go packages for duplicate declarations: %v", err)}}
+	}
+	return ws
 }
 
 // checkUploaded verifies every tree and blob the snapshot adds over base is

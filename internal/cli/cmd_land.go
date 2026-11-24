@@ -278,8 +278,20 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if len(incoming) > 0 {
 		a.printf("  Updated %d file(s) here with others' changes.\n", len(incoming))
 	}
+	a.printWarnings(r.Warnings)
 	a.emit(r)
 	return nil
+}
+
+// printWarnings shows problems the server found in a landed or planned
+// tree. They did not stop anything, so they come after the result.
+func (a *App) printWarnings(ws []*vxv1.Warning) {
+	for _, w := range ws {
+		a.printf("Warning: %s\n", w.Detail)
+	}
+	if len(ws) > 0 {
+		a.printf("  The text merged cleanly but the code may not build; fix it in a new change.\n")
+	}
 }
 
 func filesWithMarkers(ctx context.Context, wc *workcopy.WorkingCopy, changes []object.Change) ([]string, error) {

@@ -30,6 +30,8 @@ const (
 	WarningDuplicate WarningKind = "duplicate"
 	// WarningParse: a changed Go file does not parse.
 	WarningParse WarningKind = "parse"
+	// WarningCheck: a check could not run; Detail says why.
+	WarningCheck WarningKind = "check"
 )
 
 // Warning is a semantic problem in a tree: the text merged, but the result

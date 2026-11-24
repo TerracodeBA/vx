@@ -40,6 +40,9 @@ type ShipPlan struct {
 	Steps        []ShipStep
 	Conflicts    []engine.Conflict
 	ConflictedAt *store.ChangesetRow
+	// Warnings are problems found in the tree that would ship, checked over
+	// every path the effort changes on the target. They do not stop a ship.
+	Warnings []engine.Warning
 }
 
 // Commits returns the steps that produce a commit.
@@ -117,6 +120,13 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 	}
 	if len(plan.Steps) == 0 && len(plan.Conflicts) == 0 {
 		return plan, errf(CodeFailedPrecondition, "nothing to ship: effort %s has no landed changes", slug)
+	}
+	if len(plan.Conflicts) == 0 && cur != head.Tree {
+		changes, err := object.DiffTrees(ctx, s.Blobs, head.Tree, cur)
+		if err != nil {
+			return ShipPlan{}, err
+		}
+		plan.Warnings = s.treeWarnings(ctx, cur, changes)
 	}
 	plan.Title = v.Effort.Name
 	plan.Body = prBody(plan)
