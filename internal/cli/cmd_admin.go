@@ -91,15 +91,21 @@ path. An agent then only needs:
 			if err != nil {
 				return err
 			}
+			path := envFile
+			if path != "" {
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(a.dir(), path)
+				}
+				// Refuse before creating, so the agent's token is not lost.
+				if _, err := os.Lstat(path); err == nil {
+					return fmt.Errorf("%s already exists; choose another path or remove it", path)
+				}
+			}
 			resp, err := c.Auth.CreateAgent(ctxOf(cmd), connect.NewRequest(&vxv1.CreateAgentRequest{Name: args[0], DisplayName: display}))
 			if err != nil {
 				return err
 			}
-			if envFile != "" {
-				path := envFile
-				if !filepath.IsAbs(path) {
-					path = filepath.Join(a.dir(), path)
-				}
+			if path != "" {
 				if err := writeAgentEnv(path, a.settings().Server, resp.Msg.Token); err != nil {
 					return err
 				}

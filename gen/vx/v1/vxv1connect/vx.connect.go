@@ -53,6 +53,8 @@ const (
 	AuthServiceListTokensProcedure = "/vx.v1.AuthService/ListTokens"
 	// AuthServiceRevokeTokenProcedure is the fully-qualified name of the AuthService's RevokeToken RPC.
 	AuthServiceRevokeTokenProcedure = "/vx.v1.AuthService/RevokeToken"
+	// AuthServiceCreateTokenProcedure is the fully-qualified name of the AuthService's CreateToken RPC.
+	AuthServiceCreateTokenProcedure = "/vx.v1.AuthService/CreateToken"
 	// ObjectServiceMissingObjectsProcedure is the fully-qualified name of the ObjectService's
 	// MissingObjects RPC.
 	ObjectServiceMissingObjectsProcedure = "/vx.v1.ObjectService/MissingObjects"
@@ -122,6 +124,10 @@ type AuthServiceClient interface {
 	// RevokeToken revokes a token of the caller or of one of the caller's
 	// agents. Revoking the token the request is made with needs allow_current.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	// CreateToken issues a new token to the caller or to one of the caller's
+	// agents. Only people can create tokens: a leaked agent token must not be
+	// able to mint replacements that outlive its revocation.
+	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the vx.v1.AuthService service. By default, it uses
@@ -165,6 +171,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("RevokeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		createToken: connect.NewClient[v1.CreateTokenRequest, v1.CreateTokenResponse](
+			httpClient,
+			baseURL+AuthServiceCreateTokenProcedure,
+			connect.WithSchema(authServiceMethods.ByName("CreateToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -175,6 +187,7 @@ type authServiceClient struct {
 	listAgents  *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
 	listTokens  *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
 	revokeToken *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	createToken *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
 }
 
 // WhoAmI calls vx.v1.AuthService.WhoAmI.
@@ -202,6 +215,11 @@ func (c *authServiceClient) RevokeToken(ctx context.Context, req *connect.Reques
 	return c.revokeToken.CallUnary(ctx, req)
 }
 
+// CreateToken calls vx.v1.AuthService.CreateToken.
+func (c *authServiceClient) CreateToken(ctx context.Context, req *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error) {
+	return c.createToken.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the vx.v1.AuthService service.
 type AuthServiceHandler interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
@@ -216,6 +234,10 @@ type AuthServiceHandler interface {
 	// RevokeToken revokes a token of the caller or of one of the caller's
 	// agents. Revoking the token the request is made with needs allow_current.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	// CreateToken issues a new token to the caller or to one of the caller's
+	// agents. Only people can create tokens: a leaked agent token must not be
+	// able to mint replacements that outlive its revocation.
+	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -255,6 +277,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("RevokeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceCreateTokenHandler := connect.NewUnaryHandler(
+		AuthServiceCreateTokenProcedure,
+		svc.CreateToken,
+		connect.WithSchema(authServiceMethods.ByName("CreateToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceWhoAmIProcedure:
@@ -267,6 +295,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceListTokensHandler.ServeHTTP(w, r)
 		case AuthServiceRevokeTokenProcedure:
 			authServiceRevokeTokenHandler.ServeHTTP(w, r)
+		case AuthServiceCreateTokenProcedure:
+			authServiceCreateTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -294,6 +324,10 @@ func (UnimplementedAuthServiceHandler) ListTokens(context.Context, *connect.Requ
 
 func (UnimplementedAuthServiceHandler) RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.RevokeToken is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.CreateToken is not implemented"))
 }
 
 // ObjectServiceClient is a client for the vx.v1.ObjectService service.

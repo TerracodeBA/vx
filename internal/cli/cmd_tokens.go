@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"text/tabwriter"
 	"time"
 
@@ -65,7 +67,7 @@ func when(rfc3339, empty string) string {
 }
 
 func (a *App) tokenCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "token", Short: "See and revoke your tokens and your agents' tokens"}
+	cmd := &cobra.Command{Use: "token", Short: "Create, see and revoke your tokens and your agents' tokens"}
 
 	var agent string
 	list := &cobra.Command{
@@ -146,6 +148,60 @@ needs --current.`,
 	}
 	revoke.Flags().BoolVar(&current, "current", false, "allow revoking the token this command uses")
 
-	cmd.AddCommand(list, revoke)
+	var createAgent, createName, createEnv string
+	create := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new token for yourself, or for one of your agents with --agent",
+		Long: `Create a new token for yourself, or for one of your agents with --agent.
+No admin is needed. The secret is shown once; only its hash is stored.
+
+With --env-file, the token is written to a private file (mode 600) instead
+of being printed, as vx agent add --env-file does. Use it with:
+  source FILE
+
+Only people can create tokens. An agent cannot create tokens, not even for
+itself: a leaked agent token must not be able to mint new ones that outlive
+its revocation. Ask the person the agent acts for instead.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			c, err := a.client()
+			if err != nil {
+				return err
+			}
+			path := createEnv
+			if path != "" {
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(a.dir(), path)
+				}
+				// Refuse before creating, so a token is not issued and lost.
+				if _, err := os.Lstat(path); err == nil {
+					return fmt.Errorf("%s already exists; choose another path or remove it", path)
+				}
+			}
+			resp, err := c.Auth.CreateToken(ctxOf(cmd), connect.NewRequest(&vxv1.CreateTokenRequest{Agent: createAgent, Name: createName}))
+			if err != nil {
+				return err
+			}
+			t, owner := resp.Msg.Token, resp.Msg.Principal
+			if path != "" {
+				if err := writeAgentEnv(path, a.settings().Server, resp.Msg.Secret); err != nil {
+					return fmt.Errorf("created token %s for %s but could not write it: %w. Revoke it with: vx token revoke %s", t.Id[:shortID], owner.Ref, err, t.Id[:shortID])
+				}
+				a.printf("Created token %s (%s) for %s.\nIts environment is in %s (mode 600). Use it with:\n  source %s\n",
+					t.Id[:shortID], t.Name, owner.Ref, path, path)
+				a.emit(map[string]any{"principal": owner, "token": t, "env_file": path})
+				return nil
+			}
+			a.printf("Created token %s (%s) for %s.\n\nToken (shown once):\n  %s\n\nUse it as:\n  export VX_TOKEN=%s\n",
+				t.Id[:shortID], t.Name, owner.Ref, resp.Msg.Secret, resp.Msg.Secret)
+			a.emit(resp.Msg)
+			return nil
+		},
+	}
+	create.Flags().StringVar(&createAgent, "agent", "", "one of your agents, by name (backend) or handle (alice/backend); default: yourself")
+	create.Flags().StringVar(&createName, "name", "", "a label for the token, such as laptop or ci")
+	create.Flags().StringVar(&createEnv, "env-file", "", "write the environment (server, token) to this file instead of printing the token")
+
+	cmd.AddCommand(list, create, revoke)
 	return cmd
 }

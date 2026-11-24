@@ -155,6 +155,10 @@ service AuthService {
   // RevokeToken revokes a token of the caller or of one of the caller's
   // agents. Revoking the token the request is made with needs allow_current.
   rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
+  // CreateToken issues a new token to the caller or to one of the caller's
+  // agents. Only people can create tokens: a leaked agent token must not be
+  // able to mint replacements that outlive its revocation.
+  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {}
 }
 
 // Token describes an API token. The secret itself is only shown once, when
@@ -201,6 +205,18 @@ message RevokeTokenRequest {
 message RevokeTokenResponse {
   Token token = 1;
   bool already_revoked = 2;
+}
+
+message CreateTokenRequest {
+  // An agent name ("backend") or handle ("alice/backend"). Empty: the caller.
+  string agent = 1;
+  string name = 2; // a label such as "laptop"; empty: "created by <caller>"
+}
+
+message CreateTokenResponse {
+  Principal principal = 1; // the token's owner
+  Token token = 2;
+  string secret = 3; // shown once; only its hash is stored
 }
 
 message WhoAmIRequest {}
