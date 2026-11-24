@@ -43,6 +43,7 @@ func Mount(mux *http.ServeMux, svc *service.Service) {
 	mux.Handle(vxv1connect.NewShipServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewBoardServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewCoordinationServiceHandler(h, opts...))
+	mux.Handle(vxv1connect.NewOrgServiceHandler(h, opts...))
 }
 
 func invalid(err error) error { return connect.NewError(connect.CodeInvalidArgument, err) }
@@ -218,7 +219,7 @@ func (h *Handlers) GetObjects(ctx context.Context, req *connect.Request[vxv1.Get
 func (h *Handlers) CreateRepo(ctx context.Context, req *connect.Request[vxv1.CreateRepoRequest]) (*connect.Response[vxv1.CreateRepoResponse], error) {
 	m := req.Msg
 	repo, err := h.svc.CreateRepo(ctx, actorFrom(ctx), service.CreateRepoInput{
-		Name: m.Name, Provider: store.Provider(m.Provider), Remote: m.Remote, DefaultBranch: m.DefaultBranch,
+		Name: m.Name, Provider: store.Provider(m.Provider), Remote: m.Remote, DefaultBranch: m.DefaultBranch, Org: m.Org,
 	})
 	if err != nil {
 		return nil, toConnect(err)

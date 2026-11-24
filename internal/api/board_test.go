@@ -60,6 +60,9 @@ func TestBoardServiceOverConnect(t *testing.T) {
 	if _, err := svc.CreateRepo(ctx, aliceActor, service.CreateRepoInput{Name: "shop-api"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := svc.GrantRepo(ctx, aliceActor, "shop-api", "bob", service.RoleWrite); err != nil {
+		t.Fatal(err)
+	}
 	eff, err := svc.CreateEffort(ctx, aliceActor, service.CreateEffortInput{Repo: "shop-api", Name: "Rate limiting"})
 	if err != nil {
 		t.Fatal(err)

@@ -75,6 +75,9 @@ func (f *fixture) seed() (store.Repo, store.Effort, store.ChangesetRow) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	if _, err := f.svc.GrantRepo(f.ctx, f.actors["alice"], "shop-api", "bob", service.RoleWrite); err != nil {
+		f.t.Fatal(err)
+	}
 	eff, err := f.svc.CreateEffort(f.ctx, f.actors["alice"], service.CreateEffortInput{Repo: "shop-api", Name: "Rate limiting", Goal: "Limit login attempts"})
 	if err != nil {
 		f.t.Fatal(err)

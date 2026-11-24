@@ -49,15 +49,25 @@ func loadMigrations() ([]migration, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	for i := range out {
-		if out[i].version != i+1 {
-			return nil, fmt.Errorf("migrations must be numbered 1, 2, 3...; found %d at position %d", out[i].version, i+1)
+		if out[i].version < 1 {
+			return nil, fmt.Errorf("migration %q: numbers start at 1", out[i].name)
+		}
+		if i > 0 && out[i].version == out[i-1].version {
+			return nil, fmt.Errorf("migrations %q and %q have the same number", out[i-1].name, out[i].name)
 		}
 	}
 	return out, nil
 }
 
 // Migrate applies pending migrations in order, each in its own transaction.
-func (s *Store) Migrate(ctx context.Context) error {
+// Numbers may have gaps (efforts built in parallel reserve numbers), and a
+// migration is applied when its version has not been applied yet, even if
+// a later one has: a lower number landing after a higher one still runs.
+func (s *Store) Migrate(ctx context.Context) error { return s.MigrateTo(ctx, 0) }
+
+// MigrateTo is Migrate that stops after version upTo (0: all), for tests
+// of data migrations.
+func (s *Store) MigrateTo(ctx context.Context, upTo int) error {
 	migs, err := loadMigrations()
 	if err != nil {
 		return err
@@ -75,12 +85,25 @@ func (s *Store) Migrate(ctx context.Context) error {
 		version int primary key, name text not null, applied_at timestamptz not null default now())`); err != nil {
 		return err
 	}
-	var current int
-	if err := conn.QueryRow(ctx, `select coalesce(max(version), 0) from schema_migrations`).Scan(&current); err != nil {
+	applied := map[int]bool{}
+	rows, err := conn.Query(ctx, `select version from schema_migrations`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			rows.Close()
+			return err
+		}
+		applied[v] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return err
 	}
 	for _, m := range migs {
-		if m.version <= current {
+		if applied[m.version] || (upTo > 0 && m.version > upTo) {
 			continue
 		}
 		err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {

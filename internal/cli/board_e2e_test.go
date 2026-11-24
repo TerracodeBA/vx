@@ -27,6 +27,10 @@ func boardPair(t *testing.T) (alice, a, b *user) {
 		t.Fatal(err)
 	}
 	bobToken, _ := h.st.CreateToken(ctx, bobP.ID, "test")
+	repo, _ := h.st.RepoByName(ctx, "shop-api")
+	if _, err := h.st.SetRepoGrant(ctx, repo.ID, &bobP.ID, nil, "write"); err != nil { // the repo is in alice's personal org
+		t.Fatal(err)
+	}
 	bob := h.user("bob", bobToken, work)
 	tokenOf := func(u *user, name string) string {
 		var resp struct{ Token string }
