@@ -59,12 +59,13 @@ func TestSettingsPage(t *testing.T) {
 		t.Helper()
 		req, _ := http.NewRequest("POST", srv.URL+path, strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		if origin != "" {
-			req.Header.Set("Origin", origin)
+		if origin == "" {
+			origin = srv.URL
 		}
+		req.Header.Set("Origin", origin)
 		return read(c.Do(req))
 	}
-	if _, err := c.PostForm(srv.URL+"/ui/login", url.Values{"token": {webToken}, "next": {"/ui"}}); err != nil {
+	if _, err := postForm(c, srv.URL, "/ui/login", url.Values{"token": {webToken}, "next": {"/ui"}}); err != nil {
 		t.Fatal(err)
 	}
 

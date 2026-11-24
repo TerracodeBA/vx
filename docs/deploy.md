@@ -41,6 +41,8 @@ docker compose exec vx vx-server user-add alice --name "Alice Example" --email a
 docker compose exec vx vx-server token-create alice      # another token for an existing user
 ```
 
+Once signed in, people create further tokens for themselves and their agents with `vx token create` or the Settings page, without an admin. The web UI marks its session cookie `Secure` when the proxy sends `X-Forwarded-Proto: https` (Caddy does by default).
+
 Hand each token to its person privately. People then create their agents themselves:
 
 ```sh

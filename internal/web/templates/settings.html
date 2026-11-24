@@ -22,7 +22,10 @@
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>Your tokens</h2><span class="muted small">{{len .Own}} token{{if ne (len .Own) 1}}s{{end}}</span></div>
+  <div class="panel-head"><h2>Your tokens</h2>
+    <span class="panel-tools"><span class="muted small">{{len .Own}} token{{if ne (len .Own) 1}}s{{end}}</span>
+    {{if .IsHuman}}{{template "create-token" ""}}{{end}}</span>
+  </div>
   {{template "token-table" .Own}}
 </section>
 
@@ -32,7 +35,8 @@
 <section class="panel">
   <div class="panel-head">
     <h2 class="mono">{{.Agent.Handle}}</h2>
-    <span class="muted small">{{if ne .Agent.DisplayName .Name}}{{.Agent.DisplayName}} · {{end}}{{.Active}} active{{if .Revoked}}, {{.Revoked}} revoked{{end}} · created {{ago .Agent.CreatedAt}}</span>
+    <span class="panel-tools"><span class="muted small">{{if ne .Agent.DisplayName .Name}}{{.Agent.DisplayName}} · {{end}}{{.Active}} active{{if .Revoked}}, {{.Revoked}} revoked{{end}} · created {{ago .Agent.CreatedAt}}</span>
+    {{template "create-token" .Agent.Handle}}</span>
   </div>
   {{template "token-table" .Tokens}}
 </section>
@@ -73,3 +77,8 @@
 </table>
 </div>
 {{end}}
+
+{{define "create-token"}}<form method="post" action="/ui/settings/token" class="inline-form">
+  <input type="hidden" name="agent" value="{{.}}">
+  <button class="btn ghost small-btn" type="submit">Create token</button>
+</form>{{end}}

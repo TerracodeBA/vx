@@ -70,7 +70,7 @@ func TestWarningsShownOnEffortAndChange(t *testing.T) {
 	defer srv.Close()
 	jar, _ := cookiejar.New(nil)
 	c := &http.Client{Jar: jar}
-	if _, err := c.PostForm(srv.URL+"/ui/login", url.Values{"token": {token}, "next": {"/ui"}}); err != nil {
+	if _, err := postForm(c, srv.URL, "/ui/login", url.Values{"token": {token}, "next": {"/ui"}}); err != nil {
 		t.Fatal(err)
 	}
 	get := func(path string) string {
