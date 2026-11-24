@@ -430,7 +430,17 @@ service WorkspaceService {
   // Land merges a snapshot into the effort.
   rpc Land(LandRequest) returns (LandResponse) {}
   rpc Abandon(AbandonRequest) returns (AbandonResponse) {}
+  // ReportChanges records the files the working copy of an open workspace
+  // changed, so vx context can say who works on which files.
+  rpc ReportChanges(ReportChangesRequest) returns (ReportChangesResponse) {}
 }
+
+message ReportChangesRequest {
+  string id = 1; // the workspace
+  repeated string paths = 2; // changed files, at most 2000
+}
+
+message ReportChangesResponse {}
 
 message OpenWorkspaceRequest {
   string repo = 1;
@@ -704,6 +714,11 @@ message ContextWorkspace {
   string intent = 2;
   string change_id = 3;
   string created_at = 4;
+  // The workspace's changed files (or claim targets) among the targets
+  // asked about; empty when it is not known to touch them. Context lists
+  // these workspaces first.
+  repeated string on_targets = 5;
+  bool files_known = 6; // its working copy reported its changed files
 }
 
 message ContextResponse {

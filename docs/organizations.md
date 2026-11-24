@@ -207,6 +207,7 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Rebase an effort, continue or abort | `vx effort rebase` | write |
 | Reserve the next key of a vx.toml `[[unique]]` rule for an effort | `vx reserve`, `vx_reserve` | write |
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
+| Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |

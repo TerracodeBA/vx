@@ -449,3 +449,14 @@ func (h *Handlers) Abandon(ctx context.Context, req *connect.Request[vxv1.Abando
 	}
 	return connect.NewResponse(&vxv1.AbandonResponse{Workspace: h.workspaceResp(ctx, v)}), nil
 }
+
+func (h *Handlers) ReportChanges(ctx context.Context, req *connect.Request[vxv1.ReportChangesRequest]) (*connect.Response[vxv1.ReportChangesResponse], error) {
+	id, err := parseWorkspaceID(req.Msg.Id)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.svc.ReportChanges(ctx, actorFrom(ctx), id, req.Msg.Paths); err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.ReportChangesResponse{}), nil
+}

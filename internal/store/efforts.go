@@ -191,14 +191,29 @@ type Workspace struct {
 	LandedAs  hash.Hash
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// ChangedPaths are the files the working copy last reported as
+	// changed, at ChangedPathsAt; nil ChangedPathsAt: never reported.
+	ChangedPaths   []string
+	ChangedPathsAt *time.Time
 }
 
-const workspaceCols = `id, effort_id, owner_id, intent, change_id, base, state, landed_as, created_at, updated_at`
+const workspaceCols = `id, effort_id, owner_id, intent, change_id, base, state, landed_as, created_at, updated_at, changed_paths, changed_paths_at`
 
 func scanWorkspace(row interface{ Scan(...any) error }) (Workspace, error) {
 	var w Workspace
-	err := row.Scan(&w.ID, &w.EffortID, &w.OwnerID, &w.Intent, &w.ChangeID, &w.Base, &w.State, &w.LandedAs, &w.CreatedAt, &w.UpdatedAt)
+	err := row.Scan(&w.ID, &w.EffortID, &w.OwnerID, &w.Intent, &w.ChangeID, &w.Base, &w.State, &w.LandedAs, &w.CreatedAt, &w.UpdatedAt,
+		&w.ChangedPaths, &w.ChangedPathsAt)
 	return w, err
+}
+
+// SetWorkspaceChangedPaths records the files an open workspace's working
+// copy has changed.
+func (q Q) SetWorkspaceChangedPaths(ctx context.Context, id uuid.UUID, paths []string, at time.Time) error {
+	if paths == nil {
+		paths = []string{}
+	}
+	_, err := q.db.Exec(ctx, `update workspaces set changed_paths = $1, changed_paths_at = $2 where id = $3 and state = 'open'`, paths, at, id)
+	return err
 }
 
 // CreateWorkspace inserts an open workspace.

@@ -1,6 +1,8 @@
 package service_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,4 +121,46 @@ func stringsReplace(s, old, new string) string {
 		panic("no " + old)
 	}
 	return s[:i] + new + s[i+len(old):]
+}
+
+// Context lists the workspaces whose reported changed files (or claims)
+// match the targets first, says which files, and tells workspaces that
+// never reported their files apart.
+func TestContextWorkingOnTargetsFirst(t *testing.T) {
+	b := newBoardEnv(t)
+	open := func(actor service.Actor, intent string) service.WorkspaceView {
+		t.Helper()
+		ws, err := b.svc.OpenWorkspace(b.ctx, actor, "shop-api", b.effort.Slug, intent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ws
+	}
+	silent := open(b.tests, "Never reports")
+	elsewhere := open(b.agent, "Docs")
+	onIt := open(b.bobBE, "Limiter")
+	claimed := open(b.bob, "Claims it")
+	if err := b.svc.ReportChanges(b.ctx, b.agent, elsewhere.Workspace.ID, []string{"README.md"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.svc.ReportChanges(b.ctx, b.bobBE, onIt.Workspace.ID, []string{"internal/http/limit.go", "go.mod", "internal/http/limit.go"}); err != nil {
+		t.Fatal(err)
+	}
+	b.claim(b.bob, claimed.Workspace.ID.String(), "", "internal/http/")
+	// Only the owner reports.
+	wantCode(t, b.svc.ReportChanges(b.ctx, b.bob, onIt.Workspace.ID, []string{"x"}), service.CodePermission, "permission denied")
+
+	nc, err := b.svc.Context(b.ctx, b.alice, "shop-api", b.effort.Slug, []string{"internal/http/limit.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, w := range nc.Working {
+		got = append(got, fmt.Sprintf("%s:%v:%v", w.Workspace.Intent, w.OnTargets, w.FilesKnown))
+	}
+	want := "Limiter:[internal/http/limit.go]:true|Claims it:[internal/http/]:false|Never reports:[]:false|Docs:[]:true"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("working = %s\nwant      %s", strings.Join(got, "|"), want)
+	}
+	_ = silent
 }

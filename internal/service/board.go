@@ -128,6 +128,12 @@ type Inbox struct {
 type ContextWorkspace struct {
 	Workspace store.Workspace
 	Owner     store.Principal
+	// OnTargets are the workspace's changed files (as its working copy
+	// reported them) that match the targets, or the targets of its claims
+	// that do; empty when it is not known to touch them.
+	OnTargets []string
+	// FilesKnown says the working copy reported its changed files.
+	FilesKnown bool
 }
 
 // NoteContext is what an agent should know before touching some targets.
@@ -400,18 +406,14 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 	if out.Notes, err = c.notes(ctx, rows, now); err != nil {
 		return NoteContext{}, err
 	}
-	for _, w := range v.Workspaces {
-		owner, err := c.principal(ctx, w.OwnerID)
-		if err != nil {
-			return NoteContext{}, err
-		}
-		out.Working = append(out.Working, ContextWorkspace{Workspace: w, Owner: owner})
-	}
 	claims, err := s.activeClaims(ctx, s.Store.Q, v.Effort.ID, targets, uuid.Nil)
 	if err != nil {
 		return NoteContext{}, err
 	}
 	if out.Claims, err = c.claims(ctx, claims); err != nil {
+		return NoteContext{}, err
+	}
+	if out.Working, err = s.contextWorking(ctx, c, v.Workspaces, targets, claims); err != nil {
 		return NoteContext{}, err
 	}
 	chain, err := s.Store.Chain(ctx, v.Repo.ID, v.Effort.Head, v.Effort.Base, contextChainScan)

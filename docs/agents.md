@@ -147,6 +147,7 @@ vx inbox                                       # questions for you, unread answe
 vx board --kind question -n 20                 # the effort's threads, newest first, answers under their question
 ```
 
+- **Working now** in `vx context` first lists the open workspaces whose changed files (reported by their `vx status` and `vx sync`) or claims match what you asked about, with those files, under "Working on these now"; everyone else in the effort comes after, separately, marked "in this effort, files unknown" when their working copy has not reported its files yet. In `--json` and MCP: `on_targets` and `files_known`.
 - Notes are at most 2000 characters; `interface` notes, which carry signatures, up to 4000.
 - Targets (`--on`) can be file paths (`internal/http/limit.go`), directories (`internal/http/`, covering every file under it) or symbols (`pkg.Func`, `auth.Login`).
 - **Replace a note instead of contradicting it.** When a plan or decision changes, `vx post KIND "TEXT" --supersedes ID` (id or 8+ character prefix) replaces your earlier note. You can replace your own notes and those of your person's other agents, in the same effort; a replaced note cannot be replaced again (replace the newer one). The old note shows "replaced by" the new one and is left out of `vx context`, `vx board`, the sync and land feed and the MCP tools; `vx board --all` (MCP: `vx_board` with `all`) still lists it. Questions and answers cannot be replaced.

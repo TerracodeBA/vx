@@ -505,12 +505,7 @@ separately, so their changes do not show up in vx sync.`,
 					a.printClaim(cl, "  ")
 				}
 			}
-			if len(m.Working) > 0 {
-				a.printf("\nWorking now (%d):\n", len(m.Working))
-				for _, w := range m.Working {
-					a.printf("  %-30s %s  %s  since %s\n", w.Owner, w.ChangeId, oneLine(w.Intent), agoRFC(w.CreatedAt))
-				}
-			}
+			a.printWorking(m.Working)
 			if len(m.RecentChanges) == 0 {
 				a.printf("\nNo recent changes touched these.\n")
 			} else {
@@ -604,6 +599,54 @@ func otherEffortLine(o *vxv1.OtherEffort) string {
 	return oneLine(cleanBody("effort " + o.Effort + " (" + o.Owner + "): " + strings.Join(parts, "; ")))
 }
 
+// printWorking prints the Working now section of vx context: first the
+// workspaces whose changed files (or claims) match the targets, then,
+// separately, the rest of the effort: those that reported other files, and
+// those whose files are unknown.
+func (a *App) printWorking(ws []*vxv1.ContextWorkspace) {
+	var on, elsewhere, unknown []*vxv1.ContextWorkspace
+	for _, w := range ws {
+		switch {
+		case len(w.OnTargets) > 0:
+			on = append(on, w)
+		case w.FilesKnown:
+			elsewhere = append(elsewhere, w)
+		default:
+			unknown = append(unknown, w)
+		}
+	}
+	line := func(w *vxv1.ContextWorkspace) {
+		a.printf("  %-30s %s  %s  since %s\n", w.Owner, w.ChangeId, oneLine(w.Intent), agoRFC(w.CreatedAt))
+	}
+	if len(on) > 0 {
+		a.printf("\nWorking on these now (%d):\n", len(on))
+		for _, w := range on {
+			line(w)
+			a.printf("      changing %s\n", strings.Join(w.OnTargets[:min(len(w.OnTargets), 5)], ", "))
+		}
+	}
+	if len(elsewhere)+len(unknown) == 0 {
+		return
+	}
+	a.printf("\nOthers working in this effort, not known to touch these (%d):\n", len(elsewhere)+len(unknown))
+	for _, w := range elsewhere {
+		line(w)
+	}
+	for _, w := range unknown {
+		line(w)
+		a.printf("      in this effort, files unknown\n")
+	}
+}
+
+// reportChanges tells the server which files the open workspace changed,
+// so vx context can say who works on which files. Best effort.
+func (a *App) reportChanges(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, changes []object.Change) {
+	if wc.Config.Workspace == "" {
+		return
+	}
+	_, _ = c.Workspaces.ReportChanges(ctx, connect.NewRequest(&vxv1.ReportChangesRequest{Id: wc.Config.Workspace, Paths: changedPaths(changes)}))
+}
+
 // touching picks the files of a change that match the targets, or, when
 // none does (symbol targets), the first max files.
 func touching(files []*vxv1.FileChange, targets []string, max int) []*vxv1.FileChange {
@@ -647,6 +690,7 @@ func targetsMatch(a, b string) bool {
 func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, changes []object.Change) map[string]any {
 	repo, slug := wc.Config.Repo, wc.Config.Effort
 	paths := changedPaths(changes)
+	a.reportChanges(ctx, c, wc, changes)
 	me := a.me(ctx, c)
 	pc, contextOK := a.contextFor(ctx, c, repo, slug, me, paths)
 	claims, notesOnFiles, others := pc.claims, pc.notes, pc.others
