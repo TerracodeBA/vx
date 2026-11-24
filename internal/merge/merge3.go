@@ -9,6 +9,9 @@ type Result struct {
 	// KeptBoth counts regions where both sides inserted different lines at
 	// the same place and the merge kept both insertions.
 	KeptBoth int
+	// BothDeleted counts regions where each side deleted different,
+	// neighbouring lines and the merge applied both deletions.
+	BothDeleted int
 }
 
 // Bytes returns the merged text.
@@ -29,6 +32,10 @@ type Labels struct {
 // side had is lost; only the order may need a look. This does not apply when
 // base is empty (both sides created the file) or when ours or theirs already
 // contains conflict markers.
+//
+// Regions where both sides only deleted lines, and no line was deleted by
+// both (neighbouring but separate blocks), apply both deletions. Overlapping
+// deletions, or a deletion next to an edit, stay conflicts.
 //
 // Other regions changed differently on both sides are conflicts and are
 // written with diff3-style markers.
@@ -80,6 +87,10 @@ func Merge3(base, ours, theirs []string, labels Labels) Result {
 			res.KeptBoth++
 			res.Lines = appendWithNewline(res.Lines, t)
 			res.Lines = append(res.Lines, o...)
+		case keepBoth && separateDeletions(b, o, t, mo[i-len(b):i], mt[i-len(b):i]):
+			// Each base line of the region was deleted by exactly one side:
+			// nothing of the region is left.
+			res.BothDeleted++
 		default:
 			res.Conflicts++
 			res.Lines = appendConflict(res.Lines, b, o, t, labels)
@@ -101,6 +112,32 @@ func Merge3Bytes(base, ours, theirs []byte, labels Labels) (Result, bool) {
 		return Result{Conflicts: 1}, false
 	}
 	return Merge3(SplitLines(base), SplitLines(ours), SplitLines(theirs), labels), true
+}
+
+// separateDeletions reports whether, in a region of base lines b (with
+// their matches mo and mt into ours and theirs), ours region o and theirs
+// region t each only deleted lines and no line was deleted by both. Every
+// base line of such a region is deleted by exactly one side, because a line
+// both kept would have ended the region.
+func separateDeletions(b, o, t []string, mo, mt []int) bool {
+	if len(b) == 0 || len(o) >= len(b) || len(t) >= len(b) {
+		return false
+	}
+	keptO, keptT := 0, 0
+	for x := range b {
+		switch {
+		case mo[x] < 0 && mt[x] < 0:
+			return false // both deleted this line: overlapping deletions
+		case mo[x] >= 0 && mt[x] >= 0:
+			return false // kept by both inside the region: not pure deletions
+		case mo[x] >= 0:
+			keptO++
+		default:
+			keptT++
+		}
+	}
+	// Pure deletions: every line left on a side is one of its kept base lines.
+	return keptO == len(o) && keptT == len(t)
 }
 
 // matches maps each base line index to the index of the matching line in
