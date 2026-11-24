@@ -90,7 +90,7 @@ Start here:
 		a.loginCmd(), a.whoamiCmd(), a.uiCmd(), a.agentCmd(), a.tokenCmd(),
 		a.repoCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
-		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(),
+		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the vx version",
