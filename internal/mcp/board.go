@@ -44,7 +44,7 @@ type Note struct {
 type contextInput struct {
 	Repo    string   `json:"repo" jsonschema:"repository name"`
 	Effort  string   `json:"effort" jsonschema:"effort slug"`
-	Targets []string `json:"targets" jsonschema:"paths, directories (ending in /) or symbols (pkg.Func) you are about to change"`
+	Targets []string `json:"targets" jsonschema:"paths, directories (ending in /) or symbols (pkg.Func) you are about to change; empty: the effort's latest notes and changes"`
 }
 
 type boardInput struct {
@@ -151,9 +151,6 @@ func (t *tools) context(ctx context.Context, req *sdk.CallToolRequest, in contex
 	}
 	if err := need(in.Repo, "repo", in.Effort, "effort"); err != nil {
 		return nil, contextOutput{}, err
-	}
-	if len(in.Targets) == 0 {
-		return nil, contextOutput{}, invalid("name the paths or symbols you are about to change in targets")
 	}
 	nc, err := t.svc.Context(ctx, a, in.Repo, in.Effort, in.Targets)
 	if err != nil {
