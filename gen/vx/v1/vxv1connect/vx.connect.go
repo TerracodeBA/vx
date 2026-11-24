@@ -39,6 +39,8 @@ const (
 	CoordinationServiceName = "vx.v1.CoordinationService"
 	// OrgServiceName is the fully-qualified name of the OrgService service.
 	OrgServiceName = "vx.v1.OrgService"
+	// PublicServiceName is the fully-qualified name of the PublicService service.
+	PublicServiceName = "vx.v1.PublicService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -190,6 +192,15 @@ const (
 	OrgServiceCreatePersonProcedure = "/vx.v1.OrgService/CreatePerson"
 	// OrgServiceListPeopleProcedure is the fully-qualified name of the OrgService's ListPeople RPC.
 	OrgServiceListPeopleProcedure = "/vx.v1.OrgService/ListPeople"
+	// PublicServiceServerInfoProcedure is the fully-qualified name of the PublicService's ServerInfo
+	// RPC.
+	PublicServiceServerInfoProcedure = "/vx.v1.PublicService/ServerInfo"
+	// PublicServiceStartCLILoginProcedure is the fully-qualified name of the PublicService's
+	// StartCLILogin RPC.
+	PublicServiceStartCLILoginProcedure = "/vx.v1.PublicService/StartCLILogin"
+	// PublicServicePollCLILoginProcedure is the fully-qualified name of the PublicService's
+	// PollCLILogin RPC.
+	PublicServicePollCLILoginProcedure = "/vx.v1.PublicService/PollCLILogin"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -2164,4 +2175,136 @@ func (UnimplementedOrgServiceHandler) CreatePerson(context.Context, *connect.Req
 
 func (UnimplementedOrgServiceHandler) ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListPeople is not implemented"))
+}
+
+// PublicServiceClient is a client for the vx.v1.PublicService service.
+type PublicServiceClient interface {
+	// ServerInfo tells clients the server version and the oldest CLI it works
+	// with, so either side can say "update vx" instead of failing oddly.
+	ServerInfo(context.Context, *connect.Request[v1.ServerInfoRequest]) (*connect.Response[v1.ServerInfoResponse], error)
+	// StartCLILogin begins a browser login: the CLI shows user_code and opens
+	// verification_url; the person signs in and approves there.
+	StartCLILogin(context.Context, *connect.Request[v1.StartCLILoginRequest]) (*connect.Response[v1.StartCLILoginResponse], error)
+	// PollCLILogin returns the token once the person approved (exactly once).
+	PollCLILogin(context.Context, *connect.Request[v1.PollCLILoginRequest]) (*connect.Response[v1.PollCLILoginResponse], error)
+}
+
+// NewPublicServiceClient constructs a client for the vx.v1.PublicService service. By default, it
+// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewPublicServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PublicServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	publicServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("PublicService").Methods()
+	return &publicServiceClient{
+		serverInfo: connect.NewClient[v1.ServerInfoRequest, v1.ServerInfoResponse](
+			httpClient,
+			baseURL+PublicServiceServerInfoProcedure,
+			connect.WithSchema(publicServiceMethods.ByName("ServerInfo")),
+			connect.WithClientOptions(opts...),
+		),
+		startCLILogin: connect.NewClient[v1.StartCLILoginRequest, v1.StartCLILoginResponse](
+			httpClient,
+			baseURL+PublicServiceStartCLILoginProcedure,
+			connect.WithSchema(publicServiceMethods.ByName("StartCLILogin")),
+			connect.WithClientOptions(opts...),
+		),
+		pollCLILogin: connect.NewClient[v1.PollCLILoginRequest, v1.PollCLILoginResponse](
+			httpClient,
+			baseURL+PublicServicePollCLILoginProcedure,
+			connect.WithSchema(publicServiceMethods.ByName("PollCLILogin")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// publicServiceClient implements PublicServiceClient.
+type publicServiceClient struct {
+	serverInfo    *connect.Client[v1.ServerInfoRequest, v1.ServerInfoResponse]
+	startCLILogin *connect.Client[v1.StartCLILoginRequest, v1.StartCLILoginResponse]
+	pollCLILogin  *connect.Client[v1.PollCLILoginRequest, v1.PollCLILoginResponse]
+}
+
+// ServerInfo calls vx.v1.PublicService.ServerInfo.
+func (c *publicServiceClient) ServerInfo(ctx context.Context, req *connect.Request[v1.ServerInfoRequest]) (*connect.Response[v1.ServerInfoResponse], error) {
+	return c.serverInfo.CallUnary(ctx, req)
+}
+
+// StartCLILogin calls vx.v1.PublicService.StartCLILogin.
+func (c *publicServiceClient) StartCLILogin(ctx context.Context, req *connect.Request[v1.StartCLILoginRequest]) (*connect.Response[v1.StartCLILoginResponse], error) {
+	return c.startCLILogin.CallUnary(ctx, req)
+}
+
+// PollCLILogin calls vx.v1.PublicService.PollCLILogin.
+func (c *publicServiceClient) PollCLILogin(ctx context.Context, req *connect.Request[v1.PollCLILoginRequest]) (*connect.Response[v1.PollCLILoginResponse], error) {
+	return c.pollCLILogin.CallUnary(ctx, req)
+}
+
+// PublicServiceHandler is an implementation of the vx.v1.PublicService service.
+type PublicServiceHandler interface {
+	// ServerInfo tells clients the server version and the oldest CLI it works
+	// with, so either side can say "update vx" instead of failing oddly.
+	ServerInfo(context.Context, *connect.Request[v1.ServerInfoRequest]) (*connect.Response[v1.ServerInfoResponse], error)
+	// StartCLILogin begins a browser login: the CLI shows user_code and opens
+	// verification_url; the person signs in and approves there.
+	StartCLILogin(context.Context, *connect.Request[v1.StartCLILoginRequest]) (*connect.Response[v1.StartCLILoginResponse], error)
+	// PollCLILogin returns the token once the person approved (exactly once).
+	PollCLILogin(context.Context, *connect.Request[v1.PollCLILoginRequest]) (*connect.Response[v1.PollCLILoginResponse], error)
+}
+
+// NewPublicServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewPublicServiceHandler(svc PublicServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	publicServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("PublicService").Methods()
+	publicServiceServerInfoHandler := connect.NewUnaryHandler(
+		PublicServiceServerInfoProcedure,
+		svc.ServerInfo,
+		connect.WithSchema(publicServiceMethods.ByName("ServerInfo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	publicServiceStartCLILoginHandler := connect.NewUnaryHandler(
+		PublicServiceStartCLILoginProcedure,
+		svc.StartCLILogin,
+		connect.WithSchema(publicServiceMethods.ByName("StartCLILogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	publicServicePollCLILoginHandler := connect.NewUnaryHandler(
+		PublicServicePollCLILoginProcedure,
+		svc.PollCLILogin,
+		connect.WithSchema(publicServiceMethods.ByName("PollCLILogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.PublicService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case PublicServiceServerInfoProcedure:
+			publicServiceServerInfoHandler.ServeHTTP(w, r)
+		case PublicServiceStartCLILoginProcedure:
+			publicServiceStartCLILoginHandler.ServeHTTP(w, r)
+		case PublicServicePollCLILoginProcedure:
+			publicServicePollCLILoginHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedPublicServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPublicServiceHandler struct{}
+
+func (UnimplementedPublicServiceHandler) ServerInfo(context.Context, *connect.Request[v1.ServerInfoRequest]) (*connect.Response[v1.ServerInfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.PublicService.ServerInfo is not implemented"))
+}
+
+func (UnimplementedPublicServiceHandler) StartCLILogin(context.Context, *connect.Request[v1.StartCLILoginRequest]) (*connect.Response[v1.StartCLILoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.PublicService.StartCLILogin is not implemented"))
+}
+
+func (UnimplementedPublicServiceHandler) PollCLILogin(context.Context, *connect.Request[v1.PollCLILoginRequest]) (*connect.Response[v1.PollCLILoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.PublicService.PollCLILogin is not implemented"))
 }

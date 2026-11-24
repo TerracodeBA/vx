@@ -28,8 +28,9 @@ type Principal struct {
 	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"` // human, agent, service
 	DisplayName   string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Email         string                 `protobuf:"bytes,5,opt,name=email,proto3" json:"email,omitempty"`
-	OnBehalfOf    string                 `protobuf:"bytes,6,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"` // the human an agent acts for
-	SiteAdmin     bool                   `protobuf:"varint,7,opt,name=site_admin,json=siteAdmin,proto3" json:"site_admin,omitempty"`     // may manage people and every organization on this server
+	OnBehalfOf    string                 `protobuf:"bytes,6,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`  // the human an agent acts for
+	SiteAdmin     bool                   `protobuf:"varint,7,opt,name=site_admin,json=siteAdmin,proto3" json:"site_admin,omitempty"`      // may manage people and every organization on this server
+	GithubLogin   string                 `protobuf:"bytes,8,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"` // set for people who signed in with GitHub
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -113,6 +114,13 @@ func (x *Principal) GetSiteAdmin() bool {
 	return false
 }
 
+func (x *Principal) GetGithubLogin() string {
+	if x != nil {
+		return x.GithubLogin
+	}
+	return ""
+}
+
 type Branch struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -188,8 +196,9 @@ type Repo struct {
 	Remote        string                 `protobuf:"bytes,3,opt,name=remote,proto3" json:"remote,omitempty"`
 	DefaultBranch string                 `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"`
 	Branches      []*Branch              `protobuf:"bytes,5,rep,name=branches,proto3" json:"branches,omitempty"`
-	Org           string                 `protobuf:"bytes,6,opt,name=org,proto3" json:"org,omitempty"`                     // the organization that owns the repository
-	MyRole        string                 `protobuf:"bytes,7,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"` // the caller's role: read, write or admin
+	Org           string                 `protobuf:"bytes,6,opt,name=org,proto3" json:"org,omitempty"`                                        // the organization that owns the repository
+	MyRole        string                 `protobuf:"bytes,7,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`                    // the caller's role: read, write or admin
+	GithubBacked  bool                   `protobuf:"varint,8,opt,name=github_backed,json=githubBacked,proto3" json:"github_backed,omitempty"` // roles come from GitHub permissions, not vx grants
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -271,6 +280,13 @@ func (x *Repo) GetMyRole() string {
 		return x.MyRole
 	}
 	return ""
+}
+
+func (x *Repo) GetGithubBacked() bool {
+	if x != nil {
+		return x.GithubBacked
+	}
+	return false
 }
 
 type Effort struct {
@@ -8947,11 +8963,363 @@ func (x *ListPeopleResponse) GetPeople() []*Principal {
 	return nil
 }
 
+type ServerInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CliVersion    string                 `protobuf:"bytes,1,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"` // the caller's version, for the server's log and answer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServerInfoRequest) Reset() {
+	*x = ServerInfoRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[145]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServerInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerInfoRequest) ProtoMessage() {}
+
+func (x *ServerInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[145]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerInfoRequest.ProtoReflect.Descriptor instead.
+func (*ServerInfoRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{145}
+}
+
+func (x *ServerInfoRequest) GetCliVersion() string {
+	if x != nil {
+		return x.CliVersion
+	}
+	return ""
+}
+
+type ServerInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	MinCliVersion string                 `protobuf:"bytes,2,opt,name=min_cli_version,json=minCliVersion,proto3" json:"min_cli_version,omitempty"` // older CLIs must update
+	Features      []string               `protobuf:"bytes,3,rep,name=features,proto3" json:"features,omitempty"`                                  // e.g. "board", "claims", "tasks", "rebase", "orgs", "github"
+	GithubSignIn  bool                   `protobuf:"varint,4,opt,name=github_sign_in,json=githubSignIn,proto3" json:"github_sign_in,omitempty"`   // the server has a GitHub App configured
+	CliStatus     string                 `protobuf:"bytes,5,opt,name=cli_status,json=cliStatus,proto3" json:"cli_status,omitempty"`               // ok, update_recommended, update_required
+	Message       string                 `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`                                    // what to tell the person, when cli_status is not ok
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServerInfoResponse) Reset() {
+	*x = ServerInfoResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[146]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServerInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerInfoResponse) ProtoMessage() {}
+
+func (x *ServerInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[146]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerInfoResponse.ProtoReflect.Descriptor instead.
+func (*ServerInfoResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{146}
+}
+
+func (x *ServerInfoResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ServerInfoResponse) GetMinCliVersion() string {
+	if x != nil {
+		return x.MinCliVersion
+	}
+	return ""
+}
+
+func (x *ServerInfoResponse) GetFeatures() []string {
+	if x != nil {
+		return x.Features
+	}
+	return nil
+}
+
+func (x *ServerInfoResponse) GetGithubSignIn() bool {
+	if x != nil {
+		return x.GithubSignIn
+	}
+	return false
+}
+
+func (x *ServerInfoResponse) GetCliStatus() string {
+	if x != nil {
+		return x.CliStatus
+	}
+	return ""
+}
+
+func (x *ServerInfoResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type StartCLILoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientName    string                 `protobuf:"bytes,1,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"` // e.g. "vx on alice-laptop"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCLILoginRequest) Reset() {
+	*x = StartCLILoginRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[147]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCLILoginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCLILoginRequest) ProtoMessage() {}
+
+func (x *StartCLILoginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[147]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCLILoginRequest.ProtoReflect.Descriptor instead.
+func (*StartCLILoginRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{147}
+}
+
+func (x *StartCLILoginRequest) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+type StartCLILoginResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DeviceCode      string                 `protobuf:"bytes,1,opt,name=device_code,json=deviceCode,proto3" json:"device_code,omitempty"`                // secret: only the CLI knows it
+	UserCode        string                 `protobuf:"bytes,2,opt,name=user_code,json=userCode,proto3" json:"user_code,omitempty"`                      // shown to the person, confirmed in the browser
+	VerificationUrl string                 `protobuf:"bytes,3,opt,name=verification_url,json=verificationUrl,proto3" json:"verification_url,omitempty"` // opens the approval page with the code filled in
+	ExpiresAt       string                 `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	IntervalSeconds int32                  `protobuf:"varint,5,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"` // poll no faster than this
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StartCLILoginResponse) Reset() {
+	*x = StartCLILoginResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[148]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCLILoginResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCLILoginResponse) ProtoMessage() {}
+
+func (x *StartCLILoginResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[148]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCLILoginResponse.ProtoReflect.Descriptor instead.
+func (*StartCLILoginResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{148}
+}
+
+func (x *StartCLILoginResponse) GetDeviceCode() string {
+	if x != nil {
+		return x.DeviceCode
+	}
+	return ""
+}
+
+func (x *StartCLILoginResponse) GetUserCode() string {
+	if x != nil {
+		return x.UserCode
+	}
+	return ""
+}
+
+func (x *StartCLILoginResponse) GetVerificationUrl() string {
+	if x != nil {
+		return x.VerificationUrl
+	}
+	return ""
+}
+
+func (x *StartCLILoginResponse) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *StartCLILoginResponse) GetIntervalSeconds() int32 {
+	if x != nil {
+		return x.IntervalSeconds
+	}
+	return 0
+}
+
+type PollCLILoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceCode    string                 `protobuf:"bytes,1,opt,name=device_code,json=deviceCode,proto3" json:"device_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollCLILoginRequest) Reset() {
+	*x = PollCLILoginRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[149]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollCLILoginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollCLILoginRequest) ProtoMessage() {}
+
+func (x *PollCLILoginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[149]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollCLILoginRequest.ProtoReflect.Descriptor instead.
+func (*PollCLILoginRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{149}
+}
+
+func (x *PollCLILoginRequest) GetDeviceCode() string {
+	if x != nil {
+		return x.DeviceCode
+	}
+	return ""
+}
+
+type PollCLILoginResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // pending, approved, denied, expired
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`   // set once, when approved
+	Principal     *Principal             `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollCLILoginResponse) Reset() {
+	*x = PollCLILoginResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[150]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollCLILoginResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollCLILoginResponse) ProtoMessage() {}
+
+func (x *PollCLILoginResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[150]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollCLILoginResponse.ProtoReflect.Descriptor instead.
+func (*PollCLILoginResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{150}
+}
+
+func (x *PollCLILoginResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *PollCLILoginResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *PollCLILoginResponse) GetPrincipal() *Principal {
+	if x != nil {
+		return x.Principal
+	}
+	return nil
+}
+
 var File_vx_v1_vx_proto protoreflect.FileDescriptor
 
 const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
-	"\x0evx/v1/vx.proto\x12\x05vx.v1\"\xc3\x01\n" +
+	"\x0evx/v1/vx.proto\x12\x05vx.v1\"\xe6\x01\n" +
 	"\tPrincipal\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x16\n" +
 	"\x06handle\x18\x02 \x01(\tR\x06handle\x12\x12\n" +
@@ -8961,12 +9329,13 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\fon_behalf_of\x18\x06 \x01(\tR\n" +
 	"onBehalfOf\x12\x1d\n" +
 	"\n" +
-	"site_admin\x18\a \x01(\bR\tsiteAdmin\"f\n" +
+	"site_admin\x18\a \x01(\bR\tsiteAdmin\x12!\n" +
+	"\fgithub_login\x18\b \x01(\tR\vgithubLogin\"f\n" +
 	"\x06Branch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04head\x18\x02 \x01(\tR\x04head\x12\x17\n" +
 	"\agit_sha\x18\x03 \x01(\tR\x06gitSha\x12\x1b\n" +
-	"\tsynced_at\x18\x04 \x01(\tR\bsyncedAt\"\xcb\x01\n" +
+	"\tsynced_at\x18\x04 \x01(\tR\bsyncedAt\"\xf0\x01\n" +
 	"\x04Repo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
@@ -8974,7 +9343,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x0edefault_branch\x18\x04 \x01(\tR\rdefaultBranch\x12)\n" +
 	"\bbranches\x18\x05 \x03(\v2\r.vx.v1.BranchR\bbranches\x12\x10\n" +
 	"\x03org\x18\x06 \x01(\tR\x03org\x12\x17\n" +
-	"\amy_role\x18\a \x01(\tR\x06myRole\"\xf5\x02\n" +
+	"\amy_role\x18\a \x01(\tR\x06myRole\x12#\n" +
+	"\rgithub_backed\x18\b \x01(\bR\fgithubBacked\"\xf5\x02\n" +
 	"\x06Effort\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
@@ -9623,7 +9993,36 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"\x13\n" +
 	"\x11ListPeopleRequest\">\n" +
 	"\x12ListPeopleResponse\x12(\n" +
-	"\x06people\x18\x01 \x03(\v2\x10.vx.v1.PrincipalR\x06people2\xfc\x03\n" +
+	"\x06people\x18\x01 \x03(\v2\x10.vx.v1.PrincipalR\x06people\"4\n" +
+	"\x11ServerInfoRequest\x12\x1f\n" +
+	"\vcli_version\x18\x01 \x01(\tR\n" +
+	"cliVersion\"\xd1\x01\n" +
+	"\x12ServerInfoResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12&\n" +
+	"\x0fmin_cli_version\x18\x02 \x01(\tR\rminCliVersion\x12\x1a\n" +
+	"\bfeatures\x18\x03 \x03(\tR\bfeatures\x12$\n" +
+	"\x0egithub_sign_in\x18\x04 \x01(\bR\fgithubSignIn\x12\x1d\n" +
+	"\n" +
+	"cli_status\x18\x05 \x01(\tR\tcliStatus\x12\x18\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\"7\n" +
+	"\x14StartCLILoginRequest\x12\x1f\n" +
+	"\vclient_name\x18\x01 \x01(\tR\n" +
+	"clientName\"\xca\x01\n" +
+	"\x15StartCLILoginResponse\x12\x1f\n" +
+	"\vdevice_code\x18\x01 \x01(\tR\n" +
+	"deviceCode\x12\x1b\n" +
+	"\tuser_code\x18\x02 \x01(\tR\buserCode\x12)\n" +
+	"\x10verification_url\x18\x03 \x01(\tR\x0fverificationUrl\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\tR\texpiresAt\x12)\n" +
+	"\x10interval_seconds\x18\x05 \x01(\x05R\x0fintervalSeconds\"6\n" +
+	"\x13PollCLILoginRequest\x12\x1f\n" +
+	"\vdevice_code\x18\x01 \x01(\tR\n" +
+	"deviceCode\"t\n" +
+	"\x14PollCLILoginResponse\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12.\n" +
+	"\tprincipal\x18\x03 \x01(\v2\x10.vx.v1.PrincipalR\tprincipal2\xfc\x03\n" +
 	"\vAuthService\x127\n" +
 	"\x06WhoAmI\x12\x14.vx.v1.WhoAmIRequest\x1a\x15.vx.v1.WhoAmIResponse\"\x00\x12F\n" +
 	"\vCreateAgent\x12\x19.vx.v1.CreateAgentRequest\x1a\x1a.vx.v1.CreateAgentResponse\"\x00\x12C\n" +
@@ -9704,7 +10103,12 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"RepoAccess\x12\x18.vx.v1.RepoAccessRequest\x1a\x19.vx.v1.RepoAccessResponse\"\x00\x12I\n" +
 	"\fCreatePerson\x12\x1a.vx.v1.CreatePersonRequest\x1a\x1b.vx.v1.CreatePersonResponse\"\x00\x12C\n" +
 	"\n" +
-	"ListPeople\x12\x18.vx.v1.ListPeopleRequest\x1a\x19.vx.v1.ListPeopleResponse\"\x00Bs\n" +
+	"ListPeople\x12\x18.vx.v1.ListPeopleRequest\x1a\x19.vx.v1.ListPeopleResponse\"\x002\xed\x01\n" +
+	"\rPublicService\x12C\n" +
+	"\n" +
+	"ServerInfo\x12\x18.vx.v1.ServerInfoRequest\x1a\x19.vx.v1.ServerInfoResponse\"\x00\x12L\n" +
+	"\rStartCLILogin\x12\x1b.vx.v1.StartCLILoginRequest\x1a\x1c.vx.v1.StartCLILoginResponse\"\x00\x12I\n" +
+	"\fPollCLILogin\x12\x1a.vx.v1.PollCLILoginRequest\x1a\x1b.vx.v1.PollCLILoginResponse\"\x00Bs\n" +
 	"\tcom.vx.v1B\aVxProtoP\x01Z(github.com/TerracodeBA/vx/gen/vx/v1;vxv1\xa2\x02\x03VXX\xaa\x02\x05Vx.V1\xca\x02\x05Vx\\V1\xe2\x02\x11Vx\\V1\\GPBMetadata\xea\x02\x06Vx::V1b\x06proto3"
 
 var (
@@ -9719,7 +10123,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 145)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 151)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),                // 0: vx.v1.Principal
 	(*Branch)(nil),                   // 1: vx.v1.Branch
@@ -9866,6 +10270,12 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*CreatePersonResponse)(nil),     // 142: vx.v1.CreatePersonResponse
 	(*ListPeopleRequest)(nil),        // 143: vx.v1.ListPeopleRequest
 	(*ListPeopleResponse)(nil),       // 144: vx.v1.ListPeopleResponse
+	(*ServerInfoRequest)(nil),        // 145: vx.v1.ServerInfoRequest
+	(*ServerInfoResponse)(nil),       // 146: vx.v1.ServerInfoResponse
+	(*StartCLILoginRequest)(nil),     // 147: vx.v1.StartCLILoginRequest
+	(*StartCLILoginResponse)(nil),    // 148: vx.v1.StartCLILoginResponse
+	(*PollCLILoginRequest)(nil),      // 149: vx.v1.PollCLILoginRequest
+	(*PollCLILoginResponse)(nil),     // 150: vx.v1.PollCLILoginResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
 	1,   // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
@@ -9965,127 +10375,134 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	114, // 94: vx.v1.RepoAccessResponse.people:type_name -> vx.v1.RepoAccessEntry
 	0,   // 95: vx.v1.CreatePersonResponse.person:type_name -> vx.v1.Principal
 	0,   // 96: vx.v1.ListPeopleResponse.people:type_name -> vx.v1.Principal
-	25,  // 97: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	27,  // 98: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	17,  // 99: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	19,  // 100: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	21,  // 101: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	23,  // 102: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	13,  // 103: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	29,  // 104: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	31,  // 105: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	33,  // 106: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	35,  // 107: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	37,  // 108: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	39,  // 109: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	41,  // 110: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	43,  // 111: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	45,  // 112: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	47,  // 113: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	49,  // 114: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	51,  // 115: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	102, // 116: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
-	104, // 117: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
-	106, // 118: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
-	108, // 119: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
-	53,  // 120: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	55,  // 121: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	57,  // 122: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	59,  // 123: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	61,  // 124: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	66,  // 125: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	68,  // 126: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	70,  // 127: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	73,  // 128: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	75,  // 129: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	77,  // 130: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	79,  // 131: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	81,  // 132: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	83,  // 133: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	87,  // 134: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
-	89,  // 135: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
-	91,  // 136: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
-	94,  // 137: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
-	96,  // 138: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
-	98,  // 139: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
-	115, // 140: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
-	117, // 141: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
-	119, // 142: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
-	121, // 143: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
-	123, // 144: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
-	125, // 145: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
-	127, // 146: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
-	129, // 147: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
-	131, // 148: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
-	133, // 149: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
-	135, // 150: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
-	137, // 151: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
-	139, // 152: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
-	141, // 153: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
-	143, // 154: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
-	26,  // 155: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	28,  // 156: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	18,  // 157: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	20,  // 158: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	22,  // 159: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	24,  // 160: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	14,  // 161: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	30,  // 162: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	32,  // 163: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	34,  // 164: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	36,  // 165: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	38,  // 166: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	40,  // 167: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	42,  // 168: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	44,  // 169: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	46,  // 170: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	48,  // 171: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	50,  // 172: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	52,  // 173: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	103, // 174: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
-	105, // 175: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
-	107, // 176: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
-	109, // 177: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
-	54,  // 178: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	56,  // 179: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	58,  // 180: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	60,  // 181: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	62,  // 182: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	67,  // 183: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	69,  // 184: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	71,  // 185: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	74,  // 186: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	76,  // 187: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	78,  // 188: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	80,  // 189: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	82,  // 190: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	85,  // 191: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	88,  // 192: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
-	90,  // 193: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
-	92,  // 194: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
-	95,  // 195: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
-	97,  // 196: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
-	99,  // 197: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
-	116, // 198: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
-	118, // 199: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
-	120, // 200: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
-	122, // 201: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
-	124, // 202: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
-	126, // 203: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
-	128, // 204: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
-	130, // 205: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
-	132, // 206: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
-	134, // 207: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
-	136, // 208: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
-	138, // 209: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
-	140, // 210: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
-	142, // 211: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
-	144, // 212: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
-	155, // [155:213] is the sub-list for method output_type
-	97,  // [97:155] is the sub-list for method input_type
-	97,  // [97:97] is the sub-list for extension type_name
-	97,  // [97:97] is the sub-list for extension extendee
-	0,   // [0:97] is the sub-list for field type_name
+	0,   // 97: vx.v1.PollCLILoginResponse.principal:type_name -> vx.v1.Principal
+	25,  // 98: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	27,  // 99: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	17,  // 100: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	19,  // 101: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	21,  // 102: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	23,  // 103: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	13,  // 104: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	29,  // 105: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	31,  // 106: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	33,  // 107: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	35,  // 108: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	37,  // 109: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	39,  // 110: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	41,  // 111: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	43,  // 112: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	45,  // 113: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	47,  // 114: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	49,  // 115: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	51,  // 116: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	102, // 117: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
+	104, // 118: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
+	106, // 119: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
+	108, // 120: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
+	53,  // 121: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	55,  // 122: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	57,  // 123: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	59,  // 124: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	61,  // 125: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	66,  // 126: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	68,  // 127: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	70,  // 128: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	73,  // 129: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	75,  // 130: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	77,  // 131: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	79,  // 132: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	81,  // 133: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	83,  // 134: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	87,  // 135: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	89,  // 136: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	91,  // 137: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	94,  // 138: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	96,  // 139: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	98,  // 140: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	115, // 141: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
+	117, // 142: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
+	119, // 143: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
+	121, // 144: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
+	123, // 145: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
+	125, // 146: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
+	127, // 147: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
+	129, // 148: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
+	131, // 149: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
+	133, // 150: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
+	135, // 151: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
+	137, // 152: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
+	139, // 153: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
+	141, // 154: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
+	143, // 155: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
+	145, // 156: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
+	147, // 157: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
+	149, // 158: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
+	26,  // 159: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	28,  // 160: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	18,  // 161: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	20,  // 162: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	22,  // 163: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	24,  // 164: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	14,  // 165: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	30,  // 166: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	32,  // 167: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	34,  // 168: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	36,  // 169: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	38,  // 170: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	40,  // 171: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	42,  // 172: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	44,  // 173: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	46,  // 174: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	48,  // 175: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	50,  // 176: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	52,  // 177: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	103, // 178: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
+	105, // 179: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
+	107, // 180: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
+	109, // 181: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
+	54,  // 182: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	56,  // 183: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	58,  // 184: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	60,  // 185: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	62,  // 186: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	67,  // 187: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	69,  // 188: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	71,  // 189: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	74,  // 190: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	76,  // 191: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	78,  // 192: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	80,  // 193: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	82,  // 194: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	85,  // 195: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	88,  // 196: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	90,  // 197: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	92,  // 198: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	95,  // 199: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	97,  // 200: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	99,  // 201: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	116, // 202: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
+	118, // 203: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
+	120, // 204: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
+	122, // 205: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
+	124, // 206: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
+	126, // 207: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
+	128, // 208: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
+	130, // 209: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
+	132, // 210: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
+	134, // 211: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
+	136, // 212: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
+	138, // 213: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
+	140, // 214: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
+	142, // 215: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
+	144, // 216: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
+	146, // 217: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
+	148, // 218: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
+	150, // 219: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
+	159, // [159:220] is the sub-list for method output_type
+	98,  // [98:159] is the sub-list for method input_type
+	98,  // [98:98] is the sub-list for extension type_name
+	98,  // [98:98] is the sub-list for extension extendee
+	0,   // [0:98] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -10099,9 +10516,9 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   145,
+			NumMessages:   151,
 			NumExtensions: 0,
-			NumServices:   9,
+			NumServices:   10,
 		},
 		GoTypes:           file_vx_v1_vx_proto_goTypes,
 		DependencyIndexes: file_vx_v1_vx_proto_depIdxs,
