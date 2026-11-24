@@ -23,7 +23,7 @@ const generatedHint = "generated file: regenerate it (for example `buf generate`
 
 func (a *App) effortRebaseCmd() *cobra.Command {
 	var repoFlag, onto string
-	var cont, abort bool
+	var cont, abort, noGenerate bool
 	cmd := &cobra.Command{
 		Use:   "rebase [EFFORT] [--onto BRANCH] [--continue | --abort]",
 		Short: "Move the effort onto the latest head of its base branch",
@@ -41,9 +41,15 @@ branch into the files, with conflict markers, and prints what to do:
   edit the files, then          vx effort rebase --continue
   or drop the whole rebase:     vx effort rebase --abort
 A generated file ("// Code generated ... DO NOT EDIT.") gets the effort's
-version instead of markers: regenerate it (for example buf generate), then
-continue. --continue in a working copy that does not hold the conflicts
-yet writes them there, so another agent can take over a stopped rebase.
+version instead of markers. When vx.toml has a [[generated]] rule for it,
+vx runs the rule's command once no file has conflict markers: right away
+if only generated files conflicted, else at --continue, after you resolved
+the sources. If the command is missing or fails, vx says what to run.
+When the rebase finishes, vx regenerates files a replayed change kept from
+one side the same way; land the result before vx ship plan. --no-generate
+turns this off. --continue in a working copy that does not hold the
+conflicts yet writes them there, so another agent can take over a stopped
+rebase.
 
 Only one rebase per effort runs at a time. Open workspaces keep working:
 their next vx sync or vx land merges their edits onto the new head.`,
@@ -68,6 +74,7 @@ their next vx sync or vx land merges their edits onto the new head.`,
 				wc = w
 			}
 			ctx := ctxOf(cmd)
+			a.noGenerate = noGenerate
 			switch {
 			case abort:
 				return a.rebaseAbort(ctx, c, wc, repo, slug)
@@ -81,6 +88,7 @@ their next vx sync or vx land merges their edits onto the new head.`,
 	cmd.Flags().StringVar(&onto, "onto", "", "branch to rebase onto (default: the effort's base branch)")
 	cmd.Flags().BoolVar(&cont, "continue", false, "upload your resolution of the stopped change and replay the rest")
 	cmd.Flags().BoolVar(&abort, "abort", false, "drop the rebase in progress; the effort stays as it was")
+	cmd.Flags().BoolVar(&noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files the rebase kept from one side")
 	return cmd
 }
 
@@ -159,7 +167,7 @@ func (a *App) rebaseContinue(ctx context.Context, c *client.Client, wc *workcopy
 		return errConflict
 	}
 
-	tree, changes, err := wc.Snapshot(ctx)
+	_, changes, err := wc.Snapshot(ctx)
 	if err != nil {
 		return err
 	}
@@ -167,6 +175,15 @@ func (a *App) rebaseContinue(ctx context.Context, c *client.Client, wc *workcopy
 		return err
 	} else if len(bad) > 0 {
 		return fmt.Errorf("%s still has conflict markers; resolve them, then run vx effort rebase --continue again", strings.Join(bad, ", "))
+	}
+	// The sources are resolved now: regenerate what still needs it, so
+	// the resolution uploaded has generated files that match them.
+	if err := a.regenerateRebase(ctx, wc); err != nil {
+		return err
+	}
+	tree, _, err := wc.Snapshot(ctx)
+	if err != nil {
+		return err
 	}
 	trees, blobs, err := object.NewObjects(ctx, wc.Objects, wc.Config.BaseTreeHash(), tree)
 	if err != nil {
@@ -240,12 +257,16 @@ func (a *App) rebaseOutcome(ctx context.Context, c *client.Client, wc *workcopy.
 	case "done":
 		a.printf("Rebased effort %s onto %s: %d change(s) replayed, change ids kept, head now %s.\n", slug, onto, rb.Replayed, short(rb.NewHead))
 		a.printf("Their evidence is marked as gathered before the rebase.\n")
+		next := "vx ship plan"
 		if wc != nil {
 			if err := a.leaveRebase(ctx, c, wc); err != nil {
 				return err
 			}
+			if n := a.regenerateRebased(ctx, c, wc, int(rb.Replayed)); n != "" {
+				next = n
+			}
 		}
-		a.printf("\nNext: vx ship plan\n")
+		a.printf("\nNext: %s\n", next)
 		a.emit(msg)
 		return nil
 	case "stopped":
@@ -261,6 +282,9 @@ func (a *App) rebaseOutcome(ctx context.Context, c *client.Client, wc *workcopy.
 			return errConflict
 		}
 		if err := a.writeRebaseConflicts(ctx, c, wc, rb); err != nil {
+			return err
+		}
+		if err := a.regenerateRebase(ctx, wc); err != nil {
 			return err
 		}
 		a.printRebaseStop(wc, rb)
@@ -409,16 +433,21 @@ func (a *App) writeRebaseConflicts(ctx context.Context, c *client.Client, wc *wo
 // printRebaseStop says which change stopped, which files conflict and
 // what to do next.
 func (a *App) printRebaseStop(wc *workcopy.WorkingCopy, rb *vxv1.Rebase) {
-	gen := map[string]bool{}
+	gen, regen := map[string]bool{}, map[string]bool{}
 	if r := wc.Config.Rebase; r != nil {
 		for _, p := range r.Generated {
 			gen[p] = true
+		}
+		for _, p := range r.Regenerated {
+			regen[p] = true
 		}
 	}
 	a.printf("\nConflicts to resolve:\n")
 	for _, cf := range rb.Conflicts {
 		hint := "edit the file and remove the markers"
 		switch {
+		case regen[cf.Path]:
+			hint = "generated file: regenerated with its vx.toml command; check it"
 		case gen[cf.Path]:
 			hint = generatedHint + "; the effort's version is written"
 		case cf.Kind == string(engine.ConflictModifyDelete):
@@ -443,6 +472,9 @@ func (a *App) printRebaseStatus(wc *workcopy.WorkingCopy, server *vxv1.Rebase) m
 		}
 		for _, p := range r.Generated {
 			a.printf("  %s: %s\n", p, generatedHint)
+		}
+		for _, p := range r.Regenerated {
+			a.printf("  %s: generated file, regenerated with its vx.toml command\n", p)
 		}
 		a.printf("  Resolve them, then `vx effort rebase --continue`, or `vx effort rebase --abort`.\n")
 		return map[string]any{"here": true, "stopped_at": r.StoppedAt, "change_id": r.ChangeID, "onto_branch": r.OntoBranch, "conflicts": r.Conflicts, "generated": r.Generated}

@@ -45,7 +45,7 @@ func TestKeepBothInsertions(t *testing.T) {
 	a.write("guide.md", "# Guide\n\n## Alpha\n\nAlpha text.\n\n## Install\n\nRun make.\n")
 	a.write("tools.go", tools+"\nfunc Alpha() {\n}\n")
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Beta")
+	b.must("new", "Beta", "--no-sync")
 	b.write("guide.md", "# Guide\n\n## Beta\n\nBeta text.\n\n## Install\n\nRun make.\n")
 	b.write("tools.go", tools+"\nfunc Beta() {\n}\n")
 	b.write("other.txt", "x\ny\n")
@@ -67,7 +67,7 @@ func TestKeepBothInsertions(t *testing.T) {
 	a.must("new", "Gamma")
 	a.write("tools.go", wantTools+"\nfunc Gamma() {\n}\n")
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Delta")
+	b.must("new", "Delta", "--no-sync")
 	b.write("tools.go", wantTools+"\nfunc Delta() {\n}\n")
 	var res struct {
 		Merged    []string
@@ -88,7 +88,7 @@ func TestKeepBothInsertions(t *testing.T) {
 	a.must("new", "Epsilon")
 	a.write("guide.md", strings.Replace(wantGuide, "## Install\n", "## Epsilon\n\n## Install\n", 1))
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Zeta")
+	b.must("new", "Zeta", "--no-sync")
 	b.write("guide.md", strings.Replace(wantGuide, "## Install\n", "## Zeta\n\n## Install\n", 1))
 	out = b.must("land", "--run", "true")
 	if !strings.Contains(out, "Kept both insertions (check the order): guide.md\n") {
@@ -103,7 +103,7 @@ func TestKeepBothInsertions(t *testing.T) {
 	a.must("new", "Rename A")
 	a.write("other.txt", "x\nya\n")
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Rename B")
+	b.must("new", "Rename B", "--no-sync")
 	b.write("other.txt", "x\nyb\n")
 	if out, code := b.run("land", "--check", "lint=pass"); code != 2 || strings.Contains(out, "Kept both") {
 		t.Fatalf("same-line land: code %d, %q", code, out)

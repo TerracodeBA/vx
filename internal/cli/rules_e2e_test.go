@@ -43,7 +43,7 @@ func TestSyncAndLandApplyRepoRules(t *testing.T) {
 	a.write("db/migrations/002_one.sql", "one")
 	a.must("land")
 
-	b.must("new", "Two")
+	b.must("new", "Two", "--no-sync")
 	b.write("gen/api.go", "package gen\n\nvar A = 1\n\nvar B = 2\n")
 	b.write("db/migrations/002_two.sql", "two")
 	out := b.must("sync")

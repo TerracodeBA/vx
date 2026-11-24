@@ -44,7 +44,7 @@ func TestMergeByDeclarationAndSignatureWarnings(t *testing.T) {
 	a.must("new", "Drop Login")
 	a.write("auth/auth.go", "package auth\n\n// Logout signs out.\nfunc Logout() {\n}\n")
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Document Logout")
+	b.must("new", "Document Logout", "--no-sync")
 	b.write("auth/auth.go", strings.Replace(auth, "// Logout signs out.", "// Logout signs the user out\n// on every device.", 1))
 	out := b.must("land", "--check", "lint=pass")
 	if !strings.Contains(out, "Merged by declaration (the lines conflicted, the Go declarations did not; check the result): auth/auth.go\n") {
@@ -60,7 +60,7 @@ func TestMergeByDeclarationAndSignatureWarnings(t *testing.T) {
 	a.must("new", "Add Refresh")
 	a.write("auth/auth.go", "package auth\n\n// Refresh renews a session.\nfunc Refresh() {\n}\n\n"+strings.TrimPrefix(want, "package auth\n\n"))
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Logout clears")
+	b.must("new", "Logout clears", "--no-sync")
 	b.write("auth/auth.go", strings.Replace(want, "// Logout signs the user out\n", "// Logout signs the user out, clearing cookies,\n", 1))
 	var res struct {
 		MergedByDecl []string `json:"merged_by_decl"`
@@ -82,7 +82,7 @@ func TestMergeByDeclarationAndSignatureWarnings(t *testing.T) {
 	a.must("new", "Logout takes a reason")
 	a.write("auth/auth.go", strings.Replace(a.read("auth/auth.go"), "func Logout() {", "func Logout(reason string) {", 1))
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Admin kicks users")
+	b.must("new", "Admin kicks users", "--no-sync")
 	b.write("admin/admin.go", "package admin\n\nimport \"example.com/shop/auth\"\n\n// Kick signs a user out.\nfunc Kick() {\n\tauth.Logout()\n}\n")
 	raw = b.must("land", "--check", "lint=pass", "--json")
 	var landed struct {
@@ -102,7 +102,7 @@ func TestMergeByDeclarationAndSignatureWarnings(t *testing.T) {
 	a.must("new", "Refresh A")
 	a.write("auth/auth.go", strings.Replace(a.read("auth/auth.go"), "// Refresh renews a session.", "// Refresh renews a session, says A.", 1))
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Refresh B")
+	b.must("new", "Refresh B", "--no-sync")
 	b.write("auth/auth.go", strings.Replace(b.read("auth/auth.go"), "// Refresh renews a session.", "// Refresh renews a session, says B.", 1))
 	if out, code := b.run("land", "--check", "lint=pass"); code != 2 || strings.Contains(out, "Merged by declaration") {
 		t.Fatalf("same-declaration land: code %d, %q", code, out)

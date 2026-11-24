@@ -70,7 +70,7 @@ Branches are vx/<effort>/<n>-<name>. vx ship plan --split shows the parts;
 		}
 		if len(p.Warnings) > 0 {
 			a.printf("\n")
-			a.printWarnings(p.Warnings)
+			a.printWarnings(p.Warnings, nil)
 		}
 	}
 
@@ -108,7 +108,7 @@ Branches are vx/<effort>/<n>-<name>. vx ship plan --split shows the parts;
 				a.printf("  CANNOT SHIP: %s\n", g.Problem)
 			}
 			if len(g.Warnings) > 0 {
-				a.printWarnings(g.Warnings)
+				a.printWarnings(g.Warnings, nil)
 			}
 			if bodies && g.Problem == "" {
 				a.printf("\n  Title: %s\n\n%s", g.Title, indent(g.Body, "    "))

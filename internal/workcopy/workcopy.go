@@ -57,8 +57,11 @@ type Rebasing struct {
 	OntoBranch string `json:"onto_branch"`
 	OntoGitSHA string `json:"onto_git_sha,omitempty"`
 	// Conflicts and Generated (a subset) are the paths that conflicted.
-	Conflicts []string `json:"conflicts,omitempty"`
-	Generated []string `json:"generated,omitempty"`
+	// Regenerated are the generated ones vx regenerated with their
+	// vx.toml command; Generated still need it.
+	Conflicts   []string `json:"conflicts,omitempty"`
+	Generated   []string `json:"generated,omitempty"`
+	Regenerated []string `json:"regenerated,omitempty"`
 	// SavedBase and SavedBaseTree are where the files were before the
 	// rebase wrote its conflicts here; --abort puts them back.
 	SavedBase     string `json:"saved_base"`

@@ -34,7 +34,7 @@ func TestSyncWarnsAboutDuplicateMethods(t *testing.T) {
 	a.must("land")
 
 	// B adds the same names in other files, then syncs.
-	b.must("new", "Claims")
+	b.must("new", "Claims", "--no-sync")
 	b.write("app/claim.go", "package app\n\nfunc (a App) printClaim() {}\n")
 	b.write("app/objects_test.go", "package app\n\nfunc (e *env) person() {}\n")
 	out := b.must("sync")

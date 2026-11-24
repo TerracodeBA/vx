@@ -1,11 +1,9 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,7 +31,7 @@ const verifiedAttempts = 3
 func (a *App) landCmd() *cobra.Command {
 	var intent, model, session string
 	var checks, runs, dependsOn, newTests []string
-	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh bool
+	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh, noReuse bool
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land your changes into the effort",
@@ -45,6 +43,24 @@ and records the real result. If the effort moved on, vx first syncs, runs
 the commands on the merged result and lands only that, so the evidence
 always describes exactly what lands:
   vx land --run "go test ./..." --run "go vet ./..."
+
+If someone lands while the checks run, vx stops them right away, syncs
+and runs them again on the new merged files (up to 3 attempts; the last
+one is not stopped and, if the effort moved meanwhile, lands merged with
+its evidence marked as gathered before the merge).
+
+vx remembers each command that passed, with the exact files it ran on
+(the tree of the working copy). Running it again on byte-identical files
+reuses that result instead ("pass CMD (reused from 14:02 ...)"; the
+evidence says so too): for example after another check failed for a
+reason outside the files, or a land that stopped before reaching the
+effort. Any change to the files, including a sync that brought in others'
+work, runs every command again: a check reads the whole tree, so only a
+run on exactly what lands describes it. --no-reuse always runs them.
+
+A failed command prints its last 30 lines of output; the full output of
+each command is in .vx/last-check-N.log (N: its place among the --run
+flags).
 
 --check records a result you report yourself; it is marked as reported:
   vx land --check "go test ./...=pass:142"
@@ -61,6 +77,9 @@ person to review: PATHS (policy in vx.toml)" and exits 0 with "status":
 "pending_review" in --json: nothing is in the effort yet and the workspace
 stays open. vx wait returns when a person decides; landing again from the
 workspace replaces the snapshot under review.
+
+-m on an open workspace replaces its intent for this land (and a retry of
+it) and says so. Without a workspace, -m opens one first.
 
 If a land stops (conflicts, failing checks), vx keeps its evidence flags
 (--run, --check, --new-test, --depends-on). A later vx land without any of
@@ -88,13 +107,25 @@ the result.`,
 			if _, err := a.settleReview(ctx, c, wc); err != nil {
 				return err
 			}
+			intent = strings.TrimSpace(intent)
 			if wc.Config.Workspace == "" {
 				if intent == "" {
-					return errors.New(`no workspace open: run vx new "INTENT" first, or pass -m "INTENT"`)
+					return errNoWorkspace(ctx, wc)
 				}
 				if _, err := a.openWorkspace(ctx, c, wc, intent); err != nil {
 					return err
 				}
+			} else if intent != "" && intent != wc.Config.Intent {
+				// -m on an open workspace replaces its intent: this land
+				// and any retry of it use the new one.
+				a.printf("Intent of workspace %s is now %q (was %q).\n", wc.Config.ChangeID, intent, wc.Config.Intent)
+				wc.Config.Intent = intent
+				if err := wc.Save(); err != nil {
+					return err
+				}
+			}
+			if intent == "" {
+				intent = wc.Config.Intent
 			}
 			given := len(runs)+len(checks)+len(newTests)+len(dependsOn) > 0
 			if p := wc.Config.PendingLand; p != nil && p.Workspace != wc.Config.Workspace {
@@ -172,11 +203,21 @@ the result.`,
 					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
 					opts.mergedByDecl = unionSorted(opts.mergedByDecl, res.mergedByDecl)
 				}
-				ran, failed := a.runChecks(wc.Root, runs)
-				if failed && !allowFailing {
+				// Stop the checks when someone lands meanwhile, except on
+				// the last attempt, which lands merged if it has to.
+				run, err := a.runChecks(ctx, c, wc, runs, checkOptions{stopIfMoved: attempt < verifiedAttempts, reuse: !noReuse})
+				if err != nil {
+					return err
+				}
+				if run.moved {
+					a.printf("Someone landed while the checks ran; stopped them to sync and run them on the merged files (%d of %d).\n", attempt+1, verifiedAttempts)
+					continue
+				}
+				if run.failed && !allowFailing {
 					return errors.New("checks failed; nothing landed. Fix them, or pass --allow-failing to land anyway")
 				}
-				opts.ran = ran
+				a.printChangedByChecks(run.changed)
+				opts.ran = run.ran
 				opts.requireUpToDate = attempt < verifiedAttempts || upToDate
 				err = a.landOnce(ctx, c, wc, opts)
 				if !errors.Is(err, errEffortMoved) {
@@ -207,7 +248,23 @@ the result.`,
 	cmd.Flags().BoolVar(&upToDate, "require-up-to-date", false, "refuse to land if others landed since your last sync")
 	cmd.Flags().BoolVar(&allowFailing, "allow-failing", false, "with --run: land even if a command fails")
 	cmd.Flags().BoolVar(&fresh, "fresh", false, "ignore the evidence flags saved from an interrupted land")
+	cmd.Flags().BoolVar(&a.noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files a merge kept from one side")
+	cmd.Flags().BoolVar(&noReuse, "no-reuse", false, "with --run: run every command, even one that already passed on exactly these files")
 	return cmd
+}
+
+// errNoWorkspace is vx land's refusal without a workspace or -m.
+func errNoWorkspace(ctx context.Context, wc *workcopy.WorkingCopy) error {
+	if changes, err := wc.Status(ctx); err == nil && len(changes) > 0 {
+		return errors.New(noWorkspaceHint(len(changes)))
+	}
+	return errors.New(`nothing to land: no workspace open and no local changes. Start one with: vx new "INTENT"`)
+}
+
+// noWorkspaceHint is what vx status, sync and land say when there are local
+// changes but no workspace to land them from.
+func noWorkspaceHint(changes int) string {
+	return fmt.Sprintf(`You have %d local change(s) but no workspace: vx new "INTENT" (or vx land -m "INTENT")`, changes)
 }
 
 type landOptions struct {
@@ -233,41 +290,6 @@ func (a *App) effortMoved(ctx context.Context, c *client.Client, wc *workcopy.Wo
 		return false, err
 	}
 	return eff.Msg.Effort.Head != wc.Config.Base, nil
-}
-
-// runChecks runs each command with sh -c in dir and records the result.
-func (a *App) runChecks(dir string, cmds []string) ([]*vxv1.Check, bool) {
-	var out []*vxv1.Check
-	failed := false
-	for _, command := range cmds {
-		start := time.Now()
-		c := exec.Command("sh", "-c", command)
-		c.Dir = dir
-		var buf bytes.Buffer
-		c.Stdout, c.Stderr = &buf, &buf
-		err := c.Run()
-		ch := &vxv1.Check{Name: command, Result: "pass", RanByVx: true, DurationMs: time.Since(start).Milliseconds(), Notes: cacheNote(buf.String())}
-		if err != nil {
-			ch.Result = "fail"
-			failed = true
-			a.printf("FAIL %s (%.1fs)\n%s\n", command, float64(ch.DurationMs)/1000, tail(buf.String(), 40))
-		} else {
-			a.printf("pass %s (%.1fs)\n", command, float64(ch.DurationMs)/1000)
-		}
-		if ch.Notes != "" {
-			a.printf("  %s\n  Hint: add -count=1 to run every test instead of using cached results.\n", ch.Notes)
-		}
-		out = append(out, ch)
-	}
-	return out, failed
-}
-
-func tail(s string, lines int) string {
-	parts := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	if len(parts) > lines {
-		parts = parts[len(parts)-lines:]
-	}
-	return strings.Join(parts, "\n")
 }
 
 func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, o landOptions) error {
@@ -401,11 +423,24 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if notesDropped(evidence, cs.Evidence) {
 		a.printf("Warning: the server did not record the check notes (it may run an older vx); the landed evidence lacks them.\n")
 	}
-	a.printWarnings(r.Warnings)
+	// The server kept one side of generated files both changed:
+	// regenerate them here, as a local change to land next.
+	regen, _ := a.regenerate(ctx, wc, generatedOf(r.Warnings))
+	a.printWarnings(r.Warnings, regeneratedPaths(regen))
+	if len(regeneratedPaths(regen)) > 0 {
+		if changes, err := wc.Status(ctx); err == nil && len(changes) > 0 {
+			a.printf("  The landed change has one side's generated files; land the regenerated ones: vx land -m \"Regenerate generated files\"\n")
+		}
+	}
+	a.printRegenProblems(regen)
 	a.printLandedOverClaims(r.OverlappingClaims)
 	a.printOverlaps(r.Overlaps)
 	board := a.landFeed(ctx, c, wc, r) // the board comes last
-	a.emit(protoWithBoard(r, board))
+	out := protoWithBoard(r, board)
+	if m, ok := out.(map[string]any); ok && regen != nil {
+		m["regenerated"] = regen
+	}
+	a.emit(out)
 	a.landResult = fmt.Sprintf("Landed %s (%s): %s", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent))
 	return nil
 }
@@ -454,9 +489,13 @@ func (a *App) printLandResult() {
 
 // printWarnings shows problems the server found in a landed or planned
 // tree. They did not stop anything, so they come after the result.
-func (a *App) printWarnings(ws []*vxv1.Warning) {
+// Generated files in regenerated were regenerated here already.
+func (a *App) printWarnings(ws []*vxv1.Warning, regenerated map[string]bool) {
 	code, generated := false, false
 	for _, w := range ws {
+		if engine.WarningKind(w.Kind) == engine.WarningGenerated && regenerated[w.Path] {
+			continue
+		}
 		a.printf("Warning: %s\n", w.Detail)
 		switch engine.WarningKind(w.Kind) {
 		case engine.WarningDuplicate, engine.WarningParse, engine.WarningSignature, engine.WarningRemoved:
@@ -540,6 +579,9 @@ type syncResult struct {
 	// warnings are problems the merge created in Go packages you changed,
 	// such as a function or method now declared in two files.
 	warnings []engine.Warning
+	// regenerated are the [[generated]] commands vx ran (or could not) for
+	// generated files the merge kept from your side.
+	regenerated []regenResult
 }
 
 func (r syncResult) json() map[string]any {
@@ -563,7 +605,11 @@ func (r syncResult) json() map[string]any {
 	for _, w := range r.warnings {
 		wj = append(wj, map[string]any{"path": w.Path, "kind": string(w.Kind), "name": w.Name, "decl": w.Decl, "files": w.Files, "detail": w.Detail})
 	}
-	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth, "merged_by_decl": byDecl, "warnings": wj}
+	regen := r.regenerated
+	if regen == nil {
+		regen = []regenResult{}
+	}
+	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth, "merged_by_decl": byDecl, "warnings": wj, "regenerated": regen}
 }
 
 // syncWorkingCopy brings the working copy to the effort head, merging local
@@ -653,18 +699,20 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 		}
 		warnings = append(warnings, sides...)
 	}
-	more := engine.GeneratedWarnings(generated)
+	regen, stale := a.regenerate(ctx, wc, generated)
+	more := engine.GeneratedWarnings(stale)
 	if len(local) > 0 {
 		more = append(more, syncRuleWarnings(ctx, wc, theirs, result)...)
 	}
 	for _, w := range more {
 		a.printf("Warning: %s\n", w.Detail)
 	}
-	if len(generated) > 0 {
+	if len(stale) > 0 {
 		a.printf("  Both you and the effort changed generated files; vx kept yours. Regenerate them before landing.\n")
+		a.printRegenProblems(regen)
 	}
 	warnings = append(warnings, more...)
-	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, mergedByDecl: byDecl, warnings: warnings}, nil
+	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, mergedByDecl: byDecl, warnings: warnings, regenerated: regen}, nil
 }
 
 // syncWarnings runs the land-time Go check on the merged tree, for the Go
@@ -801,13 +849,20 @@ func (a *App) printConflicts(wc *workcopy.WorkingCopy, conflicts []engine.Confli
 }
 
 func (a *App) syncCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Bring in changes others landed, keeping your local edits",
 		Long: `Update the working copy to the effort head. Your local edits are kept and
 merged with the incoming changes, line by line. Where both changed the same
 lines, the file gets conflict markers (<<<<<<< local ... >>>>>>> effort);
-edit them away, then land. vx land refuses files that still have markers.`,
+edit them away, then land. vx land refuses files that still have markers.
+
+Generated files (vx.toml [[generated]]) that both you and the effort
+changed are never merged: vx keeps yours and, when no file has conflict
+markers, runs the rule's command (for example buf generate) to regenerate
+them from the merged sources, and says so. If the command is not on PATH
+or fails, the warning stays and says what to run. --no-generate turns
+this off (vx land and vx effort rebase take it too).`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -835,6 +890,12 @@ edit them away, then land. vx land refuses files that still have markers.`,
 				a.printConflicts(wc, res.conflicts)
 			}
 			out := res.json()
+			if wc.Config.Workspace == "" {
+				if changes, err := wc.Status(ctx); err == nil && len(changes) > 0 {
+					a.printf("%s.\n", noWorkspaceHint(len(changes)))
+					out["no_workspace"] = true
+				}
+			}
 			out["board"] = a.syncFeed(ctx, c, wc) // the board comes last
 			a.emit(out)
 			if len(res.conflicts) > 0 {
@@ -843,6 +904,8 @@ edit them away, then land. vx land refuses files that still have markers.`,
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&a.noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files the merge kept from your side")
+	return cmd
 }
 
 // ---------- wait ----------
