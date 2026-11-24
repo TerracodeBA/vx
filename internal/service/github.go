@@ -134,12 +134,6 @@ func githubNotImplemented() error {
 	return errf(CodeUnavailable, "this part of GitHub sign-in is not implemented yet")
 }
 
-// HandleGitHubWebhook verifies and applies a webhook delivery:
-// installations, repositories, membership and permission changes.
-func (s *Service) HandleGitHubWebhook(ctx context.Context, event, deliveryID, signature string, body []byte) error {
-	return githubNotImplemented()
-}
-
 // SyncInstallation reads an installation's account and repositories from
 // GitHub and creates or updates the matching vx organization and repos.
 func (s *Service) SyncInstallation(ctx context.Context, installationID int64) error {

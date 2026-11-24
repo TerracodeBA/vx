@@ -176,6 +176,9 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	u.mountAdmin(mux)
 	u.mountGitHub(mux)
+	if err := u.mountGitHubApp(mux); err != nil {
+		return err
+	}
 	return u.mountCLI(mux, funcs)
 }
 

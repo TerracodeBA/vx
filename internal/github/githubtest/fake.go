@@ -744,8 +744,8 @@ type Delivery struct {
 	Signature string // X-Hub-Signature-256; empty: signed with the webhook secret, "-": no header
 }
 
-// Deliver posts a webhook event signed with the App's webhook secret and
-// returns the response status code.
+// Deliver posts a webhook event signed with the App's webhook secret, with
+// a new delivery id made at s.Now(), and returns the response status code.
 func (s *Server) Deliver(t testing.TB, hookURL, event string, payload any) int {
 	t.Helper()
 	body, err := json.Marshal(payload)
@@ -764,7 +764,7 @@ func (s *Server) DeliverRaw(t testing.TB, hookURL string, d Delivery) int {
 		t.Fatalf("githubtest: delivery: %v", err)
 	}
 	if d.ID == "" {
-		d.ID = NewDeliveryID()
+		d.ID = DeliveryIDAt(s.Now())
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "GitHub-Hookshot/fake")
@@ -788,15 +788,24 @@ func (s *Server) DeliverRaw(t testing.TB, hookURL string, d Delivery) int {
 	return resp.StatusCode
 }
 
-// NewDeliveryID returns a random delivery id like GitHub's (a UUID).
-func NewDeliveryID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
+// NewDeliveryID returns a delivery id like GitHub's: a version 1 UUID,
+// which carries the time it was made (now).
+func NewDeliveryID() string { return DeliveryIDAt(time.Now()) }
+
+// DeliveryIDAt returns a delivery id made at t, for tests of stale
+// deliveries.
+func DeliveryIDAt(t time.Time) string {
+	var b [16]byte
+	if _, err := rand.Read(b[8:]); err != nil {
 		panic(err)
 	}
-	b[6] = b[6]&0x0f | 0x40
+	// 100-nanosecond intervals since 1582-10-15, the UUID epoch.
+	ts := uint64(t.UnixNano()/100) + 0x01B21DD213814000
+	b[0], b[1], b[2], b[3] = byte(ts>>24), byte(ts>>16), byte(ts>>8), byte(ts)
+	b[4], b[5] = byte(ts>>40), byte(ts>>32)
+	b[6], b[7] = byte(ts>>56)&0x0f|0x10, byte(ts>>48)
 	b[8] = b[8]&0x3f | 0x80
-	h := hex.EncodeToString(b)
+	h := hex.EncodeToString(b[:])
 	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }
 

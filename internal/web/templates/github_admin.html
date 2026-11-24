@@ -1,0 +1,47 @@
+{{define "crumbs"}}<span>Admin</span><span class="sep">/</span><span>GitHub</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>GitHub</h1>
+    <p class="muted">The vx GitHub App lets people sign in with GitHub, takes roles on installed repositories from GitHub, and keeps them in sync through webhooks. Only site admins see this page.</p>
+  </div>
+  <div class="page-actions"><a class="btn ghost" href="/ui/admin/people">People</a></div>
+</div>
+{{template "admin-flash" .Flash}}
+{{with .LoadErr}}<p class="note bad" role="alert">{{.}}</p>{{end}}
+
+{{with .App}}
+<section class="panel panel-pad">
+  <h2>The App</h2>
+  <dl class="kv">
+    <dt>Name</dt><dd><a href="{{.HTMLURL}}" rel="noopener">{{.Slug}}</a></dd>
+    <dt>App id</dt><dd class="mono">{{.AppID}}</dd>
+    <dt>Client id</dt><dd class="mono">{{.ClientID}}</dd>
+    <dt>Created</dt><dd>{{ago .CreatedAt}}</dd>
+  </dl>
+  <p>Install it on each GitHub organization or account whose repositories vx should work on. Its repositories show up in vx with roles from GitHub.</p>
+  <p><a class="btn primary" href="{{.InstallURL}}" rel="noopener">Install the App on GitHub</a></p>
+</section>
+{{end}}
+
+<section class="panel panel-pad">
+  <h2>{{if .App}}Create the App again{{else}}Create the GitHub App{{end}}</h2>
+  {{if .App}}<p class="note warn">This replaces the App vx uses now. Installations of the old App stop working with vx; install the new one instead.</p>{{end}}
+  {{with .SetupErr}}<p class="note bad" role="alert">{{.}}</p>
+  {{else}}
+  <p class="muted">GitHub creates the App from a manifest vx prepares (name, callback and webhook addresses, permissions and events), asks you to confirm, and sends you back here. Its credentials are stored encrypted with VX_SECRET_KEY.</p>
+  <form method="get" action="/ui/admin/github" class="admin-form">
+    <div class="field"><label for="gh-org">Owner on GitHub</label>
+      <input id="gh-org" name="org" type="text" maxlength="39" autocomplete="off" placeholder="your account" value="{{.Org}}"></div>
+    <button class="btn ghost" type="submit">Use this owner</button>
+  </form>
+  <p class="muted small">The App is created {{if .Org}}under the organization <span class="mono">{{.Org}}</span> (you need to own it){{else}}under your own GitHub account{{end}}.</p>
+  {{if .IsHuman}}
+  <form method="post" action="{{.FormURL}}" id="gh-create">
+    <input type="hidden" name="manifest" value="{{.Manifest}}">
+    <button class="btn primary" type="submit">Create the GitHub App</button>
+  </form>
+  {{else}}<p class="note warn">Agents cannot set up the App; sign in as the person.</p>{{end}}
+  {{end}}
+</section>
+{{end}}
