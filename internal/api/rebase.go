@@ -49,7 +49,7 @@ func (h *Handlers) AbortRebase(ctx context.Context, req *connect.Request[vxv1.Ab
 }
 
 func (h *Handlers) GetRebase(ctx context.Context, req *connect.Request[vxv1.GetRebaseRequest]) (*connect.Response[vxv1.GetRebaseResponse], error) {
-	v, ok, err := h.svc.GetRebase(ctx, req.Msg.Repo, req.Msg.Effort)
+	v, ok, err := h.svc.GetRebase(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Effort)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -76,7 +76,7 @@ func (h *Handlers) activeRebasePB(ctx context.Context, v service.EffortView) *vx
 	if v.Rebase == nil {
 		return nil
 	}
-	rv, ok, err := h.svc.GetRebase(ctx, v.Repo.Name, v.Effort.Slug)
+	rv, ok, err := h.svc.GetRebase(ctx, actorFrom(ctx), v.Repo.Name, v.Effort.Slug)
 	if err != nil || !ok {
 		return nil
 	}

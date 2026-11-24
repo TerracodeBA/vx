@@ -41,7 +41,7 @@ func TestLandWarnsAboutDuplicateGoDeclarations(t *testing.T) {
 
 	// Anyone reading the effort later sees the warning on the change that
 	// caused it, and only there.
-	_, got, err := e.svc.GetChangeset(e.ctx, repo.Name, w2.Workspace.ChangeID)
+	_, got, err := e.svc.GetChangeset(e.ctx, e.alice, repo.Name, w2.Workspace.ChangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestLandWarnsAboutDuplicateGoDeclarations(t *testing.T) {
 		got.Warnings[0].Path != "internal/httpapi" || got.Warnings[0].Name != "clientIP" {
 		t.Fatalf("stored warnings = %+v, want %q", got.Warnings, want)
 	}
-	log, err := e.svc.Log(e.ctx, repo.Name, eff.Slug, 10, false)
+	log, err := e.svc.Log(e.ctx, e.alice, repo.Name, eff.Slug, 10, false)
 	if err != nil || len(log) < 3 {
 		t.Fatalf("log = %d entries, %v", len(log), err)
 	}

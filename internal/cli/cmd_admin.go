@@ -181,8 +181,15 @@ func (a *App) repoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if len(resp.Msg.Repos) == 0 {
+				a.printf("No repositories you can read. Ask an organization admin for access, or create one: vx repo create NAME\n")
+			}
 			for _, r := range resp.Msg.Repos {
-				a.printf("%-30s %-7s %s\n", r.Name, r.Provider, r.Remote)
+				org := r.Org
+				if org == "" {
+					org = "-"
+				}
+				a.printf("%-30s %-16s %-6s %-7s %s\n", r.Name, org, r.MyRole, r.Provider, r.Remote)
 			}
 			a.emit(resp.Msg)
 			return nil

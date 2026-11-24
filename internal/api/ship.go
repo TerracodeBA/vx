@@ -62,7 +62,7 @@ func (h *Handlers) OpenShipment(ctx context.Context, req *connect.Request[vxv1.O
 }
 
 func (h *Handlers) ListShipments(ctx context.Context, req *connect.Request[vxv1.ListShipmentsRequest]) (*connect.Response[vxv1.ListShipmentsResponse], error) {
-	list, err := h.svc.ListShipments(ctx, req.Msg.Repo, req.Msg.Effort)
+	list, err := h.svc.ListShipments(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Effort)
 	if err != nil {
 		return nil, toConnect(err)
 	}

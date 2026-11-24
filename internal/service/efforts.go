@@ -19,14 +19,15 @@ type CreateEffortInput struct {
 	BaseBranch string // empty: the repo's default branch
 }
 
-// CreateEffort starts an effort on the current head of its base branch.
+// CreateEffort starts an effort on the current head of its base branch
+// (write).
 func (s *Service) CreateEffort(ctx context.Context, actor Actor, in CreateEffortInput) (store.Effort, error) {
 	if strings.TrimSpace(in.Name) == "" {
 		return store.Effort{}, errf(CodeInvalid, "an effort needs a name")
 	}
-	repo, err := s.Store.RepoByName(ctx, in.Repo)
+	repo, _, err := s.Authorize(ctx, actor, in.Repo, RoleWrite)
 	if err != nil {
-		return store.Effort{}, classify(err)
+		return store.Effort{}, err
 	}
 	if in.BaseBranch == "" {
 		in.BaseBranch = repo.DefaultBranch
@@ -60,22 +61,14 @@ type EffortView struct {
 	Rebase *store.Rebase
 }
 
-// GetEffort loads an effort by repo name and slug.
-func (s *Service) GetEffort(ctx context.Context, repoName, slug string) (EffortView, error) {
-	repo, err := s.Store.RepoByName(ctx, repoName)
-	if err != nil {
-		return EffortView{}, classify(err)
-	}
-	eff, err := s.Store.GetEffort(ctx, repo.ID, slug)
-	if err != nil {
-		return EffortView{}, classify(err)
-	}
-	ws, err := s.Store.ListWorkspaces(ctx, eff.ID, store.WorkspaceOpen)
+// GetEffort loads an effort by repo name and slug (read), with its rebase
+// in progress if there is one.
+func (s *Service) GetEffort(ctx context.Context, actor Actor, repoName, slug string) (EffortView, error) {
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleRead)
 	if err != nil {
 		return EffortView{}, err
 	}
-	v := EffortView{Repo: repo, Effort: eff, Workspaces: ws}
-	if r, err := s.Store.ActiveRebase(ctx, eff.ID); err == nil {
+	if r, err := s.Store.ActiveRebase(ctx, v.Effort.ID); err == nil {
 		v.Rebase = &r
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return EffortView{}, err
@@ -83,11 +76,11 @@ func (s *Service) GetEffort(ctx context.Context, repoName, slug string) (EffortV
 	return v, nil
 }
 
-// ListEfforts lists a repo's efforts.
-func (s *Service) ListEfforts(ctx context.Context, repoName string, state store.EffortState) (store.Repo, []store.Effort, error) {
-	repo, err := s.Store.RepoByName(ctx, repoName)
+// ListEfforts lists a repo's efforts (read).
+func (s *Service) ListEfforts(ctx context.Context, actor Actor, repoName string, state store.EffortState) (store.Repo, []store.Effort, error) {
+	repo, _, err := s.Authorize(ctx, actor, repoName, RoleRead)
 	if err != nil {
-		return store.Repo{}, nil, classify(err)
+		return store.Repo{}, nil, err
 	}
 	effs, err := s.Store.ListEfforts(ctx, repo.ID, state)
 	return repo, effs, err
@@ -99,9 +92,10 @@ type LogEntry struct {
 	Files []store.FileChange
 }
 
-// Log lists changes landed in an effort since its base, newest first.
-func (s *Service) Log(ctx context.Context, repoName, slug string, limit int, withFiles bool) ([]LogEntry, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+// Log lists changes landed in an effort since its base, newest first
+// (read).
+func (s *Service) Log(ctx context.Context, actor Actor, repoName, slug string, limit int, withFiles bool) ([]LogEntry, error) {
+	v, err := s.GetEffort(ctx, actor, repoName, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -125,11 +119,11 @@ func (s *Service) Log(ctx context.Context, repoName, slug string, limit int, wit
 	return out, nil
 }
 
-// GetChangeset resolves a changeset by hash, prefix or change ID.
-func (s *Service) GetChangeset(ctx context.Context, repoName, ref string) (store.Repo, LogEntry, error) {
-	repo, err := s.Store.RepoByName(ctx, repoName)
+// GetChangeset resolves a changeset by hash, prefix or change ID (read).
+func (s *Service) GetChangeset(ctx context.Context, actor Actor, repoName, ref string) (store.Repo, LogEntry, error) {
+	repo, _, err := s.Authorize(ctx, actor, repoName, RoleRead)
 	if err != nil {
-		return store.Repo{}, LogEntry{}, classify(err)
+		return store.Repo{}, LogEntry{}, err
 	}
 	row, err := s.Store.ResolveChangeset(ctx, repo.ID, ref)
 	if err != nil {
@@ -146,12 +140,13 @@ type WorkspaceView struct {
 	Workspace store.Workspace
 }
 
-// OpenWorkspace starts a task in an effort, based on the effort's head.
+// OpenWorkspace starts a task in an effort, based on the effort's head
+// (write).
 func (s *Service) OpenWorkspace(ctx context.Context, actor Actor, repoName, slug, intent string) (WorkspaceView, error) {
 	if strings.TrimSpace(intent) == "" {
 		return WorkspaceView{}, errf(CodeInvalid, "say what this workspace is for: vx new \"<intent>\"")
 	}
-	v, err := s.GetEffort(ctx, repoName, slug)
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleWrite)
 	if err != nil {
 		return WorkspaceView{}, err
 	}
@@ -173,8 +168,13 @@ func (s *Service) OpenWorkspace(ctx context.Context, actor Actor, repoName, slug
 	return WorkspaceView{Repo: v.Repo, Effort: v.Effort, Workspace: ws}, nil
 }
 
-// GetWorkspace loads a workspace with its effort and repo.
-func (s *Service) GetWorkspace(ctx context.Context, id uuid.UUID) (WorkspaceView, error) {
+// GetWorkspace loads a workspace with its effort and repo (read).
+func (s *Service) GetWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (WorkspaceView, error) {
+	return s.workspaceFor(ctx, actor, id, RoleRead)
+}
+
+// loadWorkspace loads a workspace without an access check.
+func (s *Service) loadWorkspace(ctx context.Context, id uuid.UUID) (WorkspaceView, error) {
 	ws, err := s.Store.GetWorkspace(ctx, id)
 	if err != nil {
 		return WorkspaceView{}, classify(err)
@@ -190,8 +190,9 @@ func (s *Service) GetWorkspace(ctx context.Context, id uuid.UUID) (WorkspaceView
 	return WorkspaceView{Repo: repo, Effort: eff, Workspace: ws}, nil
 }
 
+// ownWorkspace loads a workspace the actor owns and may still write to.
 func (s *Service) ownWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (WorkspaceView, error) {
-	v, err := s.GetWorkspace(ctx, id)
+	v, err := s.workspaceFor(ctx, actor, id, RoleWrite)
 	if err != nil {
 		return v, err
 	}
@@ -202,7 +203,7 @@ func (s *Service) ownWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (
 }
 
 // SetBase records that the workspace's files now sit on base, which must be
-// on the effort's chain.
+// on the effort's chain (write).
 func (s *Service) SetBase(ctx context.Context, actor Actor, id uuid.UUID, base hash.Hash) (WorkspaceView, error) {
 	v, err := s.ownWorkspace(ctx, actor, id)
 	if err != nil {
@@ -221,7 +222,7 @@ func (s *Service) SetBase(ctx context.Context, actor Actor, id uuid.UUID, base h
 	return v, nil
 }
 
-// Abandon closes a workspace without landing it.
+// Abandon closes a workspace without landing it (write).
 func (s *Service) Abandon(ctx context.Context, actor Actor, id uuid.UUID) (WorkspaceView, error) {
 	v, err := s.ownWorkspace(ctx, actor, id)
 	if err != nil {

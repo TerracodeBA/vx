@@ -41,7 +41,7 @@ func (s *Service) MakeClaim(ctx context.Context, actor Actor, in ClaimInput) (Cl
 	case ttl > MaxClaimTTL:
 		return Claim{}, nil, errf(CodeInvalid, "claim duration %s is too long; claim for at most %s and claim again when it runs out", ttl, MaxClaimTTL)
 	}
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleWrite)
 	if err != nil {
 		return Claim{}, nil, err
 	}
@@ -107,6 +107,9 @@ func (s *Service) ReleaseClaims(ctx context.Context, actor Actor, id, workspaceI
 		if err != nil {
 			return nil, err
 		}
+		if _, err := s.AuthorizeID(ctx, actor, found.RepoID, RoleWrite); err != nil {
+			return nil, err
+		}
 		if found.OwnerID != actor.ID {
 			return nil, errf(CodePermission, "claim %s belongs to someone else; only its owner releases it, and it ends on its own at %s",
 				shortID(found.ID), found.ExpiresAt.UTC().Format(time.RFC3339))
@@ -133,7 +136,7 @@ func (s *Service) ReleaseClaims(ctx context.Context, actor Actor, id, workspaceI
 		if err != nil {
 			return nil, errf(CodeInvalid, "workspace id %q is not a full id; `vx status` shows the open workspace", workspaceID)
 		}
-		ws, err := s.GetWorkspace(ctx, wsID)
+		ws, err := s.GetWorkspace(ctx, actor, wsID)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return nil, errf(CodeNotFound, "no workspace %s", workspaceID)
@@ -159,7 +162,7 @@ func (s *Service) ListClaims(ctx context.Context, actor Actor, repo, effort stri
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.boardEffort(ctx, repo, effort)
+	v, err := s.boardEffort(ctx, actor, repo, effort, RoleRead)
 	if err != nil {
 		return nil, err
 	}

@@ -54,6 +54,7 @@ type Repo struct {
 	Name          string   `json:"name"`
 	DefaultBranch string   `json:"default_branch"`
 	Remote        string   `json:"remote,omitempty"`
+	MyRole        string   `json:"my_role,omitempty"` // read, write or admin
 	Efforts       []Effort `json:"efforts"`
 }
 
@@ -244,30 +245,30 @@ func (t *tools) whoami(ctx context.Context, req *sdk.CallToolRequest, _ noInput)
 }
 
 func (t *tools) efforts(ctx context.Context, req *sdk.CallToolRequest, in effortsInput) (*sdk.CallToolResult, effortsOutput, error) {
-	if _, err := actorOf(req); err != nil {
+	a, err := actorOf(req)
+	if err != nil {
 		return nil, effortsOutput{}, err
 	}
-	var repos []store.Repo
+	var repos []service.RepoView
 	if in.Repo != "" {
-		r, err := t.svc.Store.RepoByName(ctx, in.Repo)
+		r, _, err := t.svc.GetRepo(ctx, a, in.Repo)
 		if err != nil {
 			return nil, effortsOutput{}, t.userError("vx_efforts", err)
 		}
-		repos = []store.Repo{r}
+		repos = []service.RepoView{r}
 	} else {
-		var err error
-		if repos, err = t.svc.Store.ListRepos(ctx); err != nil {
+		if repos, err = t.svc.ListRepos(ctx, a); err != nil {
 			return nil, effortsOutput{}, t.userError("vx_efforts", err)
 		}
 	}
 	refs := newRefs(t.svc)
 	out := effortsOutput{Repos: []Repo{}}
 	for _, r := range repos {
-		_, effs, err := t.svc.ListEfforts(ctx, r.Name, "")
+		_, effs, err := t.svc.ListEfforts(ctx, a, r.Name, "")
 		if err != nil {
 			return nil, effortsOutput{}, t.userError("vx_efforts", err)
 		}
-		repo := Repo{Name: r.Name, DefaultBranch: r.DefaultBranch, Remote: r.Remote, Efforts: []Effort{}}
+		repo := Repo{Name: r.Name, DefaultBranch: r.DefaultBranch, Remote: r.Remote, MyRole: string(r.Role), Efforts: []Effort{}}
 		for _, e := range effs {
 			open, err := t.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen)
 			if err != nil {
@@ -288,17 +289,18 @@ func (t *tools) efforts(ctx context.Context, req *sdk.CallToolRequest, in effort
 }
 
 func (t *tools) status(ctx context.Context, req *sdk.CallToolRequest, in effortInput) (*sdk.CallToolResult, statusOutput, error) {
-	if _, err := actorOf(req); err != nil {
+	a, err := actorOf(req)
+	if err != nil {
 		return nil, statusOutput{}, err
 	}
 	if err := need(in.Repo, "repo", in.Effort, "effort"); err != nil {
 		return nil, statusOutput{}, err
 	}
-	v, err := t.svc.GetEffort(ctx, in.Repo, in.Effort)
+	v, err := t.svc.GetEffort(ctx, a, in.Repo, in.Effort)
 	if err != nil {
 		return nil, statusOutput{}, t.userError("vx_status", err)
 	}
-	entries, err := t.svc.Log(ctx, in.Repo, in.Effort, statusLands, false)
+	entries, err := t.svc.Log(ctx, a, in.Repo, in.Effort, statusLands, false)
 	if err != nil {
 		return nil, statusOutput{}, t.userError("vx_status", err)
 	}
@@ -318,7 +320,8 @@ func (t *tools) status(ctx context.Context, req *sdk.CallToolRequest, in effortI
 }
 
 func (t *tools) logTool(ctx context.Context, req *sdk.CallToolRequest, in logInput) (*sdk.CallToolResult, logOutput, error) {
-	if _, err := actorOf(req); err != nil {
+	a, err := actorOf(req)
+	if err != nil {
 		return nil, logOutput{}, err
 	}
 	if err := need(in.Repo, "repo", in.Effort, "effort"); err != nil {
@@ -331,7 +334,7 @@ func (t *tools) logTool(ctx context.Context, req *sdk.CallToolRequest, in logInp
 	case limit > maxLogLimit:
 		limit = maxLogLimit
 	}
-	entries, err := t.svc.Log(ctx, in.Repo, in.Effort, limit, in.Files)
+	entries, err := t.svc.Log(ctx, a, in.Repo, in.Effort, limit, in.Files)
 	if err != nil {
 		return nil, logOutput{}, t.userError("vx_log", err)
 	}
@@ -339,13 +342,14 @@ func (t *tools) logTool(ctx context.Context, req *sdk.CallToolRequest, in logInp
 }
 
 func (t *tools) show(ctx context.Context, req *sdk.CallToolRequest, in showInput) (*sdk.CallToolResult, ChangeDetail, error) {
-	if _, err := actorOf(req); err != nil {
+	a, err := actorOf(req)
+	if err != nil {
 		return nil, ChangeDetail{}, err
 	}
 	if err := need(in.Repo, "repo", in.Ref, "ref"); err != nil {
 		return nil, ChangeDetail{}, err
 	}
-	_, e, err := t.svc.GetChangeset(ctx, in.Repo, strings.TrimSpace(in.Ref))
+	_, e, err := t.svc.GetChangeset(ctx, a, in.Repo, strings.TrimSpace(in.Ref))
 	if err != nil {
 		return nil, ChangeDetail{}, t.userError("vx_show", err)
 	}
@@ -367,13 +371,14 @@ func (t *tools) show(ctx context.Context, req *sdk.CallToolRequest, in showInput
 }
 
 func (t *tools) diff(ctx context.Context, req *sdk.CallToolRequest, in diffInput) (*sdk.CallToolResult, diffOutput, error) {
-	if _, err := actorOf(req); err != nil {
+	actor, err := actorOf(req)
+	if err != nil {
 		return nil, diffOutput{}, err
 	}
 	if err := need(in.Repo, "repo", in.Ref, "ref", in.Path, "path"); err != nil {
 		return nil, diffOutput{}, err
 	}
-	_, e, err := t.svc.GetChangeset(ctx, in.Repo, strings.TrimSpace(in.Ref))
+	_, e, err := t.svc.GetChangeset(ctx, actor, in.Repo, strings.TrimSpace(in.Ref))
 	if err != nil {
 		return nil, diffOutput{}, t.userError("vx_diff", err)
 	}

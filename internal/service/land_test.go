@@ -146,7 +146,7 @@ func TestLandFastPathAndRebase(t *testing.T) {
 	if _, err := e.svc.Land(e.ctx, e.agent, service.LandInput{WorkspaceID: w1.Workspace.ID, Tree: t1}); err == nil {
 		t.Fatal("re-landing a landed workspace should fail")
 	}
-	log, err := e.svc.Log(e.ctx, repo.Name, eff.Slug, 0, true)
+	log, err := e.svc.Log(e.ctx, e.alice, repo.Name, eff.Slug, 0, true)
 	if err != nil || len(log) != 3 {
 		t.Fatalf("log = %d entries, %v", len(log), err)
 	}
@@ -179,7 +179,7 @@ func TestLandConflictKeepsWorkspaceOpen(t *testing.T) {
 	if r2.Landed || len(r2.Conflicts) != 1 || r2.Conflicts[0].Path != "auth.go" {
 		t.Fatalf("expected one conflict on auth.go: %+v", r2)
 	}
-	w, _ := e.svc.GetWorkspace(e.ctx, w2.Workspace.ID)
+	w, _ := e.svc.GetWorkspace(e.ctx, e.alice, w2.Workspace.ID)
 	if w.Workspace.State != store.WorkspaceOpen {
 		t.Fatal("workspace must stay open after a conflict")
 	}
@@ -255,7 +255,7 @@ func TestConcurrentLands(t *testing.T) {
 	if len(got) != n+1 {
 		t.Fatalf("effort has %d files, want %d", len(got), n+1)
 	}
-	log, _ := e.svc.Log(e.ctx, repo.Name, eff.Slug, 0, false)
+	log, _ := e.svc.Log(e.ctx, e.alice, repo.Name, eff.Slug, 0, false)
 	if len(log) != n+1 {
 		t.Fatalf("log has %d entries, want %d", len(log), n+1)
 	}
