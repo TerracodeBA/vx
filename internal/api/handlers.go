@@ -41,6 +41,7 @@ func Mount(mux *http.ServeMux, svc *service.Service) {
 	mux.Handle(vxv1connect.NewEffortServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewWorkspaceServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewShipServiceHandler(h, opts...))
+	mux.Handle(vxv1connect.NewBoardServiceHandler(h, opts...))
 }
 
 func invalid(err error) error { return connect.NewError(connect.CodeInvalidArgument, err) }
