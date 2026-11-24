@@ -23,9 +23,10 @@ const claimFraming = "Claims are soft: they block nothing, and a reason is what 
 
 // claimOptions are the flags vx claim and vx new --claim share.
 type claimOptions struct {
-	targets []string
-	reason  string
-	ttl     time.Duration
+	targets  []string
+	reason   string
+	ttl      time.Duration
+	movingTo string // vx claim --moving ... --to
 }
 
 func claimFlags(cmd *cobra.Command, o *claimOptions) {
@@ -51,13 +52,19 @@ func (a *App) coordErr(err error) error {
 func (a *App) makeClaim(ctx context.Context, c *client.Client, repo, slug, workspace string, o claimOptions) (*vxv1.ClaimResponse, error) {
 	resp, err := c.Coord.Claim(ctx, connect.NewRequest(&vxv1.ClaimRequest{
 		Repo: repo, Effort: slug, Targets: o.targets, Reason: o.reason,
-		TtlSeconds: int32(o.ttl / time.Second), WorkspaceId: workspace,
+		TtlSeconds: int32(o.ttl / time.Second), WorkspaceId: workspace, MovingTo: o.movingTo,
 	}))
 	if err != nil {
 		return nil, a.coordErr(err)
 	}
 	m := resp.Msg
-	if m.Claim.WorkspaceId != "" {
+	if o.movingTo != "" && m.Claim.MovingTo == "" {
+		return nil, errors.New("this vx server does not know moving claims yet (it is older than this vx): the claim was made as a plain claim; tell others on the board instead: vx post plan \"moving ... to ...\" --on " + strings.Join(o.targets, " --on "))
+	}
+	if m.Claim.MovingTo != "" {
+		a.printf("Claimed %s as moving to %s, id %s: whoever lands a change to it is told to make it at %s; the claim lasts 2h after your move lands, or until vx release.\n",
+			strings.Join(m.Claim.Targets, ", "), m.Claim.MovingTo, noteID(m.Claim.Id), m.Claim.MovingTo)
+	} else if m.Claim.WorkspaceId != "" {
 		a.printf("Claimed %s while this workspace is open, id %s: it ends when the workspace lands or is abandoned, or with vx release.\n",
 			strings.Join(m.Claim.Targets, ", "), noteID(m.Claim.Id))
 	} else {
@@ -79,8 +86,9 @@ func (a *App) claimCmd() *cobra.Command {
 	var repoFlag, effortFlag string
 	var o claimOptions
 	var noWorkspace bool
+	var on, moving []string
 	cmd := &cobra.Command{
-		Use:   "claim TARGET... [--reason TEXT] [--for 30m]",
+		Use:   "claim TARGET... [--on TARGET...] [--reason TEXT] [--for 30m] | claim --moving pkg.Func --to PATH",
 		Short: "Tell the other agents you are changing some paths or symbols now",
 		Long: `Claim paths ("internal/http/limit.go", "internal/http/") or symbols
 ("auth.Login") you are about to change, so others see it in vx status,
@@ -95,10 +103,17 @@ vx release. A claim with --no-workspace ends after --for or vx release.
 A symbol claim (pkg.Func, pkg.Type.Method) only counts against a land
 that changes the lines of that symbol (Go: its declaration; other
 languages: the whole file named like pkg), so two agents can claim and
-change different functions of one file.`,
+change different functions of one file.
+
+Moving code? Claim it with --moving and say where it goes with --to:
+whoever lands a change to the old location while the claim is active is
+warned to make the change at the new one, and you get a note on the
+board to carry it over. A moving claim outlives the land of the move by
+2 hours, for changes still made against the old code.`,
 		Example: `  vx claim internal/http/limit.go --reason "moving clientIP into httpx"
-  vx claim auth.Login --for 1h --no-workspace`,
-		Args: cobra.MinimumNArgs(1),
+  vx claim --on auth.Login --for 1h --no-workspace
+  vx claim --moving service.planShip --to internal/service/ship_plan.go`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -114,7 +129,15 @@ change different functions of one file.`,
 					workspace = wc.Config.Workspace
 				}
 			}
-			o.targets = args
+			o.targets = append(append(append([]string{}, args...), on...), moving...)
+			switch {
+			case len(o.targets) == 0:
+				return errors.New("say what you are claiming: vx claim TARGET (or --on TARGET), e.g. vx claim internal/http/limit.go")
+			case len(moving) > 0 && o.movingTo == "":
+				return errors.New("--moving needs --to: where the code is going, e.g. vx claim --moving service.planShip --to internal/service/ship_plan.go")
+			case len(moving) == 0 && o.movingTo != "":
+				return errors.New("--to goes with --moving: vx claim --moving pkg.Func --to PATH")
+			}
 			m, err := a.makeClaim(ctxOf(cmd), c, repo, slug, workspace, o)
 			if err != nil {
 				return err
@@ -126,6 +149,9 @@ change different functions of one file.`,
 	boardScopeFlags(cmd, &repoFlag, &effortFlag)
 	claimFlags(cmd, &o)
 	cmd.Flags().BoolVar(&noWorkspace, "no-workspace", false, "do not tie the claim to the open workspace; it lasts until --for runs out or vx release")
+	cmd.Flags().StringSliceVar(&on, "on", nil, "path, directory (dir/) or symbol (pkg.Func) to claim, like the arguments (repeatable)")
+	cmd.Flags().StringSliceVar(&moving, "moving", nil, "path or symbol you are moving (with --to); others who change it are told where it went")
+	cmd.Flags().StringVar(&o.movingTo, "to", "", "with --moving: the new location (a path or symbol)")
 	return cmd
 }
 
@@ -258,6 +284,12 @@ func (a *App) claimOnNew(ctx context.Context, c *client.Client, wc *workcopy.Wor
 func (a *App) printLandedOverClaims(cs []*vxv1.Claim) {
 	if len(cs) == 0 {
 		return
+	}
+	for _, cl := range cs {
+		if cl.MovingTo != "" {
+			a.printf("Warning: %s is being moved to %s by %s (claim %s). Your change landed at the old location: make it at %s too, or tell them: vx ask \"TEXT\" --on %s --to %s\n",
+				strings.Join(cl.Targets, ", "), cl.MovingTo, cl.Owner.GetRef(), noteID(cl.Id), cl.MovingTo, cl.MovingTo, cl.Owner.GetRef())
+		}
 	}
 	a.printf("Warning: you landed over claims of others:\n")
 	for _, cl := range cs {

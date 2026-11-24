@@ -28,6 +28,9 @@ type Claim struct {
 	EffortSlug  string
 	// WorkspaceOpen is read from the workspace the claim is tied to.
 	WorkspaceOpen bool
+	// MovingTo is where the claimed code is being moved (vx claim
+	// --moving pkg.Func --to path); empty for other claims.
+	MovingTo string
 }
 
 // Active reports whether the claim is neither released nor expired at now.
@@ -39,14 +42,14 @@ func (c Claim) Active(now time.Time) bool {
 const claimWorkspaceOpen = `exists (select 1 from workspaces w where w.id = c.workspace_id and w.state = 'open')`
 
 const claimCols = `c.id, c.repo_id, c.effort_id, c.owner_id, c.workspace_id, c.targets, c.reason,
-	c.created_at, c.expires_at, c.released_at, r.name, e.slug, ` + claimWorkspaceOpen
+	c.created_at, c.expires_at, c.released_at, r.name, e.slug, ` + claimWorkspaceOpen + `, c.moving_to`
 
 const claimFrom = ` from claims c join efforts e on e.id = c.effort_id join repos r on r.id = c.repo_id `
 
 func scanClaim(row interface{ Scan(...any) error }) (Claim, error) {
 	var c Claim
 	err := row.Scan(&c.ID, &c.RepoID, &c.EffortID, &c.OwnerID, &c.WorkspaceID, &c.Targets, &c.Reason,
-		&c.CreatedAt, &c.ExpiresAt, &c.ReleasedAt, &c.RepoName, &c.EffortSlug, &c.WorkspaceOpen)
+		&c.CreatedAt, &c.ExpiresAt, &c.ReleasedAt, &c.RepoName, &c.EffortSlug, &c.WorkspaceOpen, &c.MovingTo)
 	if c.Targets == nil {
 		c.Targets = []string{}
 	}
@@ -83,10 +86,10 @@ func (q Q) InsertClaim(ctx context.Context, c Claim) (Claim, error) {
 	if !c.CreatedAt.IsZero() {
 		created = &c.CreatedAt
 	}
-	tag, err := q.db.Exec(ctx, `insert into claims (id, repo_id, effort_id, owner_id, workspace_id, targets, reason, created_at, expires_at)
-		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::uuid, $5::text[], $6::text, coalesce($7::timestamptz, now()), $8::timestamptz
+	tag, err := q.db.Exec(ctx, `insert into claims (id, repo_id, effort_id, owner_id, workspace_id, targets, reason, created_at, expires_at, moving_to)
+		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::uuid, $5::text[], $6::text, coalesce($7::timestamptz, now()), $8::timestamptz, $9::text
 		from efforts e where e.id = $2::uuid`,
-		c.ID, c.EffortID, c.OwnerID, c.WorkspaceID, c.Targets, c.Reason, created, c.ExpiresAt)
+		c.ID, c.EffortID, c.OwnerID, c.WorkspaceID, c.Targets, c.Reason, created, c.ExpiresAt, c.MovingTo)
 	if err != nil {
 		return Claim{}, err
 	}
@@ -153,4 +156,33 @@ func (q Q) ReleaseWorkspaceClaims(ctx context.Context, workspaceID uuid.UUID, ow
 		)
 		select `+claimCols+` from released c join efforts e on e.id = c.effort_id join repos r on r.id = c.repo_id
 		order by c.created_at, c.seq`, workspaceID, owner, now)
+}
+
+// KeepMovingClaims detaches the active moving claims of a workspace that
+// lands from it, so they outlive the land, and keeps them until at least
+// until.
+func (q Q) KeepMovingClaims(ctx context.Context, workspaceID uuid.UUID, until time.Time) error {
+	_, err := q.db.Exec(ctx, `update claims set workspace_id = null, expires_at = greatest(expires_at, $2)
+		where workspace_id = $1 and moving_to <> '' and released_at is null`, workspaceID, until)
+	return err
+}
+
+// workspaceLastActive is when workspace w last did something: synced,
+// landed or reported its files, or its owner used a token.
+const workspaceLastActive = `greatest(w.created_at, w.active_at, w.changed_paths_at,
+	(select max(t.last_used_at) from tokens t where t.principal_id = w.owner_id))`
+
+// LapseIdleClaims releases, at now, the claims of an effort that are alive
+// only because their workspace is open (past their own expiry) while that
+// workspace has done nothing since idleSince, and returns them.
+func (q Q) LapseIdleClaims(ctx context.Context, effortID uuid.UUID, now, idleSince time.Time) ([]Claim, error) {
+	return q.queryClaims(ctx, `with lapsed as (
+			update claims c set released_at = $2
+			where c.effort_id = $1 and c.released_at is null and c.expires_at <= $2
+			and exists (select 1 from workspaces w where w.id = c.workspace_id and w.state = 'open'
+				and `+workspaceLastActive+` < $3)
+			returning *
+		)
+		select `+strings.ReplaceAll(claimCols, claimWorkspaceOpen, "false")+` from lapsed c join efforts e on e.id = c.effort_id join repos r on r.id = c.repo_id
+		order by c.created_at, c.seq`, effortID, now, idleSince)
 }

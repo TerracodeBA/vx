@@ -29,6 +29,7 @@ const (
 	NoteOverlap NoteKind = "overlap" // a forecast collision with another effort
 	NoteReview  NoteKind = "review"  // a review comment from the git host (v0.4)
 	NoteCI      NoteKind = "ci"      // a CI result from the git host (v0.4)
+	NoteClaim   NoteKind = "claim"   // to a claim's owner: it lapsed, or someone landed on code it is moving
 )
 
 // Note states.
@@ -85,6 +86,12 @@ type Note struct {
 	SupersededBy *uuid.UUID
 	System       bool // posted by vx itself
 	Read         bool // the caller has seen it (filled per caller)
+	// CopiedTo is the person a question was copied to because the agent it
+	// is addressed to was not working when it was asked.
+	CopiedTo *store.Principal
+	// ToAway is set by Ask when the agent asked is not working right now
+	// (AwayNotice says so to the asker).
+	ToAway *Presence
 }
 
 // PostNoteInput is a non-question note.
@@ -125,8 +132,12 @@ type Inbox struct {
 	Escalated []Note // people only: overdue questions in their efforts or to their agents
 	// Notes are system notes addressed to the caller (people: also to their
 	// agents) that no newer note replaced, newest first: review comments
-	// and CI results from the git host (v0.4).
+	// and CI results from the git host (v0.4), and claims that lapsed.
 	Notes []Note
+	// ForAgents, people only: open questions to their agents that were
+	// not working when asked, copied to them at once (not part of
+	// Questions).
+	ForAgents []Note
 }
 
 // ContextWorkspace is an open workspace with its owner.
@@ -232,12 +243,24 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 		return Note{}, err
 	}
 	var to *store.Principal
+	var away *Presence
 	if strings.TrimSpace(in.To) != "" {
 		p, err := s.resolvePrincipal(ctx, actor, in.To)
 		if err != nil {
 			return Note{}, err
 		}
 		to = &p
+		// An agent that is not working would not see the question until it
+		// escalates: say so now, and copy it to the agent's person.
+		if p.Kind == store.KindAgent && p.ID != actor.ID {
+			pr, err := s.presence(ctx, p)
+			if err != nil {
+				return Note{}, err
+			}
+			if !pr.Active {
+				away = &pr
+			}
+		}
 	}
 	now := s.Now()
 	answerBy := now.Add(within)
@@ -250,10 +273,16 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 		row.ToID = &to.ID
 		extra["to"] = to.Ref()
 	}
+	if away != nil && to.ParentID != nil && *to.ParentID != actor.ID {
+		row.CCID = to.ParentID
+		extra["copied_to"] = to.ParentID.String()
+	}
 	if row, err = s.insertNote(ctx, actor, "note.ask", row, extra); err != nil {
 		return Note{}, err
 	}
-	return s.newNoteCache().note(ctx, row, now)
+	n, err := s.newNoteCache().note(ctx, row, now)
+	n.ToAway = away
+	return n, err
 }
 
 // AnswerNote answers a question (by id or an 8+ character id prefix) and
@@ -320,7 +349,7 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 	var kinds []string
 	for _, k := range in.Kinds {
 		if !allKinds[k] {
-			return nil, errf(CodeInvalid, "note kind %q is not one of plan, decision, interface, question, answer, blocker, handoff, overlap, review, ci, rebase", k)
+			return nil, errf(CodeInvalid, "note kind %q is not one of plan, decision, interface, question, answer, blocker, handoff, overlap, review, ci, rebase, claim", k)
 		}
 		kinds = append(kinds, string(k))
 	}
@@ -367,7 +396,30 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 	if err != nil {
 		return Inbox{}, err
 	}
-	if in.Questions, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
+	copied := map[uuid.UUID]bool{}
+	if person {
+		cc, err := s.Store.OpenQuestionsCopiedTo(ctx, actor.ID, maxInboxNotes)
+		if err != nil {
+			return Inbox{}, err
+		}
+		var fresh []store.Note
+		for _, n := range cc {
+			copied[n.ID] = true
+			if n.AnswerBy == nil || !now.After(*n.AnswerBy) { // overdue ones are under Escalated
+				fresh = append(fresh, n)
+			}
+		}
+		if in.ForAgents, err = c.notes(ctx, filterNotes(fresh, readable), now); err != nil {
+			return Inbox{}, err
+		}
+	}
+	var mine []store.Note
+	for _, n := range rows {
+		if !copied[n.ID] || (n.ToID != nil && *n.ToID == actor.ID) {
+			mine = append(mine, n)
+		}
+	}
+	if in.Questions, err = c.notes(ctx, filterNotes(mine, readable), now); err != nil {
 		return Inbox{}, err
 	}
 	if rows, err = s.Store.AnswersToQuestionsBy(ctx, actor.ID, now.Add(-inboxAnswerAge), maxInboxNotes); err != nil {

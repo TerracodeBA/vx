@@ -39,7 +39,7 @@ var allKinds = map[NoteKind]bool{
 	NotePlan: true, NoteDecision: true, NoteInterface: true, NoteQuestion: true, NoteAnswer: true,
 	NoteBlocker: true, NoteHandoff: true,
 	// posted by vx itself
-	NoteOverlap: true, NoteReview: true, NoteCI: true, NoteRebase: true,
+	NoteOverlap: true, NoteReview: true, NoteCI: true, NoteRebase: true, NoteClaim: true,
 }
 
 // cleanBody drops control characters other than newline and tab (and
@@ -381,6 +381,13 @@ func (c *noteCache) convert(ctx context.Context, r store.Note, now time.Time) (N
 			return Note{}, err
 		}
 		n.To = &to
+	}
+	if r.CCID != nil {
+		cc, err := c.principal(ctx, *r.CCID)
+		if err != nil {
+			return Note{}, err
+		}
+		n.CopiedTo = &cc
 	}
 	return n, nil
 }

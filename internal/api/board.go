@@ -65,7 +65,14 @@ func (h *Handlers) Ask(ctx context.Context, req *connect.Request[vxv1.AskRequest
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&vxv1.AskResponse{Question: notePB(actor, n)}), nil
+	out := &vxv1.AskResponse{Question: notePB(actor, n), Notice: service.AwayNotice(n, h.svc.Now())}
+	if n.ToAway != nil && n.ToAway.LastSeen != nil {
+		out.ToLastSeen = ts(*n.ToAway.LastSeen)
+	}
+	if n.CopiedTo != nil {
+		out.CopiedTo = n.CopiedTo.Ref()
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *Handlers) Answer(ctx context.Context, req *connect.Request[vxv1.AnswerRequest]) (*connect.Response[vxv1.AnswerResponse], error) {
@@ -118,7 +125,7 @@ func (h *Handlers) Inbox(ctx context.Context, _ *connect.Request[vxv1.InboxReque
 	}
 	return connect.NewResponse(&vxv1.InboxResponse{
 		Questions: notesPB(actor, in.Questions), Answers: notesPB(actor, in.Answers), Escalated: notesPB(actor, in.Escalated),
-		Notes: notesPB(actor, in.Notes),
+		Notes: notesPB(actor, in.Notes), ForAgents: notesPB(actor, in.ForAgents),
 	}), nil
 }
 

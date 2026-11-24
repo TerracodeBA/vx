@@ -349,6 +349,9 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 	if len(cl.Targets) > 0 {
 		b.WriteString("  on " + strings.Join(cl.Targets, ", "))
 	}
+	if cl.MovingTo != "" {
+		b.WriteString("  moving to " + cl.MovingTo)
+	}
 	if cl.WorkspaceId != "" {
 		b.WriteString("  while its workspace is open")
 	} else if cl.ExpiresAt != "" {
@@ -367,6 +370,9 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 func claimLine(cl *vxv1.Claim) string {
 	trust := trustLabel(cl.Trust)
 	s := "[" + trust + "] " + cl.Owner.GetRef() + " on " + longTargets(cl.Targets)
+	if cl.MovingTo != "" {
+		s += " (moving to " + cl.MovingTo + ")"
+	}
 	if cl.WorkspaceId != "" {
 		s += " while its workspace is open"
 	} else if cl.ExpiresAt != "" {

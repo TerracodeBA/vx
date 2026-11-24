@@ -202,6 +202,14 @@ func (s *Service) ownWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (
 	if v.Workspace.OwnerID != actor.ID {
 		return v, errf(CodePermission, "workspace %s belongs to another principal", id)
 	}
+	// Its owner is working in it: its claims hold (see WorkspaceIdleAfter).
+	if v.Workspace.State == store.WorkspaceOpen {
+		now := s.Now()
+		if err := s.Store.TouchWorkspace(ctx, id, now); err != nil {
+			return v, err
+		}
+		v.Workspace.ActiveAt = &now
+	}
 	return v, nil
 }
 

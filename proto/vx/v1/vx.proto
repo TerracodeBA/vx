@@ -830,6 +830,13 @@ message AskRequest {
 
 message AskResponse {
   Note question = 1;
+  // Set when the agent asked is not working right now (no open workspace
+  // active in the last 2 hours, no token use in the last 15 minutes): what
+  // to tell the asker, e.g. "agent:alice/backend is not working right now
+  // (last seen 40 min ago); the question also goes to user:alice."
+  string notice = 2;
+  string to_last_seen = 3; // RFC 3339; empty: never seen (or the agent is working)
+  string copied_to = 4; // the person the question was copied to at once (ref); empty: none
 }
 
 message AnswerRequest {
@@ -867,6 +874,9 @@ message InboxResponse {
   // that no newer note replaced, newest first: review comments and CI
   // results from the git host (v0.4).
   repeated Note notes = 4;
+  // People only: open questions to their agents that were not working when
+  // asked, copied to them at once (not repeated in questions).
+  repeated Note for_agents = 5;
 }
 
 message ContextRequest {
@@ -955,6 +965,7 @@ message Claim {
   string created_at = 8;
   string expires_at = 9;
   string trust = 10; // self, same_person or teammate, as for notes
+  string moving_to = 11; // vx claim --moving: where the claimed code is going; empty for other claims
 }
 
 message ClaimRequest {
@@ -964,6 +975,10 @@ message ClaimRequest {
   string reason = 4;
   int32 ttl_seconds = 5; // 0: 1800; at most 14400
   string workspace_id = 6; // optional; the claim ends when this workspace lands or is abandoned
+  // Optional: the targets are being moved here (a path or symbol). Others
+  // who land a change to the targets are warned to make it here; the claim
+  // outlives the land of the move by 2 hours.
+  string moving_to = 7;
 }
 
 message ClaimResponse {

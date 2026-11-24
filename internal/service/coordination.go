@@ -18,6 +18,10 @@ const (
 	DefaultClaimTTL = 30 * time.Minute
 	MaxClaimTTL     = 4 * time.Hour
 	MaxClaimReason  = 300
+	// MovedClaimTTL is how long a moving claim (vx claim --moving) stays
+	// active after the workspace that made the move lands, so changes
+	// still made at the old location are warned about.
+	MovedClaimTTL = 2 * time.Hour
 )
 
 // Claim says a principal is changing some paths or symbols now.
@@ -34,6 +38,10 @@ type Claim struct {
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
 	ReleasedAt  *time.Time
+	// MovingTo is where the claimed code is being moved (a path or
+	// symbol); empty for other claims. A land by someone else that changes
+	// the claimed code warns them to make the change there.
+	MovingTo string
 }
 
 // ClaimInput is a new claim.
@@ -43,6 +51,7 @@ type ClaimInput struct {
 	Reason       string
 	TTL          time.Duration // 0: DefaultClaimTTL
 	WorkspaceID  string        // optional
+	MovingTo     string        // optional: the Targets are being moved here (a path or symbol)
 }
 
 // Task states.

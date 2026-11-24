@@ -308,14 +308,16 @@ func TestBoardInbox(t *testing.T) {
 	if in := inbox(b.bobBE); strings.Join(ids(in.Questions), "|") != "to bob's agent" || len(in.Escalated) != 0 {
 		t.Fatalf("bob/backend inbox = %+v", in)
 	}
-	if in := inbox(b.bob); strings.Join(ids(in.Questions), "|") != "to bob|to bob's agent" || len(in.Escalated) != 0 {
-		t.Fatalf("bob inbox = %q, escalated %d", ids(in.Questions), len(in.Escalated))
+	// bob/backend is not working (never seen): the question to it was
+	// copied to bob at once, under ForAgents rather than Questions.
+	if in := inbox(b.bob); strings.Join(ids(in.Questions), "|") != "to bob" || strings.Join(ids(in.ForAgents), "|") != "to bob's agent" || len(in.Escalated) != 0 {
+		t.Fatalf("bob inbox = %q, for agents %q, escalated %d", ids(in.Questions), ids(in.ForAgents), len(in.Escalated))
 	}
 
 	b.now = b.now.Add(2 * time.Minute)
 	in := inbox(b.bob)
-	if strings.Join(ids(in.Escalated), "|") != "to bob's agent" || in.Questions[1].State != service.NoteEscalated {
-		t.Fatalf("bob escalated = %q", ids(in.Escalated))
+	if strings.Join(ids(in.Escalated), "|") != "to bob's agent" || in.Escalated[0].State != service.NoteEscalated || len(in.ForAgents) != 0 {
+		t.Fatalf("bob escalated = %q, for agents %q", ids(in.Escalated), ids(in.ForAgents))
 	}
 	if in := inbox(b.alice); strings.Join(ids(in.Escalated), "|") != "to anyone|to bob's agent" {
 		t.Fatalf("alice (effort owner) escalated = %q", ids(in.Escalated))

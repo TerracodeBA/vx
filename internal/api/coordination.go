@@ -17,7 +17,7 @@ func claimPB(caller service.Actor, c service.Claim) *vxv1.Claim {
 		Id: c.ID.String(), Repo: c.RepoName, Effort: c.EffortSlug, Targets: c.Targets,
 		Owner:  principalPB(service.Actor{Principal: c.Owner, Parent: c.OwnerParent}),
 		Reason: c.Reason, CreatedAt: ts(c.CreatedAt), ExpiresAt: ts(c.ExpiresAt),
-		Trust: service.ClaimTrust(caller, c),
+		Trust: service.ClaimTrust(caller, c), MovingTo: c.MovingTo,
 	}
 	if c.WorkspaceID != nil {
 		out.WorkspaceId = c.WorkspaceID.String()
@@ -63,7 +63,7 @@ func (h *Handlers) Claim(ctx context.Context, req *connect.Request[vxv1.ClaimReq
 	m := req.Msg
 	c, others, err := h.svc.MakeClaim(ctx, actor, service.ClaimInput{
 		Repo: m.Repo, Effort: m.Effort, Targets: m.Targets, Reason: m.Reason,
-		TTL: time.Duration(m.TtlSeconds) * time.Second, WorkspaceID: strings.TrimSpace(m.WorkspaceId),
+		TTL: time.Duration(m.TtlSeconds) * time.Second, WorkspaceID: strings.TrimSpace(m.WorkspaceId), MovingTo: m.MovingTo,
 	})
 	if err != nil {
 		return nil, toConnect(err)
