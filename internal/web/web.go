@@ -11,9 +11,11 @@ import (
 	"html/template"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +33,79 @@ import (
 //go:embed templates/*.html static/*
 var assets embed.FS
 
-const cookieName = "vx_token"
+// cookieBase is the start of the session cookie's name. Browsers share
+// cookies between all ports of a host, so the name also carries the port:
+// two vx servers on one machine then keep separate sessions.
+const cookieBase = "vx_token"
+
+// cookieName is the session cookie's name for the server r was sent to:
+// vx_token_7070 for localhost:7070, vx_token when the host has no port.
+func cookieName(r *http.Request) string {
+	_, port, err := net.SplitHostPort(r.Host)
+	if err != nil || port == "" {
+		return cookieBase
+	}
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return cookieBase
+		}
+	}
+	return cookieBase + "_" + port
+}
+
+// secure reports whether the browser reached vx over HTTPS, directly or
+// through a proxy that says so. Marking a cookie Secure by mistake only
+// keeps it off plain HTTP, so the proxy header needs no trust.
+func secure(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func setSession(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: cookieName(r), Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
+		Secure: secure(r), MaxAge: 30 * 24 * 3600,
+	})
+}
+
+func clearSession(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name: cookieName(r), Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: secure(r),
+	})
+}
+
+// sameOrigin reports why a state-changing form post must be refused, or ""
+// when it came from a page of this server. It trusts the Origin header and
+// falls back to Referer when a browser sends no Origin; a post with
+// neither is refused, since no browser form sends that.
+func sameOrigin(r *http.Request) string {
+	src, header := r.Header.Get("Origin"), "Origin"
+	if src == "" {
+		src, header = r.Header.Get("Referer"), "Referer"
+	}
+	if src == "" {
+		return "the request has no Origin or Referer header, so vx cannot tell it came from this site. Submit the form from the vx page again."
+	}
+	u, err := url.Parse(src)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return header + " " + strconv.Quote(src) + " is not a page of this site."
+	}
+	if !strings.EqualFold(u.Host, r.Host) {
+		return "cross-origin request refused: " + header + " is " + u.Scheme + "://" + u.Host + ", this site is " + r.Host + "."
+	}
+	return ""
+}
+
+// checkOrigin writes a 403 and returns false when sameOrigin refuses r.
+func (u *UI) checkOrigin(w http.ResponseWriter, r *http.Request) bool {
+	why := sameOrigin(r)
+	if why == "" {
+		return true
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+	_ = u.pages["login"].ExecuteTemplate(w, "error", map[string]any{"Status": http.StatusForbidden, "Message": why})
+	return false
+}
 
 // UI serves the web interface.
 type UI struct {
@@ -68,7 +142,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "home", "repo", "effort", "change", "ship", "settings", "revoke"} {
+	for _, page := range []string{"login", "home", "repo", "effort", "change", "ship", "settings", "revoke", "token"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -94,6 +168,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/ship", u.auth(u.shipPost))
 	mux.HandleFunc("GET /ui/settings", u.auth(u.settings))
 	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
+	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	return nil
 }
 
@@ -101,14 +176,14 @@ type handler func(w http.ResponseWriter, r *http.Request, actor service.Actor)
 
 func (u *UI) auth(next handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(cookieName)
+		c, err := r.Cookie(cookieName(r))
 		if err != nil {
 			http.Redirect(w, r, "/ui/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		p, tokenID, err := u.svc.Store.AuthenticateToken(r.Context(), c.Value)
 		if err != nil {
-			http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
+			clearSession(w, r)
 			http.Redirect(w, r, "/ui/login?expired=1", http.StatusFound)
 			return
 		}
@@ -210,6 +285,9 @@ func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {
 		u.fail(w, err)
 		return
 	}
+	if !u.checkOrigin(w, r) {
+		return
+	}
 	token := strings.TrimSpace(r.PostForm.Get("token"))
 	next := r.PostForm.Get("next")
 	if !strings.HasPrefix(next, "/ui") {
@@ -219,15 +297,15 @@ func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {
 		u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": next, "Error": "That token is not valid. Use a token from vx-server user-add or vx agent add."})
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode,
-		Secure: r.TLS != nil, MaxAge: 30 * 24 * 3600,
-	})
+	setSession(w, r, token)
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 func (u *UI) logout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
+	if !u.checkOrigin(w, r) {
+		return
+	}
+	clearSession(w, r)
 	http.Redirect(w, r, "/ui/login", http.StatusSeeOther)
 }
 
@@ -944,9 +1022,7 @@ func (u *UI) shipPost(w http.ResponseWriter, r *http.Request, actor service.Acto
 		u.fail(w, err)
 		return
 	}
-	// Same-origin check for this state-changing form.
-	if o := r.Header.Get("Origin"); o != "" && !strings.HasSuffix(o, "://"+r.Host) {
-		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+	if !u.checkOrigin(w, r) {
 		return
 	}
 	repoName, slug := r.PostForm.Get("repo"), r.PostForm.Get("slug")
@@ -1036,8 +1112,7 @@ func (u *UI) revokePost(w http.ResponseWriter, r *http.Request, actor service.Ac
 		u.fail(w, err)
 		return
 	}
-	if o := r.Header.Get("Origin"); o != "" && !strings.HasSuffix(o, "://"+r.Host) {
-		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+	if !u.checkOrigin(w, r) {
 		return
 	}
 	id, err := uuid.Parse(r.PostForm.Get("id"))
@@ -1067,7 +1142,7 @@ func (u *UI) revokePost(w http.ResponseWriter, r *http.Request, actor service.Ac
 		return
 	}
 	if tok.ID == actor.TokenID {
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
+		clearSession(w, r)
 		http.Redirect(w, r, "/ui/login?expired=1", http.StatusSeeOther)
 		return
 	}
@@ -1076,6 +1151,39 @@ func (u *UI) revokePost(w http.ResponseWriter, r *http.Request, actor service.Ac
 		return
 	}
 	http.Redirect(w, r, "/ui/settings?revoked="+tok.ID.String(), http.StatusSeeOther)
+}
+
+// createTokenPost is a two-step form like revokePost: without confirm=yes it
+// asks for a label; with it, it creates the token and shows the secret on
+// the response page, once. The secret never goes into a URL.
+func (u *UI) createTokenPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	if err := r.ParseForm(); err != nil {
+		u.fail(w, err)
+		return
+	}
+	if !u.checkOrigin(w, r) {
+		return
+	}
+	agent := strings.TrimSpace(r.PostForm.Get("agent"))
+	if r.PostForm.Get("confirm") != "yes" {
+		// Check the permission now, so the form is not shown in vain.
+		owner, err := u.svc.TokenCreateTarget(r.Context(), actor, agent)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		u.render(w, r, "token", map[string]any{"Actor": actor, "Title": "Create token", "Owner": owner, "Agent": agent})
+		return
+	}
+	tok, owner, secret, err := u.svc.CreateToken(r.Context(), actor, agent, r.PostForm.Get("name"))
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	// The page holds a secret: keep it out of caches and history restores.
+	w.Header().Set("Cache-Control", "no-store")
+	u.render(w, r, "token", map[string]any{"Actor": actor, "Title": "New token", "Owner": owner,
+		"Token": tokenRows([]store.Token{tok}, uuid.Nil)[0], "Secret": secret})
 }
 
 // ---------- helpers ----------

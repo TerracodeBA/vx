@@ -1,0 +1,33 @@
+{{define "crumbs"}}<a href="/ui/settings">Settings</a><span class="sep">/</span><span>{{if .Secret}}New token{{else}}Create token{{end}}</span>{{end}}
+{{define "content"}}
+{{if .Secret}}
+<section class="panel panel-pad confirm">
+  <h1>New token for {{principal .Owner.Ref}}</h1>
+  <p class="note warn">Copy it now. This is the only time vx shows it: only a hash is stored, and reloading this page will not bring it back.</p>
+  <pre class="code token-secret">{{.Secret}}</pre>
+  <p class="muted">Use it as:</p>
+  <pre class="code">export VX_TOKEN={{.Secret}}</pre>
+  <dl class="kv">
+    <dt>Name</dt><dd>{{.Token.Name}}</dd>
+    <dt>ID</dt><dd class="mono">{{.Token.Short}}</dd>
+  </dl>
+  <p class="muted">To keep it out of your terminal history, create it with <code>vx token create{{if ne .Owner.ID .Actor.ID}} --agent {{.Owner.Handle}}{{end}} --env-file FILE</code> instead. Revoke it from Settings when it is no longer needed.</p>
+  <div class="confirm-actions"><a class="btn primary" href="/ui/settings">Done</a></div>
+</section>
+{{else}}
+<section class="panel panel-pad confirm">
+  <h1>Create a token for {{principal .Owner.Ref}}?</h1>
+  <p class="muted">{{if ne .Owner.ID .Actor.ID}}The new token signs in as {{principal .Owner.Ref}}, acting for you. Its other tokens keep working.{{else}}The new token signs in as you. Your other tokens keep working.{{end}} The secret is shown once, on the next page.</p>
+  <form method="post" action="/ui/settings/token" class="stack">
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" maxlength="100" autocomplete="off" placeholder="laptop, ci, ...">
+    <input type="hidden" name="agent" value="{{.Agent}}">
+    <input type="hidden" name="confirm" value="yes">
+    <div class="confirm-actions">
+      <button class="btn primary" type="submit">Create token</button>
+      <a class="btn ghost" href="/ui/settings">Cancel</a>
+    </div>
+  </form>
+</section>
+{{end}}
+{{end}}

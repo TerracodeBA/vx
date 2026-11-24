@@ -12,6 +12,16 @@ vx agent add backend --env-file ~/.vx-agents/backend.env
 
 The agent's identity is `agent:alice/backend`, acting for `user:alice`. Every change it lands records both, plus the model (`VX_MODEL`) and session (`VX_SESSION`) from its environment. Shipped commits are authored by the person, with the agent in a `Vx-Agent` trailer.
 
+Tokens are managed by their people, without an admin, from the CLI or the Settings page of the web UI:
+
+```sh
+vx token list --agent backend                                  # when each token was last used
+vx token create --agent backend --env-file ~/.vx-agents/backend-2.env
+vx token revoke 1a2b3c4d                                       # stops working at once
+```
+
+Only people create tokens, for themselves or their own agents. An agent can list and revoke its own tokens but not create one, so a leaked agent token cannot mint replacements that survive its revocation.
+
 ## The loop
 
 ```sh

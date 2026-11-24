@@ -145,16 +145,9 @@ const MaxTokenName = 100
 // it would no longer contain the leak. An agent that needs a new token asks
 // the person it acts for.
 func (s *Service) CreateToken(ctx context.Context, actor Actor, agent, name string) (store.Token, store.Principal, string, error) {
-	if actor.Kind != store.KindHuman {
-		return store.Token{}, store.Principal{}, "", errf(CodePermission,
-			"only people can create tokens; %s is an agent. Ask %s to run `vx token create --agent %s`", actor.Ref(), ownerRef(actor), agentName(actor.Handle))
-	}
-	target, err := s.tokenOwner(ctx, actor, agent)
+	target, err := s.TokenCreateTarget(ctx, actor, agent)
 	if err != nil {
 		return store.Token{}, store.Principal{}, "", err
-	}
-	if !mayManage(actor, target) {
-		return store.Token{}, store.Principal{}, "", errf(CodePermission, "%s cannot create tokens for %s: only for yourself and your agents", actor.Ref(), target.Ref())
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -180,6 +173,23 @@ func (s *Service) CreateToken(ctx context.Context, actor Actor, agent, name stri
 		return store.Token{}, store.Principal{}, "", classify(err)
 	}
 	return tok, target, secret, nil
+}
+
+// TokenCreateTarget returns who CreateToken would create a token for, or
+// why the caller may not. It changes nothing.
+func (s *Service) TokenCreateTarget(ctx context.Context, actor Actor, agent string) (store.Principal, error) {
+	if actor.Kind != store.KindHuman {
+		return store.Principal{}, errf(CodePermission,
+			"only people can create tokens; %s is an agent. Ask %s to run `vx token create --agent %s`", actor.Ref(), ownerRef(actor), agentName(actor.Handle))
+	}
+	target, err := s.tokenOwner(ctx, actor, agent)
+	if err != nil {
+		return store.Principal{}, err
+	}
+	if !mayManage(actor, target) {
+		return store.Principal{}, errf(CodePermission, "%s cannot create tokens for %s: only for yourself and your agents", actor.Ref(), target.Ref())
+	}
+	return target, nil
 }
 
 // agentName is the part of an agent handle after the slash.

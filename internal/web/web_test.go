@@ -81,7 +81,7 @@ func TestPages(t *testing.T) {
 	if code, body := get("/ui"); code != 200 || !strings.Contains(body, "Paste a vx token") {
 		t.Fatalf("login redirect = %d", code)
 	}
-	resp, err := c.PostForm(srv.URL+"/ui/login", url.Values{"token": {"vxt_wrong"}})
+	resp, err := postForm(c, srv.URL, "/ui/login", url.Values{"token": {"vxt_wrong"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestPages(t *testing.T) {
 	if !strings.Contains(string(b), "not valid") {
 		t.Fatal("bad token should be refused")
 	}
-	if _, err := c.PostForm(srv.URL+"/ui/login", url.Values{"token": {token}, "next": {"/ui"}}); err != nil {
+	if _, err := postForm(c, srv.URL, "/ui/login", url.Values{"token": {token}, "next": {"/ui"}}); err != nil {
 		t.Fatal(err)
 	}
 	for path, wants := range map[string][]string{

@@ -400,3 +400,8 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .confirm .kv { padding: 0; }
 .confirm-actions { display: flex; gap: 8px; align-items: center; }
 .btn.danger { background: var(--bad); color: #fff; }
+
+/* settings: create token */
+.panel-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.inline-form { display: inline; margin: 0; }
+.token-secret { white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 14px; }
