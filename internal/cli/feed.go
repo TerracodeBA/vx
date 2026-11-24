@@ -10,6 +10,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -31,10 +32,11 @@ const (
 
 // boardFeed is what the board has for a working copy right now.
 type boardFeed struct {
-	notes  []*vxv1.Note  // new notes for the agent, newest first
+	notes  []*vxv1.Note  // new notes for the agent, newest first; other efforts' among them
 	claims []*vxv1.Claim // active claims of others on the agent's files
 	newest string        // created_at of the newest note read, to mark as seen
 	me     string        // the caller's ref, shown as "you"
+	effort string        // the working copy's effort; notes of others are marked with theirs
 }
 
 // json is the "board" object of the sync and land results. Both lists are
@@ -131,31 +133,104 @@ func (a *App) newNotes(ctx context.Context, c *client.Client, wc *workcopy.Worki
 // othersClaims returns the active claims of others on paths, from Context.
 // Servers without claims return none.
 func (a *App) othersClaims(ctx context.Context, c *client.Client, repo, slug, me string, paths []string) ([]*vxv1.Claim, []*vxv1.Note, bool) {
-	var claims []*vxv1.Claim
-	var notes []*vxv1.Note
+	pc, ok := a.contextFor(ctx, c, repo, slug, me, paths)
+	return pc.claims, pc.notes, ok
+}
+
+// pathsContext is what Context says about some paths, over as many
+// requests as the paths need.
+type pathsContext struct {
+	claims []*vxv1.Claim       // others' active claims in the effort
+	notes  []*vxv1.Note        // the effort's notes on the paths
+	others []*vxv1.OtherEffort // other open efforts on the paths, one per effort
+}
+
+// contextFor asks Context about paths, contextBatch at a time, and merges
+// the answers. ok is false when a request failed.
+func (a *App) contextFor(ctx context.Context, c *client.Client, repo, slug, me string, paths []string) (pathsContext, bool) {
+	var pc pathsContext
 	have := map[string]bool{}
 	haveNote := map[string]bool{}
+	other := map[string]*vxv1.OtherEffort{}
 	for start := 0; start < len(paths); start += contextBatch {
 		end := min(start+contextBatch, len(paths))
 		resp, err := c.Board.Context(ctx, connect.NewRequest(&vxv1.ContextRequest{Repo: repo, Effort: slug, Targets: paths[start:end]}))
 		if err != nil {
-			return claims, notes, false
+			return pc, false
 		}
 		for _, cl := range resp.Msg.Claims {
 			if have[cl.Id] || cl.Trust == "self" || (me != "" && cl.Owner.GetRef() == me) {
 				continue
 			}
 			have[cl.Id] = true
-			claims = append(claims, cl)
+			pc.claims = append(pc.claims, cl)
 		}
 		for _, n := range resp.Msg.Notes {
 			if !haveNote[n.Id] {
 				haveNote[n.Id] = true
-				notes = append(notes, n)
+				pc.notes = append(pc.notes, n)
+			}
+		}
+		for _, o := range resp.Msg.OtherEfforts {
+			m, ok := other[o.Effort]
+			if !ok {
+				other[o.Effort] = o
+				pc.others = append(pc.others, o)
+				for _, cl := range o.Claims {
+					have[cl.Id] = true
+				}
+				for _, n := range o.Notes {
+					haveNote[n.Id] = true
+				}
+				continue
+			}
+			m.ChangedPaths = append(m.ChangedPaths, o.ChangedPaths...)
+			for _, cl := range o.Claims {
+				if !have[cl.Id] {
+					have[cl.Id] = true
+					m.Claims = append(m.Claims, cl)
+				}
+			}
+			for _, n := range o.Notes {
+				if !haveNote[n.Id] {
+					haveNote[n.Id] = true
+					m.Notes = append(m.Notes, n)
+				}
 			}
 		}
 	}
-	return claims, notes, true
+	return pc, true
+}
+
+// otherNotes are the interface and decision notes of other efforts on
+// paths that the caller has not read and did not write, for the sync and
+// land feed. Each carries its effort (Note.effort), which the feed prints.
+func otherNotes(others []*vxv1.OtherEffort, me string) []*vxv1.Note {
+	var out []*vxv1.Note
+	for _, o := range others {
+		for _, n := range o.Notes {
+			if !n.Read && n.Trust != "self" && (me == "" || n.Author.GetRef() != me) {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+// newestFirst sorts notes by creation time, newest first.
+func newestFirst(notes []*vxv1.Note) {
+	sort.SliceStable(notes, func(i, j int) bool { return after(notes[i].CreatedAt, notes[j].CreatedAt) })
+}
+
+// otherEffortsJSON is the "other_efforts" list of vx status --json.
+func otherEffortsJSON(others []*vxv1.OtherEffort) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(others))
+	for _, o := range others {
+		if data, err := pj.Marshal(o); err == nil {
+			out = append(out, data)
+		}
+	}
+	return out
 }
 
 // markBoardSeen records that the working copy was shown the board up to
@@ -173,14 +248,24 @@ func markBoardSeen(wc *workcopy.WorkingCopy, newest string) {
 // them. It marks the notes it returns as seen.
 func (a *App) boardFeedFor(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, paths []string, withClaims bool) boardFeed {
 	me := a.me(ctx, c)
-	f := boardFeed{me: me}
+	f := boardFeed{me: me, effort: wc.Config.Effort}
 	notes, newest, ok := a.newNotes(ctx, c, wc, me, paths)
 	if !ok {
 		return f
 	}
 	f.notes, f.newest = notes, newest
-	if withClaims && len(paths) > 0 {
-		f.claims, _, _ = a.othersClaims(ctx, c, wc.Config.Repo, wc.Config.Effort, me, paths)
+	if len(paths) > 0 {
+		// One look at Context gives others' claims on the paths and other
+		// efforts' new interfaces and decisions on them.
+		if pc, ok := a.contextFor(ctx, c, wc.Config.Repo, wc.Config.Effort, me, paths); ok {
+			if withClaims {
+				f.claims = pc.claims
+			}
+			if more := otherNotes(pc.others, me); len(more) > 0 {
+				f.notes = append(f.notes, more...)
+				newestFirst(f.notes)
+			}
+		}
 	}
 	markBoardSeen(wc, newest)
 	return f
@@ -196,13 +281,16 @@ func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed)
 	defer func() { a.markRead(ctx, c, printed...) }()
 	if len(f.notes) > 0 {
 		a.printf("\nNew on the board since your last sync (%d). %s\n", len(f.notes), boardFraming)
+		if n := f.fromOthers(); n > 0 {
+			a.printf("  %d from other efforts on your files (marked \"in EFFORT\"): they ship separately, so your sync does not bring their changes.\n", n)
+		}
 		roots, replies := threads(f.notes)
 		shown := 0
 		for _, n := range roots {
 			if shown == feedShown {
 				break
 			}
-			a.printNote(n, noteOpts{me: me, indent: "  "})
+			a.printNote(n, noteOpts{me: me, indent: "  ", where: f.otherEffort(n)})
 			printed = append(printed, n)
 			shown++
 			for _, r := range replies[n.Id] {
@@ -225,6 +313,22 @@ func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed)
 			a.printClaim(cl, "  ")
 		}
 	}
+}
+
+// otherEffort reports whether n is another effort's note.
+func (f boardFeed) otherEffort(n *vxv1.Note) bool {
+	return n.Effort != "" && f.effort != "" && n.Effort != f.effort
+}
+
+// fromOthers counts the feed's notes of other efforts.
+func (f boardFeed) fromOthers() int {
+	k := 0
+	for _, n := range f.notes {
+		if f.otherEffort(n) {
+			k++
+		}
+	}
+	return k
 }
 
 // printClaim prints a claim like a note: trust label, owner, targets,

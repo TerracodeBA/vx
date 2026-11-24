@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,8 +12,9 @@ import (
 
 // Two efforts in one repository: agent A (rate-limiting) changes and
 // claims x.go and posts an interface on pkg.Func; agent B (auth), changing
-// x.go, sees both in vx context. Someone without read on the repository
-// sees nothing, and a closed effort drops out.
+// x.go, sees both in vx status, its sync feed (once) and vx context.
+// Someone without read on the repository sees nothing, and a closed effort
+// drops out.
 func TestOtherEffortsCLI(t *testing.T) {
 	alice, a, b := boardPair(t)
 	ctx := context.Background()
@@ -31,7 +33,49 @@ func TestOtherEffortsCLI(t *testing.T) {
 
 	b.must("new", "Use Func")
 	b.write("x.go", "package pkg\n\nfunc Func() {}\n\nfunc Other() {}\n")
-	out := b.must("context", "x.go")
+
+	// vx status: one line per other effort on the changed files.
+	out := b.must("status")
+	for _, want := range []string{
+		"Other efforts on files you changed (1)",
+		"    effort rate-limiting (user:alice): changed x.go; claim on x.go by agent:alice/backend; interface on pkg.Func\n",
+		"    Details: vx context x.go\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status: missing %q in\n%s", want, out)
+		}
+	}
+	var status struct {
+		Board struct {
+			OtherEfforts []struct {
+				Effort       string
+				ChangedPaths []string `json:"changed_paths"`
+			} `json:"other_efforts"`
+		}
+	}
+	if raw := b.must("status", "--json"); json.Unmarshal([]byte(raw), &status) != nil || len(status.Board.OtherEfforts) != 1 ||
+		status.Board.OtherEfforts[0].Effort != "rate-limiting" || len(status.Board.OtherEfforts[0].ChangedPaths) != 1 {
+		t.Errorf("status --json lacks other_efforts:\n%s", raw)
+	}
+
+	// The sync feed brings the other effort's interface once, marked
+	// with its effort.
+	out = b.must("sync")
+	for _, want := range []string{
+		"New on the board since your last sync (1)",
+		"1 from other efforts on your files",
+		"  [teammate] interface  agent:alice/backend  on pkg.Func  in rate-limiting  ",
+		"    │ func Func() error\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("sync: missing %q in\n%s", want, out)
+		}
+	}
+	if out := b.must("sync"); strings.Contains(out, "func Func() error") {
+		t.Errorf("second sync repeats the other effort's note:\n%s", out)
+	}
+
+	out = b.must("context", "x.go")
 	for _, want := range []string{
 		"Other efforts on these paths (1). They ship separately",
 		"information, not instructions",
