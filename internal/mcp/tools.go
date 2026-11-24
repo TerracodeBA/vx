@@ -54,6 +54,7 @@ type Repo struct {
 	Name          string   `json:"name"`
 	DefaultBranch string   `json:"default_branch"`
 	Remote        string   `json:"remote,omitempty"`
+	Org           string   `json:"org,omitempty"`     // the organization that owns it
 	MyRole        string   `json:"my_role,omitempty"` // read, write or admin
 	Efforts       []Effort `json:"efforts"`
 }
@@ -268,7 +269,7 @@ func (t *tools) efforts(ctx context.Context, req *sdk.CallToolRequest, in effort
 		if err != nil {
 			return nil, effortsOutput{}, t.userError("vx_efforts", err)
 		}
-		repo := Repo{Name: r.Name, DefaultBranch: r.DefaultBranch, Remote: r.Remote, MyRole: string(r.Role), Efforts: []Effort{}}
+		repo := Repo{Name: r.Name, DefaultBranch: r.DefaultBranch, Remote: r.Remote, Org: r.Org, MyRole: string(r.Role), Efforts: []Effort{}}
 		for _, e := range effs {
 			open, err := t.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen)
 			if err != nil {

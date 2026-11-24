@@ -38,27 +38,13 @@ func (s *Service) GetRepo(ctx context.Context, actor Actor, name string) (RepoVi
 // ListRepos lists the repositories the caller can read, with the caller's
 // role on each.
 func (s *Service) ListRepos(ctx context.Context, actor Actor) ([]RepoView, error) {
-	repos, err := s.Store.ListRepos(ctx)
+	repos, roles, err := s.ReadableRepos(ctx, actor, nil)
 	if err != nil {
 		return nil, err
 	}
-	readable, err := s.readableFilter(ctx, actor)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]RepoView, 0, len(repos))
-	for _, r := range repos {
-		if !readable(r.ID) {
-			continue
-		}
-		role, err := s.AuthorizeID(ctx, actor, r.ID, RoleRead)
-		if isHidden(err) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, RepoView{Repo: r, Role: role})
+	out := make([]RepoView, len(repos))
+	for i, r := range repos {
+		out[i] = RepoView{Repo: r, Role: roles[i]}
 	}
 	return out, nil
 }

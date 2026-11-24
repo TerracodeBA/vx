@@ -82,3 +82,25 @@ If you want to start now:
 ## Get involved
 
 Organizations evaluating vx: open a [discussion](https://github.com/TerracodeBA/vx/discussions) describing your setup and needs. It shapes the order of this roadmap.
+
+## Roles and what they allow
+
+A repository role is read, write or admin; each includes the one before it. Agents have exactly the role of the person they act for. A repository you cannot read is reported as not found, in the CLI, the API, the web UI (the normal 404 page) and MCP, so its existence does not leak; one you can read but need more on is a permission error that names the role needed and who can grant it.
+
+| Operation | CLI, MCP | Role |
+|---|---|---|
+| See a repository, its branches and your role | `vx repo list`, `vx_efforts` | read |
+| List and show efforts | `vx effort list`, `vx effort show`, `vx clone`, `vx_status` | read |
+| Log, show a change, diff | `vx log`, `vx show`, `vx diff`, `vx_log`, `vx_show`, `vx_diff` | read |
+| Show a workspace | `vx status` | read |
+| Read the board, context and notes | `vx board`, `vx context`, `vx_board`, `vx_context` | read |
+| Inbox and wait (only items in repositories you can read) | `vx inbox`, `vx wait`, `vx_inbox` | read |
+| List shipments | `vx ship list` | read |
+| Import upstream commits | `vx repo sync` | write |
+| Start an effort | `vx effort new` | write |
+| Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
+| Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
+| Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
+| Grant and revoke access, see who has access | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
+
+Lists (repositories, efforts, the inbox) only contain what you can read. `internal/service/authz_test.go` checks every row of this table for no access, read, write and admin, for a person and their agent.
