@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/gitbridge"
 	"github.com/TerracodeBA/vx/internal/server"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
@@ -143,6 +145,9 @@ func openMigrated(ctx context.Context, url string) (*store.Store, error) {
 	return st, nil
 }
 
-// upstream builds the git bridge. It is filled in once the bridge exists.
-var upstream func(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error)
+// upstream builds the git bridge. GitHub access uses VX_GITHUB_TOKEN.
+func upstream(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error) {
+	token := func() string { return os.Getenv("VX_GITHUB_TOKEN") }
+	return gitbridge.New(st, blobs, filepath.Join(dataDir, "git"), token), nil
+}
 

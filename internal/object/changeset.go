@@ -186,3 +186,20 @@ func ValidChangeID(s string) bool {
 	}
 	return true
 }
+
+// ChangeIDFrom derives a change ID from bytes, such as a git commit hash, so
+// importing the same commit twice gives the same change ID.
+func ChangeIDFrom(b []byte) string {
+	out := make([]byte, 0, 9)
+	for i := 0; i < 8; i++ {
+		if i == 4 {
+			out = append(out, '-')
+		}
+		var v byte
+		if i < len(b) {
+			v = b[i]
+		}
+		out = append(out, changeIDAlphabet[int(v)%len(changeIDAlphabet)])
+	}
+	return string(out)
+}
