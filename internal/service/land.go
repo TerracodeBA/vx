@@ -54,6 +54,10 @@ type LandResult struct {
 	// KeptBoth lists paths where both sides inserted different lines at the
 	// same place and the merge kept both; worth a look.
 	KeptBoth []string
+	// MergedByDecl lists .go paths whose lines conflicted but whose
+	// top-level declarations did not, merged declaration by declaration;
+	// worth a look, like KeptBoth.
+	MergedByDecl []string
 	// Overlaps are the effort's stored forecasts with other open efforts.
 	// The forecast for this land runs after it, in the background, so they
 	// may still describe the effort before this land.
@@ -169,6 +173,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		res.Rebased = true
 		res.AutoMerged = mr.AutoMerged
 		res.KeptBoth = mr.KeptBoth
+		res.MergedByDecl = mr.MergedByDecl
 		generated = mr.Generated
 	}
 
@@ -184,6 +189,11 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		return LandResult{}, err
 	}
 	res.Warnings = s.treeWarnings(ctx, newTree, changes)
+	if res.Rebased {
+		res.Warnings = append(res.Warnings, s.sideWarnings(ctx, engine.GoSides{
+			Base: base.Tree, Ours: in.Tree, Theirs: head.Tree, Merged: newTree, OursName: "this land", TheirsName: "the effort",
+		})...)
+	}
 	res.Warnings = append(res.Warnings, engine.GeneratedWarnings(generated)...)
 	res.Warnings = append(res.Warnings, s.ruleWarnings(ctx, head.Tree, newTree)...)
 
@@ -270,6 +280,18 @@ func (s *Service) treeWarnings(ctx context.Context, tree hash.Hash, changes []ob
 	ws, err := engine.CheckGo(ctx, s.Blobs, tree, paths)
 	if err != nil {
 		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check Go packages for duplicate declarations: %v", err)}}
+	}
+	return ws
+}
+
+// sideWarnings runs the checks that need both sides of a merge: a
+// signature one side changed that the other side's new code calls the old
+// way, a name one side removed that the other side's new code uses. They
+// only warn; a failing check becomes a warning.
+func (s *Service) sideWarnings(ctx context.Context, sides engine.GoSides) []engine.Warning {
+	ws, err := engine.CheckGoSides(ctx, s.Blobs, sides)
+	if err != nil {
+		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check Go signatures across the merge: %v", err)}}
 	}
 	return ws
 }

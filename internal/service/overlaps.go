@@ -403,6 +403,28 @@ func (r *forecastRun) compute(ctx context.Context, repo store.Repo, branch store
 				fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, inA...), append(fc.involvedOfB, inB...)
 			}
 		}
+		// Signatures and names one effort changed that the other's new
+		// code uses the old way.
+		sws, err := engine.CheckGoSides(ctx, s.Blobs, engine.GoSides{
+			Base: secondBase.Tree, Ours: secondHead.Tree, Theirs: onto, Merged: combined,
+			OursName: "effort " + second.eff.Slug, TheirsName: "effort " + first.eff.Slug,
+		})
+		if err != nil {
+			slog.Warn("overlap forecast: Go signatures", "repo", repo.Name, "err", err)
+		}
+		for _, w := range sws {
+			if inA, inB := involved(w.Files, a.changed), involved(w.Files, b.changed); len(inA) > 0 && len(inB) > 0 {
+				fc.warnings = append(fc.warnings, w)
+				fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, inA...), append(fc.involvedOfB, inB...)
+			}
+		}
+		// Shared files the merge could only do declaration by declaration.
+		for _, w := range engine.MergedByDeclWarnings(r2.MergedByDecl) {
+			if shared[w.Path] {
+				fc.warnings = append(fc.warnings, w)
+				fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, w.Path), append(fc.involvedOfB, w.Path)
+			}
+		}
 		rules, err := s.RulesAt(ctx, combined)
 		if err != nil {
 			slog.Warn("overlap forecast: vx.toml", "repo", repo.Name, "err", err)

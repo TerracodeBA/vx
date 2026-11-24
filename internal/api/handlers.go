@@ -459,7 +459,7 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 	out := &vxv1.LandResponse{
 		Landed: res.Landed, Rebased: res.Rebased, AutoMerged: res.AutoMerged,
 		Conflicts: conflictsPB(res.Conflicts), EffortHead: res.EffortHead.String(), EffortMoved: res.EffortMoved,
-		Warnings: warningsPB(res.Warnings), KeptBoth: res.KeptBoth, Overlaps: overlapsPB(res.Overlaps),
+		Warnings: warningsPB(res.Warnings), KeptBoth: res.KeptBoth, MergedByDecl: res.MergedByDecl, Overlaps: overlapsPB(res.Overlaps),
 	}
 	for _, c := range res.OverlappingClaims {
 		out.OverlappingClaims = append(out.OverlappingClaims, claimPB(actorFrom(ctx), c))

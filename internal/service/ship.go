@@ -106,6 +106,21 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 			return ShipPlan{}, err
 		}
 		plan.Warnings = s.treeWarnings(ctx, cur, changes)
+		if rp.Merged {
+			effBase, err := s.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
+			if err != nil {
+				return ShipPlan{}, err
+			}
+			effHead, err := s.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Head)
+			if err != nil {
+				return ShipPlan{}, err
+			}
+			plan.Warnings = append(plan.Warnings, s.sideWarnings(ctx, engine.GoSides{
+				Base: effBase.Tree, Ours: effHead.Tree, Theirs: head.Tree, Merged: cur,
+				OursName: "effort " + v.Effort.Slug, TheirsName: target,
+			})...)
+		}
+		plan.Warnings = append(plan.Warnings, engine.MergedByDeclWarnings(rp.MergedByDecl)...)
 		plan.Warnings = append(plan.Warnings, engine.GeneratedWarnings(uniqueGenerated(rp.Generated))...)
 		plan.Warnings = append(plan.Warnings, s.ruleWarnings(ctx, head.Tree, cur)...)
 	}
@@ -134,6 +149,8 @@ type replayResult struct {
 	Conflicts    []engine.Conflict
 	ConflictedAt *store.ChangesetRow    // the first change that conflicted
 	Generated    []engine.GeneratedFile // generated files both sides changed: taken from the change, not merged
+	MergedByDecl []string               // .go files whose lines conflicted, merged by declaration
+	Merged       bool                   // some change was merged onto the current tree instead of taking its own
 }
 
 // replayChain replays the vx changes of chain (newest first, as Store.Chain
@@ -170,6 +187,8 @@ func (s *Service) replayChain(ctx context.Context, repoID uuid.UUID, chain []sto
 				}
 				res.Conflicts = append(res.Conflicts, mr.Conflicts...)
 				res.Generated = append(res.Generated, mr.Generated...)
+				res.MergedByDecl = append(res.MergedByDecl, mr.MergedByDecl...)
+				res.Merged = true
 				if mr.Tree.IsZero() { // a path conflict leaves no tree to go on with
 					break
 				}
@@ -190,6 +209,8 @@ func (s *Service) replayChain(ctx context.Context, repoID uuid.UUID, chain []sto
 				}
 				next = mr.Tree
 				res.Generated = append(res.Generated, mr.Generated...)
+				res.MergedByDecl = append(res.MergedByDecl, mr.MergedByDecl...)
+				res.Merged = true
 			}
 		}
 		changes, err := object.DiffTrees(ctx, s.Blobs, cur, next)

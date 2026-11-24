@@ -149,7 +149,7 @@ message Conflict {
 // such as two changes that each declare the same Go function in one package.
 message Warning {
   string path = 1; // the file or directory concerned, e.g. a Go package directory
-  string kind = 2; // duplicate, parse
+  string kind = 2; // duplicate, parse, check, generated, rule, signature, removed, merged-by-declaration
   string detail = 3; // human-readable, e.g. "duplicate func clientIP in internal/httpapi (audit.go, limit.go)"
 }
 
@@ -562,6 +562,7 @@ message LandResponse {
   repeated Claim overlapping_claims = 9; // active claims of others on files this land changed; they never block a land
   repeated string kept_both = 10; // paths where both sides inserted different lines at the same place and vx kept both
   repeated Overlap overlaps = 11; // this effort's forecast collisions after the land
+  repeated string merged_by_decl = 12; // .go paths whose lines conflicted but whose top-level declarations did not; merged declaration by declaration
 }
 
 message AbandonRequest {
