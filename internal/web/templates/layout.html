@@ -13,6 +13,8 @@
   <a class="brand" href="/ui"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></a>
   <nav class="side-nav" aria-label="Main">
     <a class="side-link{{if eq .Path "/ui"}} on{{end}}" href="/ui"><span class="ico ico-grid" aria-hidden="true"></span>All efforts</a>
+    <a class="side-link{{if eq .Section "orgs"}} on{{end}}" href="/ui/orgs"><span class="ico ico-org" aria-hidden="true"></span>Organizations</a>
+    {{if .NavAdmin}}<a class="side-link{{if eq .Section "admin"}} on{{end}}" href="/ui/admin/people"><span class="ico ico-admin" aria-hidden="true"></span>Admin</a>{{end}}
   </nav>
   <div class="side-label">Repositories</div>
   <nav class="side-tree" aria-label="Repositories">

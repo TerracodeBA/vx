@@ -144,7 +144,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "code", "home", "repo", "effort", "change", "ship", "settings", "revoke", "token"} {
+	for _, page := range []string{"login", "code", "home", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -174,6 +174,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/settings", u.auth(u.settings))
 	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
+	u.mountAdmin(mux)
 	return nil
 }
 
@@ -255,6 +256,12 @@ func (u *UI) nav(r *http.Request) []navRepo {
 func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
 	if _, signedIn := data["Actor"]; signedIn {
 		data["Nav"] = u.nav(r)
+		if a, ok := data["Actor"].(service.Actor); ok {
+			data["NavAdmin"] = u.svc.IsSiteAdmin(r.Context(), a)
+		}
+		if _, ok := data["Section"]; !ok {
+			data["Section"] = ""
+		}
 		if _, ok := data["ActiveRepo"]; !ok {
 			data["ActiveRepo"] = param(r, "repo")
 			if data["ActiveRepo"] == "" {

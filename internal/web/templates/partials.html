@@ -29,3 +29,6 @@
 {{define "stat"}}<span class="stat"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span> <span class="blocks" aria-hidden="true">{{range blocks .Added .Deleted}}<i class="b{{.}}"></i>{{end}}</span></span>{{end}}
 
 {{define "modeswitch"}}<div class="modeswitch" role="group" aria-label="Diff layout"><button type="button" data-diff-mode="unified">Unified</button><button type="button" data-diff-mode="split">Split</button></div>{{end}}
+
+{{/* admin-flash shows the outcome of an admin form: a fixed success text or the service's error. */}}
+{{define "admin-flash"}}{{with .OK}}<p class="note ok" role="status">{{.}}</p>{{end}}{{with .Err}}<p class="note bad" role="alert">{{.}}</p>{{end}}{{end}}

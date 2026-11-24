@@ -1,0 +1,54 @@
+{{define "crumbs"}}<span>Organizations</span>{{end}}
+{{define "actions"}}{{if .SiteAdmin}}{{if .All}}<a class="btn ghost small-btn" href="/ui/orgs">Only mine</a>{{else}}<a class="btn ghost small-btn" href="/ui/orgs?all=1">All on this server</a>{{end}}{{end}}{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Organizations</h1>
+    <p class="muted">{{if .All}}Every organization on this server.{{else}}The organizations you belong to.{{end}} An organization's members get its default role on its repositories; teams and direct grants give more.</p>
+  </div>
+</div>
+{{template "admin-flash" .Flash}}
+{{with .ListErr}}<p class="note bad" role="alert">{{.}}</p>{{end}}
+
+<div class="kpis kpis-3">
+  <div class="kpi"><span class="kpi-label">Organizations</span><span class="kpi-value">{{len .Orgs}}</span></div>
+  <div class="kpi"><span class="kpi-label">You own</span><span class="kpi-value">{{.Owned}}</span></div>
+  <div class="kpi"><span class="kpi-label">Repositories</span><span class="kpi-value">{{.RepoTotal}}</span></div>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>{{if .All}}All organizations{{else}}Your organizations{{end}}</h2><span class="muted small">{{len .Orgs}} organization{{if ne (len .Orgs) 1}}s{{end}}</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Organization</th><th>Your role</th><th class="num">Members</th><th class="num">Repositories</th><th>Default repository role</th><th>Created</th></tr></thead>
+    <tbody>
+    {{range .Orgs}}
+      <tr>
+        <td class="cell-main"><a class="row-link" href="/ui/orgs/{{.Handle}}">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Handle}}{{end}}</a>
+          <div class="cell-sub mono">{{.Handle}}{{if .Personal}} · personal{{end}}</div></td>
+        <td>{{if .Role}}<span class="badge{{if eq .Role "owner"}} badge-owner{{else if eq .Role "admin"}} badge-admin{{end}}">{{.Role}}</span>{{else}}<span class="muted">not a member</span>{{end}}</td>
+        <td class="num">{{.Users}}</td>
+        <td class="num">{{.Repos}}</td>
+        <td>{{if .DefaultRepoRole}}<span class="badge">{{.DefaultRepoRole}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+        <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="6" class="muted">{{if .All}}No organizations on this server yet.{{else}}You are not in any organization yet. Create one below, or ask an owner to add you.{{end}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .IsHuman}}
+  <form method="post" action="/ui/orgs" class="admin-form" id="new">
+    <div class="field"><label for="org-handle">Handle</label>
+      <input id="org-handle" name="handle" type="text" required maxlength="39" autocomplete="off" placeholder="acme" value="{{.Form.Get "handle"}}"></div>
+    <div class="field"><label for="org-name">Display name</label>
+      <input id="org-name" name="display_name" type="text" maxlength="100" autocomplete="off" placeholder="Acme Inc." value="{{.Form.Get "display_name"}}"></div>
+    <button class="btn primary" type="submit">New organization</button>
+    <p class="field-hint">You become its owner. The handle is lowercase letters, digits, dot, dash or underscore and cannot be changed later.</p>
+  </form>
+  {{else}}
+  <p class="panel-note muted small">Agents can look but not create organizations. Sign in as the person to do that.</p>
+  {{end}}
+</section>
+{{end}}
