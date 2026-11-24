@@ -167,6 +167,12 @@ func (s *Service) RevokeToken(ctx context.Context, actor Actor, in RevokeInput) 
 	return tok, owner, !revoked, nil
 }
 
+// Token returns a token the caller may manage, by id or unique prefix, with
+// its owner. It changes nothing; use it to show what RevokeToken would do.
+func (s *Service) Token(ctx context.Context, actor Actor, id string) (store.Token, store.Principal, error) {
+	return s.findToken(ctx, actor, strings.ToLower(strings.TrimSpace(id)))
+}
+
 // findToken resolves a token id or prefix and checks the caller may manage it.
 func (s *Service) findToken(ctx context.Context, actor Actor, id string) (store.Token, store.Principal, error) {
 	if full, err := uuid.Parse(id); err == nil {

@@ -1,0 +1,75 @@
+{{define "crumbs"}}<span>Settings</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Settings</h1>
+    <p class="muted">Who you are in vx, your agents, and the tokens they sign in with. A revoked token stops working at once.</p>
+  </div>
+</div>
+{{with .Revoked}}<p class="note ok">Revoked token <span class="mono">{{.Short}}</span> ({{.Name}}) of {{principal $.RevokedOwner}}.</p>{{end}}
+{{if .AlreadyRevoked}}<p class="note warn">That token was already revoked.</p>{{end}}
+
+<div class="settings">
+<section class="panel">
+  <div class="panel-head"><h2>Profile</h2></div>
+  <dl class="kv">
+    <dt>Handle</dt><dd class="mono">{{.Actor.Handle}}</dd>
+    <dt>Name</dt><dd>{{.Actor.DisplayName}}</dd>
+    <dt>Email</dt><dd>{{if .Actor.Email}}{{.Actor.Email}}{{else}}<span class="muted">not set</span>{{end}}</dd>
+    {{if .Actor.Parent}}<dt>Acting for</dt><dd class="mono">{{principal .Actor.Parent.Ref}}</dd>{{end}}
+    <dt>Member since</dt><dd>{{.Actor.CreatedAt.Format "2 Jan 2006"}}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Your tokens</h2><span class="muted small">{{len .Own}} token{{if ne (len .Own) 1}}s{{end}}</span></div>
+  {{template "token-table" .Own}}
+</section>
+
+{{if .IsHuman}}
+<h2 class="sec settings-sec">Agents</h2>
+{{range .Agents}}
+<section class="panel">
+  <div class="panel-head">
+    <h2 class="mono">{{.Agent.Handle}}</h2>
+    <span class="muted small">{{if ne .Agent.DisplayName .Name}}{{.Agent.DisplayName}} · {{end}}{{.Active}} active{{if .Revoked}}, {{.Revoked}} revoked{{end}} · created {{ago .Agent.CreatedAt}}</span>
+  </div>
+  {{template "token-table" .Tokens}}
+</section>
+{{else}}
+<div class="panel empty">
+  <h2>No agents yet</h2>
+  <p class="muted">Give each coding agent its own identity, so its work shows up under its name and you can revoke it on its own:</p>
+  <pre class="code">vx agent add backend --env-file ~/.vx-agents/backend.env</pre>
+</div>
+{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "token-table"}}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th>ID</th><th>Created</th><th>Last used</th><th>State</th><th></th></tr></thead>
+  <tbody>
+  {{range .}}
+    <tr{{if .RevokedAt}} class="row-revoked"{{end}}>
+      <td class="cell-main">{{if .Name}}{{.Name}}{{else}}<span class="muted">unnamed</span>{{end}}</td>
+      <td class="mono small">{{.Short}}</td>
+      <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+      <td class="muted small nowrap">{{with .LastUsedAt}}{{ago .}}{{else}}never{{end}}</td>
+      <td class="nowrap">{{with .RevokedAt}}<span class="badge">revoked {{ago .}}</span>{{else}}<span class="badge badge-open">active</span>{{end}}{{if .Current}} <span class="badge badge-merged">this browser</span>{{end}}</td>
+      <td class="num">{{if not .RevokedAt}}
+        <form method="post" action="/ui/settings/revoke">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="btn ghost small-btn" type="submit">Revoke</button>
+        </form>{{end}}
+      </td>
+    </tr>
+  {{else}}
+    <tr><td colspan="6" class="muted">No tokens.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

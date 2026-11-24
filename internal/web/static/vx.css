@@ -98,6 +98,9 @@ h2 { font-size: 14px; font-weight: 600; }
   font: 600 12px var(--sans); text-transform: uppercase; flex: none; }
 .side-signout { background: none; border: 0; color: var(--muted); font: 12px var(--sans); cursor: pointer; padding: 4px; }
 .side-signout:hover { color: var(--fg); }
+.side-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.side-settings { color: var(--muted); font: 12px var(--sans); padding: 4px; }
+.side-settings:hover, .side-settings.on { color: var(--fg); text-decoration: none; }
 .ico { width: 16px; height: 16px; flex: none; display: inline-block; border-radius: 3px; position: relative; }
 .ico-grid { background:
   linear-gradient(var(--muted) 0 0) 0 0 / 6px 6px no-repeat, linear-gradient(var(--muted) 0 0) 10px 0 / 6px 6px no-repeat,
@@ -386,3 +389,14 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
   .file-head .viewed { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .sidebar { transition: none; } }
+
+/* ---------- settings ---------- */
+.settings { display: grid; gap: 16px; max-width: 980px; }
+.settings-sec { margin: 8px 0 -6px; }
+.row-revoked td { color: var(--muted); }
+.row-revoked .cell-main { text-decoration: line-through; }
+.confirm { max-width: 620px; display: grid; gap: 14px; }
+.confirm h1 { margin: 0; }
+.confirm .kv { padding: 0; }
+.confirm-actions { display: flex; gap: 8px; align-items: center; }
+.btn.danger { background: var(--bad); color: #fff; }

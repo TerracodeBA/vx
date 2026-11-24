@@ -68,7 +68,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "home", "repo", "effort", "change", "ship"} {
+	for _, page := range []string{"login", "home", "repo", "effort", "change", "ship", "settings", "revoke"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -92,6 +92,8 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/diff", u.auth(u.diff))
 	mux.HandleFunc("GET /ui/ship", u.auth(u.ship))
 	mux.HandleFunc("POST /ui/ship", u.auth(u.shipPost))
+	mux.HandleFunc("GET /ui/settings", u.auth(u.settings))
+	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
 	return nil
 }
 
@@ -104,7 +106,7 @@ func (u *UI) auth(next handler) http.HandlerFunc {
 			http.Redirect(w, r, "/ui/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
-		p, err := u.svc.Store.Authenticate(r.Context(), c.Value)
+		p, tokenID, err := u.svc.Store.AuthenticateToken(r.Context(), c.Value)
 		if err != nil {
 			http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
 			http.Redirect(w, r, "/ui/login?expired=1", http.StatusFound)
@@ -115,6 +117,7 @@ func (u *UI) auth(next handler) http.HandlerFunc {
 			u.fail(w, err)
 			return
 		}
+		actor.TokenID = tokenID
 		next(w, r, actor)
 	}
 }
@@ -956,6 +959,123 @@ func (u *UI) shipPost(w http.ResponseWriter, r *http.Request, actor service.Acto
 		return
 	}
 	http.Redirect(w, r, "/ui/ship?repo="+url.QueryEscape(repoName)+"&slug="+url.QueryEscape(slug)+"&shipped=1", http.StatusSeeOther)
+}
+
+// ---------- settings ----------
+
+// tokenRow is a token as the settings page shows it.
+type tokenRow struct {
+	store.Token
+	Short   string
+	Current bool // the token this browser is signed in with
+}
+
+type agentPanel struct {
+	Agent           store.Principal
+	Name            string
+	Tokens          []tokenRow
+	Active, Revoked int
+}
+
+func tokenRows(tokens []store.Token, current uuid.UUID) []tokenRow {
+	out := make([]tokenRow, len(tokens))
+	for i, t := range tokens {
+		out[i] = tokenRow{Token: t, Short: t.ID.String()[:service.MinTokenPrefix], Current: current != uuid.Nil && t.ID == current}
+	}
+	return out
+}
+
+func (u *UI) settings(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	ctx := r.Context()
+	_, own, err := u.svc.ListTokens(ctx, actor, "")
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	data := map[string]any{"Actor": actor, "Title": "Settings", "Own": tokenRows(own, actor.TokenID), "IsHuman": actor.Kind == store.KindHuman}
+	if actor.Kind == store.KindHuman {
+		agents, err := u.svc.Store.ListAgents(ctx, actor.ID)
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		panels := make([]agentPanel, 0, len(agents))
+		for _, a := range agents {
+			_, toks, err := u.svc.ListTokens(ctx, actor, a.Handle)
+			if err != nil {
+				u.fail(w, err)
+				return
+			}
+			p := agentPanel{Agent: a, Name: a.Handle[strings.LastIndex(a.Handle, "/")+1:], Tokens: tokenRows(toks, actor.TokenID)}
+			for _, t := range toks {
+				if t.Active() {
+					p.Active++
+				} else {
+					p.Revoked++
+				}
+			}
+			panels = append(panels, p)
+		}
+		data["Agents"] = panels
+	}
+	if id, err := uuid.Parse(r.URL.Query().Get("revoked")); err == nil {
+		// Only tokens the caller may manage are named back to them.
+		if tok, owner, err := u.svc.Token(ctx, actor, id.String()); err == nil {
+			data["Revoked"] = tokenRows([]store.Token{tok}, uuid.Nil)[0]
+			data["RevokedOwner"] = owner.Ref()
+		}
+	}
+	data["AlreadyRevoked"] = r.URL.Query().Get("already") != ""
+	u.render(w, r, "settings", data)
+}
+
+// revokePost is a two-step form: without confirm=yes it shows what would be
+// revoked and asks again; with it, it revokes.
+func (u *UI) revokePost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	if err := r.ParseForm(); err != nil {
+		u.fail(w, err)
+		return
+	}
+	if o := r.Header.Get("Origin"); o != "" && !strings.HasSuffix(o, "://"+r.Host) {
+		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+		return
+	}
+	id, err := uuid.Parse(r.PostForm.Get("id"))
+	if err != nil {
+		u.fail(w, &service.Error{Code: service.CodeInvalid, Msg: "no token id in the form; go back to Settings and use a Revoke button"})
+		return
+	}
+	if r.PostForm.Get("confirm") != "yes" {
+		tok, owner, err := u.svc.Token(r.Context(), actor, id.String())
+		if err != nil {
+			u.fail(w, err)
+			return
+		}
+		if !tok.Active() {
+			http.Redirect(w, r, "/ui/settings?already=1", http.StatusSeeOther)
+			return
+		}
+		u.render(w, r, "revoke", map[string]any{"Actor": actor, "Title": "Revoke token",
+			"Token": tokenRows([]store.Token{tok}, actor.TokenID)[0], "Owner": owner})
+		return
+	}
+	tok, _, already, err := u.svc.RevokeToken(r.Context(), actor, service.RevokeInput{
+		ID: id.String(), AllowCurrent: r.PostForm.Get("current") == "yes",
+	})
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	if tok.ID == actor.TokenID {
+		http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
+		http.Redirect(w, r, "/ui/login?expired=1", http.StatusSeeOther)
+		return
+	}
+	if already {
+		http.Redirect(w, r, "/ui/settings?already=1", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/ui/settings?revoked="+tok.ID.String(), http.StatusSeeOther)
 }
 
 // ---------- helpers ----------
