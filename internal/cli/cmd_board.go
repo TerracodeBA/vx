@@ -526,6 +526,10 @@ separately, so their changes do not show up in vx sync.`,
 			for _, o := range m.OtherEfforts {
 				a.markRead(ctx, c, o.Notes...)
 			}
+			if ov := notClean(m.Overlaps); len(ov) > 0 && !a.jsonOut {
+				a.printf("\nOverlaps with other efforts (details: vx overlaps):\n")
+				printOverlaps(a.Out, ov)
+			}
 			a.emit(m)
 			return nil
 		},

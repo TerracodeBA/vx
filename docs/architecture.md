@@ -122,6 +122,28 @@ Every step that changes the rebase row is a compare-and-swap on its version. A c
 3. Write one git commit per change: the intent as the message, provenance trailers (`Vx-Change-Id`, `Vx-Agent`, `Vx-On-Behalf-Of`, `Vx-Model`, `Vx-Evidence`, and for rebased changes `Vx-Rebased-Onto` and `Vx-Resolved-By`), the person as author.
 4. Push to `vx/<effort>` (the bridge refuses any other branch) and open or update the pull request.
 
+## Overlap forecast
+
+Efforts ship separately, so two of them can change the same code, or each add migration 008, without anyone knowing until the second one ships (#26). The forecast (`internal/service/overlaps.go`) answers, for every pair of open efforts of a repository with the same base branch: what happens when both ship?
+
+1. For each effort, the paths changed from its base tree to its head tree. Shared files are the paths both changed.
+2. No shared file and no directory in common: the pair is `clean`, stored without a simulation.
+3. Otherwise simulate: the effort whose first change landed earlier is replayed onto the branch head with the replay of shipping (`replayChain`, the loop `PlanShipment` uses, here with `MergeTreesKeepConflicts` so it goes on past a conflict). If that effort alone conflicts with the branch (it needs a rebase anyway), its own head tree stands in. The other effort's net change (its base tree to its head tree) is then three-way merged onto the result. Conflicts are the shared files that do not merge.
+4. On the combined tree, `engine.CheckGo` and `CheckRules` (with the `vx.toml` of the combined tree, against the branch head's tree) run over the union of both efforts' changed paths. Only warnings that involve a file of each effort are kept: a duplicate declared in a file of each, two migrations with one number, one from each. The pair is `conflict` with conflicts, `overlap` with shared files or warnings, `clean` otherwise.
+5. The result is stored in `effort_overlaps` (one row per ordered pair) with both effort heads and the branch head it was computed on. When none of the three moved since, the pair is skipped.
+6. When status, conflicts or warnings differ from the stored row (shared files alone do not count), vx posts a note of kind `overlap` on both boards, authored by the `vx` service principal and marked `system`, on the shared files, superseding the pair's previous note on that board (`a_note`, `b_note`). A pair that turns clean gets one `Resolved:` note; clean after clean posts nothing. Writing the row and the notes holds a transaction-scoped advisory lock on the pair and re-reads the row, so concurrent runs, also on other servers, post once.
+
+Triggers: every successful land queues a forecast of its effort, after the land transaction, in a background goroutine per repository that coalesces requests and is bounded by `ForecastTimeout` (default 2 minutes); errors are logged and never reach the land. A branch sync that imported commits (`vx repo sync`, shipping's sync, a GitHub push webhook) queues every open effort on that branch, and a finished rebase queues its effort. `ListOverlaps` recomputes stale pairs of the effort it is asked about first, within 20 seconds, and otherwise returns what is stored; the land response, `Context` and the web UI only read what is stored. On shutdown the server waits for running forecasts within its grace period.
+
+Limits:
+
+- The second effort is merged as one net change, not change by change: intermediate history that a later change undid is not reported, though shipping in that order may still stop at it (`vx effort rebase` resolves it).
+- Only pairs are simulated. Three efforts that each merge pairwise but not all together are not detected, and the order is fixed (first land first); the other order can differ for keep-both insertions.
+- Efforts with different base branches are never compared; closed efforts drop out.
+- Directory sharing decides whether a pair without shared files is simulated, so a rule glob that spans directories can be missed when the efforts touch no common directory.
+- A run that hits its timeout leaves the remaining pairs stale until the next land, branch move or `ListOverlaps`.
+- Merged trees and conflict-marker blobs the simulation makes are written to the blob store but never recorded as part of the repository.
+
 ## Code layout
 
 | Package | Responsibility |

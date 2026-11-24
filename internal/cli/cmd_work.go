@@ -270,6 +270,9 @@ func (a *App) statusCmd() *cobra.Command {
 						out["warnings"] = warned
 					}
 				}
+				if ov := a.overlapStatus(ctx, c, wc.Config.Repo, wc.Config.Effort); ov != nil {
+					out["overlaps"] = ov
+				}
 			}
 			var files []map[string]string
 			if len(changes) == 0 {

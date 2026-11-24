@@ -433,6 +433,9 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 	if out.OtherEfforts, err = s.otherEfforts(ctx, v, targets, c); err != nil {
 		return NoteContext{}, err
 	}
+	if out.Overlaps, err = s.contextOverlaps(ctx, v.Repo, v.Effort.ID, targets); err != nil {
+		return NoteContext{}, err
+	}
 	return out, nil
 }
 

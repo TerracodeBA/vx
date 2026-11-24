@@ -162,6 +162,24 @@ vx land --run "go test ./..."</pre></div>
     </div>
     {{end}}
 
+    {{if .Overlaps}}
+    <div class="panel" id="overlaps">
+      <div class="panel-head"><h2>Overlaps with other efforts</h2><span class="muted small">forecast</span></div>
+      <p class="panel-note muted small">What happens when this effort and another open effort both ship onto {{.Effort.BaseBranch}}.</p>
+      <ul class="rows overlaps">
+      {{range .Overlaps}}
+        <li class="overlap overlap-{{.Status}}">
+          <div><span class="badge badge-{{if eq .Status "conflict"}}conflict{{else}}overlap{{end}}">{{.Status}}</span> <a href="/ui/effort?repo={{.RepoName}}&amp;slug={{.Other.Slug}}">{{.Other.Name}}</a> <span class="muted small">{{principal .OtherOwner.Ref}}</span></div>
+          {{if .Conflicts}}<div class="small">Conflicts in <span class="mono">{{range $i, $f := .Conflicts}}{{if $i}}, {{end}}{{$f}}{{end}}</span></div>{{end}}
+          {{if .SharedFiles}}<div class="small muted">Both change <span class="mono">{{range $i, $f := .SharedFiles}}{{if $i}}, {{end}}{{$f}}{{end}}</span></div>{{end}}
+          {{range .Warnings}}<div class="small warn-text">{{.Detail}}</div>{{end}}
+          <div class="muted small">checked {{ago .CheckedAt}}</div>
+        </li>
+      {{end}}
+      </ul>
+    </div>
+    {{end}}
+
     <div class="panel">
       <div class="panel-head"><h2>Agents</h2></div>
       {{$max := maxLines .Agents}}

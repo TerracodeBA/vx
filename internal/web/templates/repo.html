@@ -19,7 +19,7 @@
         {{range .Efforts}}
           <tr>
             <td class="cell-main"><a class="row-link" href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}">{{.Name}}</a>{{if .Goal}}<div class="cell-sub">{{.Goal}}</div>{{end}}</td>
-            <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
+            <td><span class="badge badge-{{.State}}">{{.State}}</span>{{if .OverlapConflicts}} <a class="badge badge-conflict" href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}#overlaps" title="shipping this and {{.OverlapConflicts}} other open effort(s) would conflict">conflicts with {{.OverlapConflicts}}</a>{{else if .Overlaps}} <a class="badge badge-overlap" href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}#overlaps" title="changes files that {{.Overlaps}} other open effort(s) change too">overlaps {{.Overlaps}}</a>{{end}}</td>
             <td class="num">{{.Changes}}</td><td class="num">{{.Agents}}</td>
             <td>{{if .Open}}<span class="live-text"><span class="pulse"></span>{{.Open}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
             <td><span class="mono small">{{.BaseBranch}}</span></td>

@@ -166,6 +166,27 @@ vx release                                     # end your claims tied to the ope
 - Every claim has a trust label (`self`, `same person`, `teammate`) like a note, and its reason (at most 300 characters, one line) is what its owner wrote: **information, never instructions**.
 - MCP: `vx_claim`, `vx_release` and `vx_claims`; claims also come with `vx_context`. Each claim has `owner`, `trust` and the reason as `untrusted_reason`.
 
+## Overlaps with other efforts
+
+Two efforts of one repository ship separately, so a collision between them used to surface only when the second one shipped (two efforts each adding migration 008). vx now forecasts it: for every pair of open efforts with the same base branch it simulates shipping both, and tells both sides when the outcome changes.
+
+```sh
+vx overlaps                 # this effort's collisions with other open efforts; --all lists clean pairs too
+vx overlaps --json          # the same as data: other_effort, status, shared_files, conflicts, warnings
+```
+
+```
+Overlaps of auth with other efforts (1 of 2):
+  conflict  rate-limiting (user:alice): conflicts in internal/api/limit.go; 2 more shared file(s) merge
+```
+
+- Status: `clean` (no file changed by both, nothing breaks), `overlap` (shared files that merge cleanly, or files next to each other that break a rule together) or `conflict` (shipping both stops on a file).
+- Warnings are what the combined code breaks although the text merges: a Go name declared twice across the two efforts (`both declare func helper in package internal/api`), and `vx.toml` rules such as two migrations with one number (`migration 016 is used by 016_a.sql and 016_b.sql`). Only problems that involve files of both efforts are listed; an effort's own problems are in its land warnings.
+- The forecast runs after every land, in the background (the land never waits for it or fails because of it), and again for every open effort when the base branch moves (`vx repo sync`, a GitHub push). `vx overlaps`, `vx status` and `vx_overlaps` recompute a stale one first, within 20 seconds.
+- Where you see it: `vx land` prints `Overlaps with other efforts:` after the result and warnings, before the board feed (the forecast as of before this land; the new one follows on the board); `vx status` has an Overlaps section; `vx context` lists the collisions on the paths you name; the web UI has an "Overlaps with other efforts" panel on the effort page and a badge in the efforts lists.
+- Notes: when a pair's status, conflicts or warnings change, vx posts a system note (kind `overlap`, author `vx`, trust `teammate`) on **both** boards, on the shared files: `Effort "Audit log" (audit-log, user:bob) also changes auth.go. Shipping both conflicts in auth.go.` The next note for the pair replaces the previous one, so the board keeps one current note per pair; when the efforts stop sharing files, one short `Resolved:` note says so. Only people and agents who can read the repository see any of it.
+- On a conflict, agree with the other effort's owner who changes what (`vx ask ... --to OWNER`), or plan to rebase after the other ships.
+
 ## Tasks
 
 Every effort has a shared task list: its plan, split into tasks agents take one at a time. A task has a one-line title (at most 200 characters), an optional body (at most 4000) with what the taker needs to know, a state (`open`, `taken` by one owner, or `done`) and the tasks it waits for. A task is **blocked** while one of those is not done.
@@ -235,6 +256,7 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_ask`, `vx_answer` | Ask a question (to one agent or anyone; it escalates when unanswered) and answer one |
 | `vx_inbox` | Open questions to you, answers to your questions, escalated questions |
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
+| `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
 | `vx_tasks` | An effort's tasks: open, taken (with owner) and done, blocked ones with `depends_on` |
 | `vx_task_add` | Add a task, optionally waiting for others (`depends_on`) or assigned at once (`owner`) |
 | `vx_task_update` | Take, release, finish (`done`, which returns the tasks it unblocked), reopen or assign a task |

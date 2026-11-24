@@ -368,6 +368,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	}
 	a.printWarnings(r.Warnings)
 	a.printLandedOverClaims(r.OverlappingClaims)
+	a.printOverlaps(r.Overlaps)
 	board := a.landFeed(ctx, c, wc, r) // the board comes last
 	a.emit(protoWithBoard(r, board))
 	a.landResult = fmt.Sprintf("Landed %s (%s): %s", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent))

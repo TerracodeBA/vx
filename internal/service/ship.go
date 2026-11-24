@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/TerracodeBA/vx/internal/engine"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
@@ -89,43 +91,12 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 		return ShipPlan{}, err
 	}
 	plan := ShipPlan{Repo: v.Repo, Effort: v.Effort, Target: target, TargetHead: head, Branch: "vx/" + v.Effort.Slug}
-	cur := head.Tree
-	var generated []engine.GeneratedFile
-	for i := len(chain) - 1; i >= 0; i-- {
-		c := chain[i]
-		if c.Origin != object.OriginVX {
-			continue
-		}
-		parent, err := s.Store.GetChangeset(ctx, v.Repo.ID, c.FirstParent())
-		if err != nil {
-			return ShipPlan{}, err
-		}
-		next := c.Tree
-		if parent.Tree != cur {
-			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur, merge.Labels{Base: "base", Ours: c.ChangeID, Theirs: target},
-				s.mergeOptions(ctx, c.Tree, cur)...)
-			if err != nil {
-				return ShipPlan{}, err
-			}
-			if !mr.Clean() {
-				plan.Conflicts = mr.Conflicts
-				cc := c
-				plan.ConflictedAt = &cc
-				break
-			}
-			if err := s.recordTree(ctx, v.Repo.ID, cur, mr.Tree); err != nil {
-				return ShipPlan{}, err
-			}
-			next = mr.Tree
-			generated = append(generated, mr.Generated...)
-		}
-		changes, err := object.DiffTrees(ctx, s.Blobs, cur, next)
-		if err != nil {
-			return ShipPlan{}, err
-		}
-		plan.Steps = append(plan.Steps, ShipStep{Changeset: c, Tree: next, Files: len(changes), Skipped: len(changes) == 0})
-		cur = next
+	rp, err := s.replayChain(ctx, v.Repo.ID, chain, head.Tree, target, replayShip)
+	if err != nil {
+		return ShipPlan{}, err
 	}
+	plan.Steps, plan.Conflicts, plan.ConflictedAt = rp.Steps, rp.Conflicts, rp.ConflictedAt
+	cur := rp.Tree
 	if len(plan.Steps) == 0 && len(plan.Conflicts) == 0 {
 		return plan, errf(CodeFailedPrecondition, "nothing to ship: effort %s has no landed changes", slug)
 	}
@@ -135,12 +106,101 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 			return ShipPlan{}, err
 		}
 		plan.Warnings = s.treeWarnings(ctx, cur, changes)
-		plan.Warnings = append(plan.Warnings, engine.GeneratedWarnings(uniqueGenerated(generated))...)
+		plan.Warnings = append(plan.Warnings, engine.GeneratedWarnings(uniqueGenerated(rp.Generated))...)
 		plan.Warnings = append(plan.Warnings, s.ruleWarnings(ctx, head.Tree, cur)...)
 	}
 	plan.Title = v.Effort.Name
 	plan.Body = prBody(plan)
 	return plan, nil
+}
+
+// replayMode says what replayChain does at a conflict.
+type replayMode int
+
+const (
+	// replayShip stops at the first conflicting change and records the
+	// merged trees as part of the repository, as shipping needs.
+	replayShip replayMode = iota
+	// replayForecast keeps going: a conflicting change leaves its file with
+	// conflict markers and the replay goes on, so every conflicting path is
+	// found. Nothing is recorded as part of the repository.
+	replayForecast
+)
+
+// replayResult is the outcome of replaying an effort's changes.
+type replayResult struct {
+	Steps        []ShipStep
+	Tree         hash.Hash // the tree after the last replayed change
+	Conflicts    []engine.Conflict
+	ConflictedAt *store.ChangesetRow    // the first change that conflicted
+	Generated    []engine.GeneratedFile // generated files both sides changed: taken from the change, not merged
+}
+
+// replayChain replays the vx changes of chain (newest first, as Store.Chain
+// returns it), oldest first, onto the tree onto. A change whose parent tree
+// is the current tree takes its own tree; any other change is three-way
+// merged onto the current tree (base: its parent, ours: the change,
+// theirs: the current tree, so keep-both puts the target's lines first),
+// generated files excepted (vx.toml [[generated]]). This is the replay of
+// shipping, and of the overlap forecast.
+func (s *Service) replayChain(ctx context.Context, repoID uuid.UUID, chain []store.ChangesetRow, onto hash.Hash, target string, mode replayMode) (replayResult, error) {
+	res := replayResult{Tree: onto}
+	cur := onto
+	for i := len(chain) - 1; i >= 0; i-- {
+		c := chain[i]
+		if c.Origin != object.OriginVX {
+			continue
+		}
+		parent, err := s.Store.GetChangeset(ctx, repoID, c.FirstParent())
+		if err != nil {
+			return res, err
+		}
+		next := c.Tree
+		if parent.Tree != cur {
+			labels := merge.Labels{Base: "base", Ours: c.ChangeID, Theirs: target}
+			opts := s.mergeOptions(ctx, c.Tree, cur)
+			if mode == replayForecast {
+				mr, err := engine.MergeTreesKeepConflicts(ctx, s.Blobs, parent.Tree, c.Tree, cur, labels, opts...)
+				if err != nil {
+					return res, err
+				}
+				if !mr.Clean() && res.ConflictedAt == nil {
+					cc := c
+					res.ConflictedAt = &cc
+				}
+				res.Conflicts = append(res.Conflicts, mr.Conflicts...)
+				res.Generated = append(res.Generated, mr.Generated...)
+				if mr.Tree.IsZero() { // a path conflict leaves no tree to go on with
+					break
+				}
+				next = mr.Tree
+			} else {
+				mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur, labels, opts...)
+				if err != nil {
+					return res, err
+				}
+				if !mr.Clean() {
+					res.Conflicts = mr.Conflicts
+					cc := c
+					res.ConflictedAt = &cc
+					break
+				}
+				if err := s.recordTree(ctx, repoID, cur, mr.Tree); err != nil {
+					return res, err
+				}
+				next = mr.Tree
+				res.Generated = append(res.Generated, mr.Generated...)
+			}
+		}
+		changes, err := object.DiffTrees(ctx, s.Blobs, cur, next)
+		if err != nil {
+			return res, err
+		}
+		res.Steps = append(res.Steps, ShipStep{Changeset: c, Tree: next, Files: len(changes), Skipped: len(changes) == 0})
+		cur = next
+	}
+	res.Tree = cur
+	return res, nil
 }
 
 // ShipInput controls OpenShipment.

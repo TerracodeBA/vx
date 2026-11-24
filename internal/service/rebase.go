@@ -449,9 +449,14 @@ func (s *Service) stopRebase(ctx context.Context, actor Actor, repo store.Repo, 
 
 // finishRebase moves the effort onto the rebased chain and marks the
 // rebase done, both with a compare-and-swap, in one transaction.
-func (s *Service) finishRebase(ctx context.Context, actor Actor, repo store.Repo, eff store.Effort, r store.Rebase) error {
+func (s *Service) finishRebase(ctx context.Context, actor Actor, repo store.Repo, eff store.Effort, r store.Rebase) (err error) {
 	seen := r.Version
 	r.State, r.Conflicts, r.UpdatedBy = store.RebaseDone, nil, actor.ID
+	defer func() {
+		if err == nil {
+			s.scheduleForecast(repo, eff.ID)
+		}
+	}()
 	return s.Store.InTx(ctx, func(tx *store.Tx) error {
 		ok, err := tx.UpdateRebase(ctx, r, seen)
 		if err != nil {

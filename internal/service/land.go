@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -53,6 +54,10 @@ type LandResult struct {
 	// KeptBoth lists paths where both sides inserted different lines at the
 	// same place and the merge kept both; worth a look.
 	KeptBoth []string
+	// Overlaps are the effort's stored forecasts with other open efforts.
+	// The forecast for this land runs after it, in the background, so they
+	// may still describe the effort before this land.
+	Overlaps []Overlap
 }
 
 // ErrNothingToLand is returned when a snapshot has no changes.
@@ -102,6 +107,15 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 		res, err := s.landOnce(ctx, actor, v, base, in, intent)
 		if errors.Is(err, errLostRace) {
 			continue
+		}
+		if err == nil && res.Landed {
+			// Never slows or fails the land: the stored forecasts are read
+			// as they are and the new forecast runs in the background.
+			if res.Overlaps, err = s.storedOverlaps(ctx, v.Repo, v.Effort.ID); err != nil {
+				slog.Warn("overlaps after land", "repo", v.Repo.Name, "effort", v.Effort.Slug, "err", err)
+				res.Overlaps, err = nil, nil
+			}
+			s.scheduleForecast(v.Repo, v.Effort.ID)
 		}
 		return res, err
 	}

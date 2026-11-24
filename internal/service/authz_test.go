@@ -162,6 +162,22 @@ var authzOps = []authzOp{
 		_, err := e.svc.Context(e.ctx, a, "acme/shop", e.eff.Slug, []string{"cart.go"})
 		return err
 	}},
+	{"ListOverlaps", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListOverlaps(e.ctx, a, "acme/shop", e.eff.Slug)
+		return err
+	}},
+	{"ListOverlapsRepo", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListOverlaps(e.ctx, a, "acme/shop", "")
+		return err
+	}},
+	{"EffortOverlaps", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.EffortOverlaps(e.ctx, a, "acme/shop", e.eff.Slug)
+		return err
+	}},
+	{"OverlapCounts", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.OverlapCounts(e.ctx, a, "acme/shop")
+		return err
+	}},
 	{"GetNote", service.RoleRead, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.GetNote(e.ctx, a, e.question.ID.String())
 		return err

@@ -78,20 +78,6 @@ func (s *Service) CheckRules(ctx context.Context, r Rules, base, tree hash.Hash)
 	return rules.Check(ctx, s.Blobs, r, base, tree)
 }
 
-// ForecastOverlaps recomputes the forecast between effort and every other
-// open effort of its repository, and posts or updates overlap notes on
-// both boards when something changed. Called after every land and when the
-// base branch moves; it never fails a land (errors are logged).
-func (s *Service) ForecastOverlaps(ctx context.Context, repo store.Repo, effortID uuid.UUID) error {
-	return nil
-}
-
-// ListOverlaps returns the stored forecasts of an effort (read), or of every
-// pair in the repository when effort is empty.
-func (s *Service) ListOverlaps(ctx context.Context, actor Actor, repo, effort string) ([]Overlap, error) {
-	return nil, v03NotImplemented()
-}
-
 // Reserve hands out the next free value of a unique rule (write).
 func (s *Service) Reserve(ctx context.Context, actor Actor, repo, effort, rule string) (value, example string, err error) {
 	return "", "", v03NotImplemented()
