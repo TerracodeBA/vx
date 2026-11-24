@@ -35,6 +35,8 @@ func (u *UI) mountAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("POST /ui/repos/{path...}", u.auth(u.admin(u.accessPost)))
 	mux.HandleFunc("GET /ui/admin/people", u.auth(u.peoplePage))
 	mux.HandleFunc("POST /ui/admin/people", u.auth(u.admin(u.personCreatePost)))
+	mux.HandleFunc("POST /ui/admin/invites", u.auth(u.admin(u.invitePost)))
+	mux.HandleFunc("POST /ui/admin/invites/withdraw", u.auth(u.admin(u.inviteWithdrawPost)))
 }
 
 // admin wraps every admin form handler: the form must come from this site
@@ -115,6 +117,8 @@ var okMessages = map[string]string{
 	"team-removed":   "Team member removed.",
 	"granted":        "Access granted.",
 	"revoked":        "Access revoked.",
+	"invited":        "Invite saved. They can sign in with GitHub now.",
+	"uninvited":      "Invite withdrawn.",
 }
 
 func flashFrom(r *http.Request) flash { return flash{OK: okMessages[r.URL.Query().Get("ok")]} }
@@ -474,6 +478,7 @@ func grantSubject(kind, name, org string) (string, error) {
 
 type personRow struct {
 	store.Principal
+	GitHub string // GitHub login, when linked
 	Agents int
 	Orgs   []string // "acme (owner)"; personal organizations left out
 }
@@ -483,7 +488,7 @@ func (u *UI) peoplePage(w http.ResponseWriter, r *http.Request, actor service.Ac
 		http.NotFound(w, r)
 		return
 	}
-	u.renderPeople(w, r, actor, flash{}, nil)
+	u.renderPeople(w, r, actor, flashFrom(r), nil)
 }
 
 func (u *UI) renderPeople(w http.ResponseWriter, r *http.Request, actor service.Actor, f flash, form url.Values) {
@@ -528,6 +533,7 @@ func (u *UI) renderPeople(w http.ResponseWriter, r *http.Request, actor service.
 	}
 	data["People"], data["Agents"], data["Admins"] = rows, agents, admins
 	data["OrgCount"], data["OrgChoices"] = len(shared), shared
+	u.peopleGitHub(r, actor, rows, data)
 	u.renderStatus(w, r, f.Status, "people", data)
 }
 

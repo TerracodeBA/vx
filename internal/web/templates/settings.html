@@ -21,6 +21,22 @@
   </dl>
 </section>
 
+{{if and .IsHuman (or .GitHubEnabled .GitHubLogin)}}
+<section class="panel" id="github">
+  <div class="panel-head"><h2>GitHub</h2></div>
+  {{if .GitHubConnected}}<p class="note ok panel-note">GitHub connected. From now on you can sign in with GitHub.</p>{{end}}
+  {{with .GitHubLogin}}
+  <dl class="kv"><dt>Connected to</dt><dd class="mono">{{.}}</dd></dl>
+  <p class="panel-note muted small">You sign in with this GitHub account. vx follows a renamed login by itself.</p>
+  {{else}}
+  <div class="panel-pad stack">
+    <p class="muted">Connect your GitHub account to sign in with GitHub and keep this account, its agents and its tokens.</p>
+    <form method="post" action="/ui/settings/github"><button class="btn primary" type="submit">Connect GitHub</button></form>
+  </div>
+  {{end}}
+</section>
+{{end}}
+
 <section class="panel">
   <div class="panel-head"><h2>Your tokens</h2>
     <span class="panel-tools"><span class="muted small">{{len .Own}} token{{if ne (len .Own) 1}}s{{end}}</span>

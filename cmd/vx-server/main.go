@@ -145,6 +145,41 @@ The first person on a new server: vx-server user-add alice --admin --org acme`,
 	userAdd.Flags().BoolVar(&siteAdmin, "admin", false, "make them a site admin")
 	userAdd.Flags().StringVar(&userOrg, "org", "", "add them to this organization (created with them as owner if missing)")
 
+	var inviteNote string
+	var inviteAdmin bool
+	invite := &cobra.Command{
+		Use:   "invite GITHUB_LOGIN",
+		Short: "Let a GitHub user create an account by signing in with GitHub",
+		Long: `Invite a GitHub login while sign-up is invite-only (the default). The person
+then opens the server and chooses Sign in with GitHub; the invite is used up
+on their first sign-in. Site admins can also invite on Admin > People.
+
+--admin makes them a site admin when they sign up: use it for the first admin
+of a new server.
+
+  vx-server invite octocat --note "from the waitlist"`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := openMigrated(cmd.Context(), dbURL)
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			inv, err := service.New(st, nil, nil).InviteGitHubLogin(cmd.Context(), nil, args[0], inviteNote, inviteAdmin)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Invited GitHub user %s.", inv.GitHubLogin)
+			if inv.SiteAdmin {
+				fmt.Print(" They become a site admin when they sign up.")
+			}
+			fmt.Println("\nThey open the server in a browser and choose Sign in with GitHub.")
+			return nil
+		},
+	}
+	invite.Flags().StringVar(&inviteNote, "note", "", "why they are invited, shown to site admins")
+	invite.Flags().BoolVar(&inviteAdmin, "admin", false, "make them a site admin when they sign up")
+
 	tokenCreate := &cobra.Command{
 		Use:   "token-create HANDLE",
 		Short: "Issue another token for a person or agent",
@@ -228,7 +263,7 @@ again even when already indexed). It is safe to run while the server runs.`,
 		Short: "Print the vx-server version",
 		Run:   func(*cobra.Command, []string) { fmt.Println("vx-server " + version.String()) },
 	}
-	cmd.AddCommand(serve, migrate, userAdd, tokenCreate, backfill, versionCmd)
+	cmd.AddCommand(serve, migrate, userAdd, invite, tokenCreate, backfill, versionCmd)
 	return cmd
 }
 

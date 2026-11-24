@@ -41,7 +41,7 @@
     <tbody>
     {{range .People}}
       <tr>
-        <td class="cell-main"><span class="row-link">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Handle}}{{end}}</span><div class="cell-sub mono">{{principal .Ref}}</div></td>
+        <td class="cell-main"><span class="row-link">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Handle}}{{end}}</span><div class="cell-sub mono">{{principal .Ref}}{{with .GitHub}} · GitHub {{.}}{{end}}</div></td>
         <td class="nowrap">{{if eq .Kind "human"}}person{{else}}{{.Kind}}{{end}}<div class="cell-sub">{{if .Agents}}{{.Agents}} agent{{if ne .Agents 1}}s{{end}}{{else}}no agents{{end}}</div></td>
         <td>{{if .SiteAdmin}}<span class="badge badge-owner">site admin</span>{{else}}<span class="muted">no</span>{{end}}</td>
         <td>{{if .Orgs}}<span class="chips">{{range .Orgs}}<span class="chip chip-plain">{{.}}</span>{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
@@ -72,5 +72,42 @@
   <p class="panel-note muted small">Agents cannot add people; sign in as the person to do that.</p>
   {{end}}
 </section>
+
+{{if or .GitHubEnabled .Invites}}
+<section class="panel" id="invites">
+  <div class="panel-head"><h2>Invites</h2><span class="muted small">{{if eq .Signup "invite"}}sign-up is invite-only{{else if eq .Signup "open"}}sign-up is open to everyone with GitHub{{else}}sign-up is closed{{end}}</span></div>
+  <p class="panel-note muted small">An invited GitHub login can create an account by signing in with GitHub. The invite is used up on their first sign-in.</p>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>GitHub login</th><th>Note</th><th>Invited</th><th></th></tr></thead>
+    <tbody>
+    {{range .Invites}}
+      <tr>
+        <td class="cell-main mono">{{.GitHubLogin}}{{if .SiteAdmin}} <span class="badge badge-owner">site admin</span>{{end}}</td>
+        <td class="small">{{if .Note}}{{.Note}}{{else}}<span class="muted">none</span>{{end}}</td>
+        <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+        <td class="num">{{if $.IsHuman}}<form method="post" action="/ui/admin/invites/withdraw" class="inline-form">
+          <input type="hidden" name="login" value="{{.GitHubLogin}}">
+          <button class="btn ghost small-btn" type="submit">Withdraw</button>
+        </form>{{end}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="4" class="muted">No open invites.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .IsHuman}}
+  <form method="post" action="/ui/admin/invites" class="admin-form">
+    <div class="field"><label for="i-login">Invite by GitHub login</label>
+      <input id="i-login" name="login" type="text" required maxlength="60" autocomplete="off" placeholder="octocat" value="{{.Form.Get "login"}}"></div>
+    <div class="field"><label for="i-note">Note</label>
+      <input id="i-note" name="note" type="text" maxlength="200" autocomplete="off" placeholder="from the waitlist" value="{{.Form.Get "note"}}"></div>
+    <button class="btn primary" type="submit">Invite</button>
+    <p class="field-hint">Then tell them to open this server and choose Sign in with GitHub.</p>
+  </form>
+  {{end}}
+</section>
+{{end}}
 {{end}}
 {{end}}

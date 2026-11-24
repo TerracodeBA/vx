@@ -2,15 +2,21 @@
 <section class="login-card">
   <div class="brand brand-lg"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></div>
   <h1>Sign in</h1>
-  <p class="muted">Easiest: run <code>vx ui</code> in a terminal where vx is logged in. It opens this page already signed in.</p>
-  <p class="muted">Paste a vx token. People get one from <code>vx-server user-add</code> or <code>vx token create</code>, agents from <code>vx agent add</code>.</p>
   {{if .Expired}}<p class="note warn">Your session ended. Sign in again.</p>{{end}}
   {{if .Error}}<p class="note bad">{{.Error}}</p>{{end}}
+  {{if .GitHub}}
+  <a class="btn primary block btn-github" href="/ui/login/github{{with .Next}}?next={{.}}{{end}}">Sign in with GitHub</a>
+  {{if eq .Signup "open"}}<p class="muted small">New here? Signing in with GitHub creates your account. No token needed.</p>
+  {{else if eq .Signup "invite"}}<p class="muted small">New here? A site admin invites your GitHub login first; then sign in with GitHub. No token needed.</p>{{end}}
+  <div class="login-or">or with a token</div>
+  {{end}}
+  <p class="muted">Easiest: run <code>vx ui</code> in a terminal where vx is logged in. It opens this page already signed in.</p>
+  <p class="muted">Paste a vx token. People get one from <code>vx-server user-add</code> or <code>vx token create</code>, agents from <code>vx agent add</code>.</p>
   <form method="post" action="/ui/login" class="stack">
     <label for="token">Token</label>
-    <input id="token" name="token" type="password" autocomplete="off" placeholder="vxt_..." required autofocus>
+    <input id="token" name="token" type="password" autocomplete="off" placeholder="vxt_..." required{{if not .GitHub}} autofocus{{end}}>
     <input type="hidden" name="next" value="{{.Next}}">
-    <button class="btn primary block" type="submit">Sign in</button>
+    <button class="btn {{if .GitHub}}ghost{{else}}primary{{end}} block" type="submit">Sign in{{if .GitHub}} with token{{end}}</button>
   </form>
 </section>
 {{end}}
