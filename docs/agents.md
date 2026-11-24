@@ -51,6 +51,12 @@ When an agent lands without `--run` and others landed first, the server merges t
 
 `--require-up-to-date` refuses to land if anyone landed since the last sync.
 
+## When an effort is finished
+
+vx marks an effort **merged** by itself once its target branch contains every change it shipped: after `vx repo sync`, a GitHub push, or a merged pull request (with the vx GitHub App; that also covers squash merges). Commits carry a `Vx-Change-Id` trailer, so rebase and merge commits on the git host are recognised. A merged effort keeps its history and board but takes no new workspaces or lands, and lists, context and overlap forecasts leave it out.
+
+For hosts vx does not hear from, or work that will not ship: `vx effort close --merged` or `vx effort close --abandon`. `vx effort list` hides finished efforts (`--all` shows them); so does the web UI's All efforts page.
+
 ## Conflicts
 
 - Exit code 2 from `vx land` or `vx sync` means conflicts.

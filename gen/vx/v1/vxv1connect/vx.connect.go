@@ -93,6 +93,9 @@ const (
 	// EffortServiceListEffortsProcedure is the fully-qualified name of the EffortService's ListEfforts
 	// RPC.
 	EffortServiceListEffortsProcedure = "/vx.v1.EffortService/ListEfforts"
+	// EffortServiceCloseEffortProcedure is the fully-qualified name of the EffortService's CloseEffort
+	// RPC.
+	EffortServiceCloseEffortProcedure = "/vx.v1.EffortService/CloseEffort"
 	// EffortServiceListOverlapsProcedure is the fully-qualified name of the EffortService's
 	// ListOverlaps RPC.
 	EffortServiceListOverlapsProcedure = "/vx.v1.EffortService/ListOverlaps"
@@ -747,6 +750,9 @@ type EffortServiceClient interface {
 	CreateEffort(context.Context, *connect.Request[v1.CreateEffortRequest]) (*connect.Response[v1.CreateEffortResponse], error)
 	GetEffort(context.Context, *connect.Request[v1.GetEffortRequest]) (*connect.Response[v1.GetEffortResponse], error)
 	ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error)
+	// CloseEffort marks an effort merged or abandoned. vx also marks efforts
+	// merged by itself once their target branch contains every change.
+	CloseEffort(context.Context, *connect.Request[v1.CloseEffortRequest]) (*connect.Response[v1.CloseEffortResponse], error)
 	// ListOverlaps returns the forecast collisions of an effort with the
 	// repository's other open efforts.
 	ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error)
@@ -793,6 +799,12 @@ func NewEffortServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+EffortServiceListEffortsProcedure,
 			connect.WithSchema(effortServiceMethods.ByName("ListEfforts")),
+			connect.WithClientOptions(opts...),
+		),
+		closeEffort: connect.NewClient[v1.CloseEffortRequest, v1.CloseEffortResponse](
+			httpClient,
+			baseURL+EffortServiceCloseEffortProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("CloseEffort")),
 			connect.WithClientOptions(opts...),
 		),
 		listOverlaps: connect.NewClient[v1.ListOverlapsRequest, v1.ListOverlapsResponse](
@@ -845,6 +857,7 @@ type effortServiceClient struct {
 	createEffort   *connect.Client[v1.CreateEffortRequest, v1.CreateEffortResponse]
 	getEffort      *connect.Client[v1.GetEffortRequest, v1.GetEffortResponse]
 	listEfforts    *connect.Client[v1.ListEffortsRequest, v1.ListEffortsResponse]
+	closeEffort    *connect.Client[v1.CloseEffortRequest, v1.CloseEffortResponse]
 	listOverlaps   *connect.Client[v1.ListOverlapsRequest, v1.ListOverlapsResponse]
 	log            *connect.Client[v1.LogRequest, v1.LogResponse]
 	getChangeset   *connect.Client[v1.GetChangesetRequest, v1.GetChangesetResponse]
@@ -867,6 +880,11 @@ func (c *effortServiceClient) GetEffort(ctx context.Context, req *connect.Reques
 // ListEfforts calls vx.v1.EffortService.ListEfforts.
 func (c *effortServiceClient) ListEfforts(ctx context.Context, req *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error) {
 	return c.listEfforts.CallUnary(ctx, req)
+}
+
+// CloseEffort calls vx.v1.EffortService.CloseEffort.
+func (c *effortServiceClient) CloseEffort(ctx context.Context, req *connect.Request[v1.CloseEffortRequest]) (*connect.Response[v1.CloseEffortResponse], error) {
+	return c.closeEffort.CallUnary(ctx, req)
 }
 
 // ListOverlaps calls vx.v1.EffortService.ListOverlaps.
@@ -909,6 +927,9 @@ type EffortServiceHandler interface {
 	CreateEffort(context.Context, *connect.Request[v1.CreateEffortRequest]) (*connect.Response[v1.CreateEffortResponse], error)
 	GetEffort(context.Context, *connect.Request[v1.GetEffortRequest]) (*connect.Response[v1.GetEffortResponse], error)
 	ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error)
+	// CloseEffort marks an effort merged or abandoned. vx also marks efforts
+	// merged by itself once their target branch contains every change.
+	CloseEffort(context.Context, *connect.Request[v1.CloseEffortRequest]) (*connect.Response[v1.CloseEffortResponse], error)
 	// ListOverlaps returns the forecast collisions of an effort with the
 	// repository's other open efforts.
 	ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error)
@@ -951,6 +972,12 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 		EffortServiceListEffortsProcedure,
 		svc.ListEfforts,
 		connect.WithSchema(effortServiceMethods.ByName("ListEfforts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effortServiceCloseEffortHandler := connect.NewUnaryHandler(
+		EffortServiceCloseEffortProcedure,
+		svc.CloseEffort,
+		connect.WithSchema(effortServiceMethods.ByName("CloseEffort")),
 		connect.WithHandlerOptions(opts...),
 	)
 	effortServiceListOverlapsHandler := connect.NewUnaryHandler(
@@ -1003,6 +1030,8 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 			effortServiceGetEffortHandler.ServeHTTP(w, r)
 		case EffortServiceListEffortsProcedure:
 			effortServiceListEffortsHandler.ServeHTTP(w, r)
+		case EffortServiceCloseEffortProcedure:
+			effortServiceCloseEffortHandler.ServeHTTP(w, r)
 		case EffortServiceListOverlapsProcedure:
 			effortServiceListOverlapsHandler.ServeHTTP(w, r)
 		case EffortServiceLogProcedure:
@@ -1036,6 +1065,10 @@ func (UnimplementedEffortServiceHandler) GetEffort(context.Context, *connect.Req
 
 func (UnimplementedEffortServiceHandler) ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.ListEfforts is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) CloseEffort(context.Context, *connect.Request[v1.CloseEffortRequest]) (*connect.Response[v1.CloseEffortResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.CloseEffort is not implemented"))
 }
 
 func (UnimplementedEffortServiceHandler) ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error) {
