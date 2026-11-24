@@ -320,7 +320,8 @@ func TestRepoObjectsMigrationBackfillsOldRepos(t *testing.T) {
 	old := service.New(st, blobs, nil)
 	// The old schema is written with store calls only: today's service
 	// reads columns (GitHub links, migration 011) that version 9 lacks.
-	// Alice is a site admin, so she reads the repository in "default".
+	// Alice is a site admin from before superadmins; that gives her no
+	// role, so she is made an owner of "default" after the migration.
 	alice, err := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "alice", DisplayName: "Alice", SiteAdmin: true})
 	if err != nil {
 		t.Fatal(err)
@@ -364,6 +365,13 @@ func TestRepoObjectsMigrationBackfillsOldRepos(t *testing.T) {
 	}
 	if pending, err := st.ObjectBackfillPending(ctx, repo.ID); err != nil || !pending {
 		t.Fatalf("migration should queue the old repo: %v %v", pending, err)
+	}
+	legacy, err := st.RepoByName(ctx, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetOrgMember(ctx, legacy.OrgID, alice.ID, "owner"); err != nil {
+		t.Fatal(err)
 	}
 	svc := service.New(st, blobs, nil)
 	trees, files, _ := object.NewObjects(ctx, blobs, hash.Zero, tree)

@@ -7,7 +7,7 @@
   {{if .GitHub}}
   <a class="btn primary block btn-github" href="/ui/login/github{{with .Next}}?next={{.}}{{end}}">Sign in with GitHub</a>
   {{if eq .Signup "open"}}<p class="muted small">New here? Signing in with GitHub creates your account. No token needed.</p>
-  {{else if eq .Signup "invite"}}<p class="muted small">New here? A site admin invites your GitHub login first; then sign in with GitHub. No token needed.</p>{{end}}
+  {{else if eq .Signup "invite"}}<p class="muted small">New here? A superadmin invites your GitHub login first; then sign in with GitHub. No token needed.</p>{{end}}
   <div class="login-or">or with a token</div>
   {{end}}
   <p class="muted">Easiest: run <code>vx ui</code> in a terminal where vx is logged in. It opens this page already signed in.</p>

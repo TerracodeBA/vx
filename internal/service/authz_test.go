@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -34,7 +35,8 @@ type authzEnv struct {
 	aliceWS       uuid.UUID // a workspace of alice's agent in the effort
 	question      service.Note
 	n             int
-	rules         bool // acme/shop has a vx.toml with a human policy on db/**
+	rules         bool                // acme/shop has a vx.toml with a human policy on db/**
+	linkRoot      func(service.Actor) // links the superadmin to GitHub, for the GitHub matrix
 }
 
 // pendingReview lands a file under a human landing policy as alice's agent
@@ -380,6 +382,73 @@ func TestAuthzMatrix(t *testing.T) {
 			}
 		}
 	}
+	e.superadminRows(t, "")
+}
+
+// superadminRows is the matrix for root, a superadmin outside both
+// organizations, and root's agent: no access to any repository operation
+// from being a superadmin, then exactly the role of a support grant (read,
+// write) while it lasts, and nothing once it expires or is revoked.
+func (e *authzEnv) superadminRows(t *testing.T, label string) {
+	t.Helper()
+	root, err := e.svc.Store.CreatePrincipal(e.ctx, store.Principal{Kind: store.KindHuman, Handle: "root", SiteAdmin: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootAgent, err := e.svc.Store.CreatePrincipal(e.ctx, store.Principal{Kind: store.KindAgent, Handle: "root/ops", ParentID: &root.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sa, _ := e.svc.ResolveActor(e.ctx, root)
+	saAgent, _ := e.svc.ResolveActor(e.ctx, rootAgent)
+	if e.linkRoot != nil {
+		e.linkRoot(sa)
+	}
+	check := func(role service.RepoRole, when string) {
+		t.Helper()
+		for _, actor := range []service.Actor{sa, saAgent} {
+			for _, op := range authzOps {
+				err := op.run(e, actor)
+				switch {
+				case role == service.RoleNone:
+					if !isCode(err, service.CodeNotFound) {
+						t.Errorf("%s%s by superadmin %s %s: want not found, got %v", label, op.name, actor.Ref(), when, err)
+					}
+				case !role.Includes(op.need):
+					if !isCode(err, service.CodePermission) {
+						t.Errorf("%s%s by superadmin %s %s: want a permission error (needs %s), got %v", label, op.name, actor.Ref(), when, op.need, err)
+					}
+				default:
+					if err != nil {
+						t.Errorf("%s%s by superadmin %s %s: %v", label, op.name, actor.Ref(), when, err)
+					}
+				}
+			}
+		}
+	}
+	check(service.RoleNone, "without a grant")
+	repos, err := e.svc.ListRepos(e.ctx, sa)
+	if err != nil || len(repos) != 0 {
+		t.Errorf("%ssuperadmin lists %+v, %v", label, repos, err)
+	}
+	for _, role := range []service.RepoRole{service.RoleRead, service.RoleWrite} {
+		if _, err := e.svc.GrantSupport(e.ctx, e.alice, service.SupportInput{Repo: "acme/shop", Person: "root", Role: role, For: time.Hour}); err != nil {
+			t.Fatal(err)
+		}
+		check(role, "with "+string(role)+" support access")
+	}
+	// Expired: as if the grant had never been made.
+	clock := e.svc.Now
+	e.svc.Now = func() time.Time { return clock().Add(2 * time.Hour) }
+	check(service.RoleNone, "after the support access expired")
+	e.svc.Now = clock
+	if _, err := e.svc.GrantSupport(e.ctx, e.alice, service.SupportInput{Repo: "acme/shop", Person: "root", For: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.RevokeSupport(e.ctx, e.alice, "acme/shop", "root"); err != nil {
+		t.Fatal(err)
+	}
+	check(service.RoleNone, "after the support access was revoked")
 }
 
 // TestAuthzMatrixGitHub is the matrix on a GitHub-backed repository: bob's
@@ -437,6 +506,11 @@ func TestAuthzMatrixGitHub(t *testing.T) {
 			}
 		}
 	}
+	// The superadmin is a GitHub user outside acme: GitHub gives them
+	// nothing, and support grants count on GitHub-backed repositories.
+	rootGH := gh.AddUser("root")
+	e.linkRoot = func(a service.Actor) { linkGitHub(e.env, a, rootGH) }
+	e.superadminRows(t, "GitHub-backed: ")
 }
 
 // TestAuthzLists checks that lists only show readable repositories, with

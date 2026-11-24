@@ -154,14 +154,14 @@ vx ship open --repo acme/shop-api rate-limiting --draft
 
 ## Signing in
 
-On a server with GitHub sign-in (a site admin set up the GitHub App on Admin > GitHub, and `VX_PUBLIC_URL` is the address people open), people sign in with GitHub. There are no tokens to hand around:
+On a server with GitHub sign-in (a superadmin set up the GitHub App on Admin > GitHub, and `VX_PUBLIC_URL` is the address people open), people sign in with GitHub. There are no tokens to hand around:
 
 1. Open the server (for example https://app.vxbench.com) and choose **Sign in with GitHub**. Approve vx on GitHub. The first time, this creates your vx account: your handle is your GitHub login in lowercase (with `-2`, `-3`... when someone already has it), your email is GitHub's primary verified email, or your GitHub no-reply address when you do not share one.
 2. vx opens **Set up vx** with three steps: install the vx GitHub App on your organization, install the CLI (`curl -fsSL https://app.vxbench.com/install.sh | sh`), and `vx login --server https://app.vxbench.com`, which opens the browser for you to approve. Then, in Claude Code, `/plugin marketplace add TerracodeBA/vx` and `/plugin install vx@vx`. The page stays in the menu until you hide it.
 
 Who may create an account is the server's sign-up mode, `VX_SIGNUP`:
 
-- `invite` (the default): only invited GitHub logins. A site admin invites on **Admin > People > Invite by GitHub login**, or on the server console with `vx-server invite LOGIN --note "why"`. The invite is used up on the first sign-in. The first admin of a new server: `vx-server invite LOGIN --admin`, then sign in with GitHub.
+- `invite` (the default): only invited GitHub logins. A superadmin invites on **Admin > People > Invite by GitHub login**, or on the server console with `vx-server invite LOGIN --note "why"`. The invite is used up on the first sign-in. The first admin of a new server: `vx-server invite LOGIN --admin`, then sign in with GitHub.
 - `open`: anyone with a GitHub account.
 - `closed`: nobody new; people who have an account still sign in.
 

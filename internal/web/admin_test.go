@@ -20,7 +20,7 @@ import (
 )
 
 // adminEnv is a server with an organization acme and a repository in it,
-// and one signed-in browser per person: alice (site admin, owner of
+// and one signed-in browser per person: alice (superadmin, owner of
 // acme), bob (member of acme), carol (in no organization) and alice's
 // agent.
 type adminEnv struct {
@@ -161,7 +161,7 @@ func TestAdminPagesByRole(t *testing.T) {
 		who, path string
 		want      want
 	}{
-		// Everyone gets the Organizations entry; only site admins get Admin.
+		// Everyone gets the Organizations entry; only superadmins get Admin.
 		{"alice", "/ui", want{200, []string{`href="/ui/orgs"`, `href="/ui/admin/people"`}, nil}},
 		{"bob", "/ui", want{200, []string{`href="/ui/orgs"`}, []string{`href="/ui/admin/people"`}}},
 		{"carol", "/ui", want{200, []string{`href="/ui/orgs"`}, []string{`href="/ui/admin/people"`}}},
@@ -187,7 +187,7 @@ func TestAdminPagesByRole(t *testing.T) {
 		{"alice", "/ui/repo?name=acme/shop", want{200, []string{`href="/ui/repos/acme/shop/access"`}, nil}},
 		{"bob", "/ui/repo?name=acme/shop", want{200, nil, []string{"/access"}}},
 
-		{"alice", "/ui/admin/people", want{200, []string{"Add person", "alice", "bob", "carol", "site admin", "acme (owner)", "acme (member)"}, nil}},
+		{"alice", "/ui/admin/people", want{200, []string{"Add person", "alice", "bob", "carol", "superadmin", "acme (owner)", "acme (member)"}, nil}},
 		{"bob", "/ui/admin/people", want{404, nil, []string{"Add person"}}},
 		{"carol", "/ui/admin/people", want{404, nil, []string{"Add person"}}},
 	}

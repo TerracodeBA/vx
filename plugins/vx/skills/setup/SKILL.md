@@ -74,7 +74,7 @@ Ask for the handle (lowercase, e.g. `alice`) and display name. Email is optional
 docker compose exec vx vx-server user-add HANDLE --admin --name "Display Name" --email EMAIL
 ```
 
-`--admin` makes the first person a site admin (admin on every repository). Every person also gets a personal organization named like them, where repositories they create go by default. Add `--org ORG` to also create a shared organization they own.
+`--admin` makes the first person a superadmin (runs the server: people, invites, the GitHub App; no access to repositories from it, so also give them `--org`). Every person also gets a personal organization named like them, where repositories they create go by default. Add `--org ORG` to also create a shared organization they own.
 
 The command prints a token once. Do not repeat it in chat.
 

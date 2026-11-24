@@ -240,14 +240,13 @@ func (q Q) GitHubBackedRepos(ctx context.Context, installations []int64, org *uu
 }
 
 // GitHubAccessFacts is RepoAccessFacts for a GitHub-backed repository:
-// site admins, the roles GitHub reported for people checked since since
-// (via "GitHub"), and direct grants of service principals, by handle.
+// the roles GitHub reported for people checked since since (via "GitHub"),
+// and direct grants of service principals, by handle. Support grants are
+// listed by ListSupportGrants.
 func (q Q) GitHubAccessFacts(ctx context.Context, repo uuid.UUID, since time.Time) ([]AccessFact, error) {
 	cols := prefixed("p", principalCols)
 	rows, err := q.db.Query(ctx, `select * from (
-		select `+cols+`, 'admin' as role, 'site admin' as via from principals p where p.site_admin and p.kind = 'human'
-		union all
-		select `+cols+`, c.role, 'GitHub' from github_role_cache c join principals p on p.id = c.principal_id
+		select `+cols+`, c.role as role, 'GitHub' as via from github_role_cache c join principals p on p.id = c.principal_id
 		where c.repo_id = $1 and c.role <> '' and c.checked_at >= $2
 		union all
 		select `+cols+`, g.role, 'service:' || p.handle from repo_grants g join principals p on p.id = g.person_id
@@ -286,7 +285,8 @@ func (q Q) UpsertGitHubInstallation(ctx context.Context, in GitHubInstallationRo
 
 // DeleteGitHubInstallation forgets an installation (removed from GitHub).
 // Its repositories stay linked to it, so they stay GitHub-backed and nobody
-// but site admins has a role on them until they are linked again.
+// but service principals and support grants has a role on them until they
+// are linked again.
 func (q Q) DeleteGitHubInstallation(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, `delete from github_installations where id = $1`, id)
 	return err

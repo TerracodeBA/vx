@@ -27,7 +27,7 @@ To let vx open pull requests on GitHub, add `VX_GITHUB_TOKEN=...` to `.env`: a f
 With a GitHub App, people sign in with GitHub, roles on installed repositories come from GitHub, and webhooks keep repositories, renames and pushes in sync.
 
 1. Set `VX_PUBLIC_URL` (for example `https://vx.example.com`) and `VX_SECRET_KEY` (`openssl rand -hex 32`, once) in `.env`, and restart. `deploy/production/install.sh` does both.
-2. As a site admin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents, pull requests and checks write, commit statuses read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
+2. As a superadmin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents, pull requests and checks write, commit statuses read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
 3. Click **Install the App on GitHub** and pick the organizations and repositories. They show up in vx at once; their roles come from GitHub.
 
 The App subscribes to these webhook events: repository, member, membership, organization, team, team_add, push, pull_request (roles, renames, pushes and merges), and pull_request_review, pull_request_review_comment, issue_comment, check_run, check_suite, status (review comments and CI results reach the agents, see docs/agents.md).
@@ -87,7 +87,7 @@ docker compose exec vx vx-server token-create alice      # another token for an 
 
 `user-add` creates the person, their personal organization (named like them) and a first token.
 
-- `--admin` makes them a site admin: admin on every repository, and allowed to manage people and every organization. Make the first person one.
+- `--admin` makes them a superadmin: they run the server (people, invites, the GitHub App, server settings, the operation log's metadata) but have no role on any repository from it. Make the first person one, and give them `--org` too so they own the team's organization and its repositories.
 - Later, without SQL: `vx-server superadmin grant HANDLE`, `vx-server superadmin revoke HANDLE` and `vx-server superadmin list` (each change goes to the operation log as `person.superadmin_grant` or `person.superadmin_revoke`, from the console).
 - `--org ORG` adds them to an organization as a member. When the organization does not exist yet, it is created with them as its owner, which is how the first person sets up the team's organization.
 
@@ -163,7 +163,7 @@ Database migrations run when `vx-server` starts. Back up before upgrading.
 
 ### Upgrading to v0.2
 
-v0.2 adds organizations and repository roles. The migration keeps everyone's access as it was: each owner part of existing repository names becomes an organization (repositories without one go to `default`), every existing person becomes an owner of all of them, and every existing person becomes a site admin. Prune afterwards, signed in as someone who stays a site admin:
+v0.2 adds organizations and repository roles. The migration keeps everyone's access as it was: each owner part of existing repository names becomes an organization (repositories without one go to `default`), every existing person becomes an owner of all of them, and every existing person becomes a site admin (since v0.5 a superadmin: see below). Prune afterwards, signed in as someone who stays a superadmin:
 
 ```sh
 vx org list --all                              # what the upgrade created
@@ -174,11 +174,26 @@ vx org set-default acme none                   # if members should not see every
 vx repo grant acme/api team:acme/backend --role write
 ```
 
-Site admin is a flag on the person. Until the admin pages cover it, take it away for everyone except the real admins in Postgres:
+Superadmin (the `site_admin` column) is a flag on the person. Take it away for everyone except the people who run the server, on the console (`vx-server superadmin revoke HANDLE`) or in Postgres:
 
 ```sh
 docker compose exec -T postgres psql -U vx vx -c "update principals set site_admin = false where handle not in ('alice')"
 ```
+
+### Upgrading to v0.5: superadmins
+
+Until v0.5 a site admin was admin on every repository on the server. From v0.5 the flag means **superadmin**: someone who runs the server (Admin, People and GitHub; invites and the sign-up mode; server settings; the operation log's metadata) and has **no role on any repository** from it. To a superadmin, a repository they have no role on is "not found" in the CLI, the API, the web UI and MCP, like to anyone else. See [organizations.md](organizations.md#superadmins-and-support-access).
+
+The upgrade (migration 029) keeps the flag: everyone who was a site admin can still use the admin panel. The old "admin everywhere" access is not carried over. What a site admin could do only because of the flag stops working at once: reading repositories of organizations they are not in, managing organizations they do not own or administer, creating repositories there.
+
+Upgrading from v0.1 made every existing person both an owner of every organization and a site admin (migrations 009 and 010), so most people keep their access through organization ownership. Check before and after:
+
+1. **The notice.** When a server with site admins starts on v0.5 for the first time, it logs once: `upgrade notice: Site admins are now superadmins: ... no longer have access to repositories. Grant support access per repository if needed ...`. Admin, People and Admin, GitHub show the same as a banner ("site admins no longer have access to repositories; grant support access per repository if needed") until a superadmin clicks **Mark as reviewed** (recorded in the operation log as `server.notice.resolve`). A new server, without site admins when the migration runs, gets neither.
+2. **Who relied on it.** Each superadmin runs `vx repo list` and `vx org list`. A repository they need and no longer see needs an ordinary role from its organization's owners (`vx org member ORG HANDLE --role member`, `vx repo grant REPO user:HANDLE --role write`), or, for an operator helping a customer, support access.
+3. **Support access.** A repository's admins give a superadmin read or write on that one repository for a limited time: `vx repo support REPO HANDLE --role read --for 24h --reason "why"`, or **Support access** on the repository's access page. It ends by itself (at most 30 days), shows as "operator (support access) until DATE", is in the operation log, and the admins end it with `--revoke` or End now.
+4. **Fewer superadmins.** Keep only the people who run the server: `vx-server superadmin revoke HANDLE` on the console (or the SQL above).
+
+Organizations whose only owners were removed or left can no longer be fixed by a superadmin from the web UI. Make someone an owner on the console: `docker compose exec -T postgres psql -U vx vx -c "insert into org_members (org_id, person_id, role) select o.id, p.id, 'owner' from orgs o, principals p where o.handle = 'acme' and p.handle = 'alice' on conflict (org_id, person_id) do update set role = 'owner'"`.
 
 ## Configuration
 
@@ -190,7 +205,7 @@ docker compose exec -T postgres psql -U vx vx -c "update principals set site_adm
 | `VX_GITHUB_TOKEN` | empty | GitHub API and HTTPS git access |
 | `VX_PUBLIC_URL` | empty | This server's public address, like `https://vx.example.com`; needed for the GitHub App (callbacks, webhooks) and the CLI login |
 | `VX_SECRET_KEY` | empty | 32 bytes, 64 hex characters or base64 (`openssl rand -hex 32`); seals the GitHub App's credentials and the tokens and webhook secrets of GitLab, Gitea, Forgejo and Bitbucket repositories at rest. Required once a GitHub App exists: the server does not start without it. Keep it with your backups; never change it |
-| `VX_SIGNUP` | `invite` | Who may create an account by signing in with GitHub: `invite` (logins a site admin invited), `open` (anyone) or `closed` (nobody new) |
+| `VX_SIGNUP` | `invite` | Who may create an account by signing in with GitHub: `invite` (logins a superadmin invited), `open` (anyone) or `closed` (nobody new) |
 | `VX_GITHUB_URL`, `VX_GITHUB_API_URL` | github.com | GitHub Enterprise Server only: `https://HOST` and `https://HOST/api/v3` (set both) |
 | `VX_GITLAB_URL` | `https://gitlab.com` | GitLab address repositories default to (`--gitlab-url` overrides per repository) |
 | `VX_GITLAB_TOKEN` | empty | GitLab token for repositories on `VX_GITLAB_URL` |

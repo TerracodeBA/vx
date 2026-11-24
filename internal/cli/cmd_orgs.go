@@ -48,7 +48,7 @@ personal organization named like them.`,
 	var all bool
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List your organizations (site admins: --all for every one)",
+		Short: "List your organizations (superadmins: --all for every one)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -73,7 +73,7 @@ personal organization named like them.`,
 			return nil
 		},
 	}
-	list.Flags().BoolVar(&all, "all", false, "every organization on the server (site admins)")
+	list.Flags().BoolVar(&all, "all", false, "every organization on the server (superadmins)")
 
 	show := &cobra.Command{
 		Use:   "show ORG",
@@ -383,5 +383,5 @@ func (a *App) repoAccessCmds() []*cobra.Command {
 			return nil
 		},
 	}
-	return []*cobra.Command{grant, revoke, access}
+	return []*cobra.Command{grant, revoke, access, a.supportCmd()}
 }

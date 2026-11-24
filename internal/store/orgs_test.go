@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -90,6 +91,44 @@ func TestOrgsMigrationKeepsAccess(t *testing.T) {
 	if _, err := conn.Exec(ctx, `insert into repos (name) values ('x')`); err == nil {
 		t.Error("repos.org_id should be not null")
 	}
+	// Those site admins are superadmins now and have no role from it
+	// (migration 029), so the upgrade opens a review notice.
+	if n, err := s.GetServerNotice(ctx, "superadmin-review"); err != nil || n.LoggedAt != nil || n.ResolvedAt != nil {
+		t.Errorf("superadmin review notice after the upgrade = %+v, %v", n, err)
+	}
+}
+
+// TestSuperadminNoticeOnlyOnUpgrade: a new server (no site admins when
+// migration 029 runs) gets no review notice; logging and resolving a
+// notice happen once.
+func TestSuperadminNoticeOnlyOnUpgrade(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.New(t)
+	if _, err := s.GetServerNotice(ctx, "superadmin-review"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("new server has a review notice: %v", err)
+	}
+	if err := s.AddServerNotice(ctx, "superadmin-review"); err != nil {
+		t.Fatal(err)
+	}
+	if first, err := s.MarkServerNoticeLogged(ctx, "superadmin-review"); err != nil || !first {
+		t.Fatalf("first log = %v %v", first, err)
+	}
+	if first, _ := s.MarkServerNoticeLogged(ctx, "superadmin-review"); first {
+		t.Error("the notice was logged twice")
+	}
+	root, err := s.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "root", SiteAdmin: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if open, err := s.ResolveServerNotice(ctx, "superadmin-review", root.ID); err != nil || !open {
+		t.Fatalf("resolve = %v %v", open, err)
+	}
+	if open, _ := s.ResolveServerNotice(ctx, "superadmin-review", root.ID); open {
+		t.Error("resolved twice")
+	}
+	if n, _ := s.GetServerNotice(ctx, "superadmin-review"); n.ResolvedAt == nil || n.ResolvedBy == nil || *n.ResolvedBy != root.ID {
+		t.Errorf("resolved notice = %+v", n)
+	}
 }
 
 func TestOrgStore(t *testing.T) {
@@ -151,17 +190,17 @@ func TestOrgStore(t *testing.T) {
 	if err != nil || repo.Org != "acme" {
 		t.Fatalf("CreateRepo = %+v, %v", repo, err)
 	}
-	if _, f, err := s.RepoRoleFacts(ctx, "acme/api", bob.ID, false); err != nil || f.OrgRole != "member" || f.DefaultRole != "read" || f.Grant != "" || !f.SiteAdmin {
+	if _, f, err := s.RepoRoleFacts(ctx, "acme/api", bob.ID, false, time.Now()); err != nil || f.OrgRole != "member" || f.DefaultRole != "read" || f.Grant != "" || f.Support != "" {
 		t.Errorf("bob facts = %+v, %v", f, err)
 	}
 	tid := team.ID
 	if _, err := s.SetRepoGrant(ctx, repo.ID, nil, &tid, "write"); err != nil {
 		t.Fatal(err)
 	}
-	if _, f, _ := s.RepoRoleFacts(ctx, "acme/api", bob.ID, false); f.Grant != "write" {
+	if _, f, _ := s.RepoRoleFacts(ctx, "acme/api", bob.ID, false, time.Now()); f.Grant != "write" {
 		t.Errorf("team grant: %+v", f)
 	}
-	if _, f, _ := s.RepoRoleFacts(ctx, "acme/api", bob.ID, true); f.Grant != "" || f.OrgRole != "" {
+	if _, f, _ := s.RepoRoleFacts(ctx, "acme/api", bob.ID, true, time.Now()); f.Grant != "" || f.OrgRole != "" {
 		t.Errorf("direct only: %+v", f)
 	}
 	cid := carol.ID
@@ -175,7 +214,7 @@ func TestOrgStore(t *testing.T) {
 	if err != nil || len(grants) != 2 || grants[0].Principal.Handle != "carol" || grants[0].Role != "admin" || grants[1].Team.Name != "backend" {
 		t.Fatalf("grants = %+v, %v", grants, err)
 	}
-	ids, err := s.ReadableRepoIDs(ctx, carol.ID, false)
+	ids, err := s.ReadableRepoIDs(ctx, carol.ID, false, time.Now())
 	if err != nil || len(ids) != 1 || ids[0] != repo.ID {
 		t.Errorf("carol readable = %v, %v", ids, err)
 	}

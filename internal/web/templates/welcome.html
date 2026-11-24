@@ -14,12 +14,12 @@
     {{if .InstallURL}}
     <p><a class="btn primary" href="{{.InstallURL}}" rel="noopener">Install the GitHub App</a></p>
     {{else if .SiteAdmin}}
-    <p class="muted">This server has no GitHub App yet. You are a site admin: create it once for the whole server, then this button installs it.</p>
+    <p class="muted">This server has no GitHub App yet. You are a superadmin: create it once for the whole server, then this button installs it.</p>
     <p><a class="btn primary" href="/ui/admin/github">Set up the GitHub App</a></p>
     {{else if .GitHub}}
-    <p class="note warn">The install link is not available yet. Ask a site admin to check Admin > GitHub.</p>
+    <p class="note warn">The install link is not available yet. Ask a superadmin to check Admin > GitHub.</p>
     {{else}}
-    <p class="note warn">This server has no GitHub App yet. A site admin sets it up on Admin > GitHub.</p>
+    <p class="note warn">This server has no GitHub App yet. A superadmin sets it up on Admin > GitHub.</p>
     {{end}}
     {{if .Installations}}
     <p class="muted small">Installed on:</p>

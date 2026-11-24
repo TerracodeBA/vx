@@ -5,13 +5,16 @@ package service
 //   - Only people manage organizations, teams and grants; agents are
 //     refused, like token creation.
 //   - Any person may create an organization and becomes its owner.
-//   - Owners and admins (and site admins) change an organization, its
-//     members and its teams; only owners make, change or remove owners;
+//   - Owners and admins change an organization, its members and its
+//     teams (superadmins see every organization but change none they do
+//     not own or administer: adding themselves would give them its
+//     repositories); only owners make, change or remove owners;
 //     the last owner cannot be removed or demoted. Anyone may leave an
 //     organization, except its last owner.
 //   - Personal organizations have one member, their person.
-//   - Repository admins grant and revoke roles on the repository.
-//   - Site admins create people and see every person and organization.
+//   - Repository admins grant and revoke roles on the repository, and
+//     support access for superadmins (support.go).
+//   - Superadmins create people and see every person and organization.
 
 import (
 	"context"
@@ -51,19 +54,19 @@ func orgNotFound(handle string) error {
 
 // orgAccess is an organization as seen by the caller.
 type orgAccess struct {
-	org       store.Org
-	role      OrgRole // the caller's role, "" when not a member
-	siteAdmin bool
+	org        store.Org
+	role       OrgRole // the caller's role, "" when not a member
+	superadmin bool    // sees the organization; changes nothing for it
 }
 
 func (a orgAccess) canManage() bool {
-	return a.siteAdmin || a.role == OrgOwner || a.role == OrgAdmin
+	return a.role == OrgOwner || a.role == OrgAdmin
 }
 
-func (a orgAccess) isOwner() bool { return a.siteAdmin || a.role == OrgOwner }
+func (a orgAccess) isOwner() bool { return a.role == OrgOwner }
 
-// loadOrg reads an organization the caller can see (members and site
-// admins; anyone else gets not found), locking it inside transactions.
+// loadOrg reads an organization the caller can see (members and
+// superadmins; anyone else gets not found), locking it inside transactions.
 func (s *Service) loadOrg(ctx context.Context, q *store.Tx, actor Actor, handle string) (orgAccess, error) {
 	handle = strings.ToLower(strings.TrimSpace(handle))
 	var o store.Org
@@ -86,18 +89,22 @@ func (s *Service) loadOrg(ctx context.Context, q *store.Tx, actor Actor, handle 
 	if err != nil {
 		return orgAccess{}, err
 	}
-	a := orgAccess{org: o, role: OrgRole(role), siteAdmin: s.IsSiteAdmin(ctx, actor)}
-	if a.role == "" && !a.siteAdmin {
+	a := orgAccess{org: o, role: OrgRole(role), superadmin: s.IsSuperadmin(ctx, actor)}
+	if a.role == "" && !a.superadmin {
 		return orgAccess{}, orgNotFound(handle)
 	}
 	return a, nil
 }
 
-// manageable is loadOrg for changes: owners, admins and site admins.
+// manageable is loadOrg for changes: owners and admins.
 func (s *Service) manageable(ctx context.Context, q *store.Tx, actor Actor, handle, what string) (orgAccess, error) {
 	a, err := s.loadOrg(ctx, q, actor, handle)
 	if err != nil {
 		return a, err
+	}
+	if !a.canManage() && a.role == "" {
+		return a, errf(CodePermission, "%s needs owner or admin in organization %s; %s is a superadmin, which lets them see organizations but not change them. Ask an owner (%s)",
+			what, a.org.Handle, actor.Human().Ref(), s.orgOwnerRefs(ctx, a.org.ID))
 	}
 	if !a.canManage() {
 		return a, errf(CodePermission, "%s needs owner or admin in organization %s; %s is a %s. Ask an owner (%s)",
@@ -154,11 +161,11 @@ func (s *Service) CreateOrg(ctx context.Context, actor Actor, handle, displayNam
 	return orgFromStore(o), classify(err)
 }
 
-// ListOrgs lists the caller's organizations, or all of them for site admins
-// with all set.
+// ListOrgs lists the caller's organizations, or all of them for
+// superadmins with all set.
 func (s *Service) ListOrgs(ctx context.Context, actor Actor, all bool) ([]Org, []OrgRole, error) {
-	if all && !s.IsSiteAdmin(ctx, actor) {
-		return nil, nil, errf(CodePermission, "only site admins can list every organization; leave out --all to list yours")
+	if all && !s.IsSuperadmin(ctx, actor) {
+		return nil, nil, errf(CodePermission, "only superadmins can list every organization; leave out --all to list yours")
 	}
 	rows, err := s.Store.ListOrgs(ctx, actor.Human().ID, all)
 	if err != nil {
@@ -173,7 +180,7 @@ func (s *Service) ListOrgs(ctx context.Context, actor Actor, all bool) ([]Org, [
 }
 
 // GetOrg returns an organization the caller is a member of (or any, for
-// site admins).
+// superadmins, with only the repositories they can read).
 func (s *Service) GetOrg(ctx context.Context, actor Actor, handle string) (OrgDetail, error) {
 	a, err := s.loadOrg(ctx, nil, actor, handle)
 	if err != nil {
@@ -622,7 +629,12 @@ func (s *Service) RepoAccess(ctx context.Context, actor Actor, repo string) ([]R
 		return nil, nil, err
 	}
 	if r.GitHubBacked() {
-		return s.githubRepoAccess(ctx, r, rows)
+		grants, entries, err := s.githubRepoAccess(ctx, r, rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		entries, err = s.withSupportAccess(ctx, r, entries)
+		return grants, entries, err
 	}
 	var grants []RepoGrant
 	for _, g := range rows {
@@ -652,6 +664,10 @@ func (s *Service) RepoAccess(ctx context.Context, actor Actor, repo string) ([]R
 		e := byID[id]
 		sort.Strings(e.Via)
 		entries = append(entries, *e)
+	}
+	entries, err = s.withSupportAccess(ctx, r, entries)
+	if err != nil {
+		return nil, nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Person.Handle < entries[j].Person.Handle })
 	return grants, entries, nil
@@ -728,23 +744,25 @@ func (s *Service) AddPerson(ctx context.Context, by *store.Principal, n NewPerso
 	return p, token, created, nil
 }
 
-// CreatePerson creates a person with a first token (site admins), optionally
-// as a member of an organization.
+// CreatePerson creates a person with a first token (superadmins),
+// optionally as a member of an organization (a superadmin may add people
+// to any organization: that gives the new person a role, never the
+// superadmin).
 func (s *Service) CreatePerson(ctx context.Context, actor Actor, handle, displayName, email string, siteAdmin bool, org string) (store.Principal, string, error) {
 	if err := peopleOnly(actor, "create people"); err != nil {
 		return store.Principal{}, "", err
 	}
-	if !s.IsSiteAdmin(ctx, actor) {
-		return store.Principal{}, "", errf(CodePermission, "only site admins can create people; %s is not one. Ask a site admin, or run `vx-server user-add` on the server", actor.Ref())
+	if !s.IsSuperadmin(ctx, actor) {
+		return store.Principal{}, "", errf(CodePermission, "only superadmins can create people; %s is not one. Ask a superadmin, or run `vx-server user-add` on the server", actor.Ref())
 	}
 	p, token, _, err := s.AddPerson(ctx, &actor.Principal, NewPerson{Handle: handle, DisplayName: displayName, Email: email, SiteAdmin: siteAdmin, Org: org})
 	return p, token, err
 }
 
-// ListPeople lists every person on the server (site admins).
+// ListPeople lists every person on the server (superadmins).
 func (s *Service) ListPeople(ctx context.Context, actor Actor) ([]store.Principal, error) {
-	if !s.IsSiteAdmin(ctx, actor) {
-		return nil, errf(CodePermission, "only site admins can list everyone on the server; %s is not one", actor.Human().Ref())
+	if !s.IsSuperadmin(ctx, actor) {
+		return nil, errf(CodePermission, "only superadmins can list everyone on the server; %s is not one", actor.Human().Ref())
 	}
 	people, err := s.Store.ListPeople(ctx)
 	return people, classify(err)

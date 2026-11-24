@@ -113,8 +113,8 @@ func root() *cobra.Command {
 		Use:   "user-add HANDLE",
 		Short: "Create a person, their personal organization and a first token",
 		Long: `Create a person and print their first token. Every person gets a personal
-organization named like them. --admin makes them a site admin (may manage
-people and every organization). --org adds them to an organization as a
+organization named like them. --admin makes them a superadmin (runs the
+server: people, invites, the GitHub App; no access to repositories). --org adds them to an organization as a
 member, or creates it with them as owner when it does not exist yet.
 
 The first person on a new server: vx-server user-add alice --admin --org acme`,
@@ -134,7 +134,7 @@ The first person on a new server: vx-server user-add alice --admin --org acme`,
 			}
 			fmt.Printf("Created %s with personal organization %s.\n", p.Ref(), p.Handle)
 			if p.SiteAdmin {
-				fmt.Println("They are a site admin.")
+				fmt.Println("They are a superadmin.")
 			}
 			switch {
 			case createdOrg:
@@ -148,7 +148,7 @@ The first person on a new server: vx-server user-add alice --admin --org acme`,
 	}
 	userAdd.Flags().StringVar(&name, "name", "", "display name, used as git author name")
 	userAdd.Flags().StringVar(&email, "email", "", "email, used as git author email")
-	userAdd.Flags().BoolVar(&siteAdmin, "admin", false, "make them a site admin")
+	userAdd.Flags().BoolVar(&siteAdmin, "admin", false, "make them a superadmin")
 	userAdd.Flags().StringVar(&userOrg, "org", "", "add them to this organization (created with them as owner if missing)")
 
 	var inviteNote string
@@ -158,9 +158,9 @@ The first person on a new server: vx-server user-add alice --admin --org acme`,
 		Short: "Let a GitHub user create an account by signing in with GitHub",
 		Long: `Invite a GitHub login while sign-up is invite-only (the default). The person
 then opens the server and chooses Sign in with GitHub; the invite is used up
-on their first sign-in. Site admins can also invite on Admin > People.
+on their first sign-in. Superadmins can also invite on Admin > People.
 
---admin makes them a site admin when they sign up: use it for the first admin
+--admin makes them a superadmin when they sign up: use it for the first admin
 of a new server.
 
   vx-server invite octocat --note "from the waitlist"`,
@@ -177,14 +177,14 @@ of a new server.
 			}
 			fmt.Printf("Invited GitHub user %s.", inv.GitHubLogin)
 			if inv.SiteAdmin {
-				fmt.Print(" They become a site admin when they sign up.")
+				fmt.Print(" They become a superadmin when they sign up.")
 			}
 			fmt.Println("\nThey open the server in a browser and choose Sign in with GitHub.")
 			return nil
 		},
 	}
-	invite.Flags().StringVar(&inviteNote, "note", "", "why they are invited, shown to site admins")
-	invite.Flags().BoolVar(&inviteAdmin, "admin", false, "make them a site admin when they sign up")
+	invite.Flags().StringVar(&inviteNote, "note", "", "why they are invited, shown to superadmins")
+	invite.Flags().BoolVar(&inviteAdmin, "admin", false, "make them a superadmin when they sign up")
 
 	tokenCreate := &cobra.Command{
 		Use:   "token-create HANDLE",

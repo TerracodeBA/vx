@@ -7,7 +7,7 @@
     <dt>Handle</dt><dd class="mono">{{.Created.Handle}}</dd>
     {{with .Created.Email}}<dt>Email</dt><dd>{{.}}</dd>{{end}}
     {{with .Org}}<dt>Organization</dt><dd class="mono">{{.}}</dd>{{end}}
-    <dt>Site admin</dt><dd>{{if .MadeAdmin}}yes{{else}}no{{end}}</dd>
+    <dt>Superadmin</dt><dd>{{if .MadeAdmin}}yes{{else}}no{{end}}</dd>
   </dl>
   <p class="note warn">This is their first token, and the only time vx shows it: only a hash is stored, and reloading this page will not bring it back.</p>
   <pre class="code token-secret">{{.Secret}}</pre>
@@ -20,17 +20,18 @@
 <div class="page-head">
   <div class="page-title">
     <h1>People</h1>
-    <p class="muted">Everyone on this server: each person, how many agents act for them, and which organizations they belong to. Only site admins see this page.</p>
+    <p class="muted">Everyone on this server: each person, how many agents act for them, and which organizations they belong to. Only superadmins see this page.</p>
   </div>
   <div class="page-actions"><a class="btn ghost" href="/ui/admin/github">GitHub</a></div>
 </div>
+{{if .SuperadminReview}}{{template "superadmin-review" .}}{{end}}
 {{template "admin-flash" .Flash}}
 {{with .ListErr}}<p class="note bad" role="alert">{{.}}</p>{{end}}
 
 <div class="kpis">
   <div class="kpi"><span class="kpi-label">People</span><span class="kpi-value">{{len .People}}</span></div>
   <div class="kpi"><span class="kpi-label">Their agents</span><span class="kpi-value">{{.Agents}}</span></div>
-  <div class="kpi"><span class="kpi-label">Site admins</span><span class="kpi-value">{{.Admins}}</span></div>
+  <div class="kpi"><span class="kpi-label">Superadmins</span><span class="kpi-value">{{.Admins}}</span></div>
   <div class="kpi"><span class="kpi-label">Organizations</span><span class="kpi-value">{{.OrgCount}}</span></div>
 </div>
 
@@ -38,13 +39,13 @@
   <div class="panel-head"><h2>Everyone</h2><span class="muted small">{{len .People}} {{if eq (len .People) 1}}person{{else}}people{{end}}</span></div>
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th>Name</th><th>Kind</th><th>Site admin</th><th>Organizations</th><th>Email</th><th>Since</th></tr></thead>
+    <thead><tr><th>Name</th><th>Kind</th><th>Superadmin</th><th>Organizations</th><th>Email</th><th>Since</th></tr></thead>
     <tbody>
     {{range .People}}
       <tr>
         <td class="cell-main"><span class="row-link">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Handle}}{{end}}</span><div class="cell-sub mono">{{principal .Ref}}{{with .GitHub}} · GitHub {{.}}{{end}}</div></td>
         <td class="nowrap">{{if eq .Kind "human"}}person{{else}}{{.Kind}}{{end}}<div class="cell-sub">{{if .Agents}}{{.Agents}} agent{{if ne .Agents 1}}s{{end}}{{else}}no agents{{end}}</div></td>
-        <td>{{if .SiteAdmin}}<span class="badge badge-owner">site admin</span>{{else}}<span class="muted">no</span>{{end}}</td>
+        <td>{{if .SiteAdmin}}<span class="badge badge-owner">superadmin</span>{{else}}<span class="muted">no</span>{{end}}</td>
         <td>{{if .Orgs}}<span class="chips">{{range .Orgs}}<span class="chip chip-plain">{{.}}</span>{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
         <td class="small">{{if .Email}}{{.Email}}{{else}}<span class="muted">not set</span>{{end}}</td>
         <td class="muted small nowrap">{{ago .CreatedAt}}</td>
@@ -65,9 +66,9 @@
       <input id="p-email" name="email" type="email" maxlength="200" autocomplete="off" placeholder="alice@example.com" value="{{.Form.Get "email"}}"></div>
     <div class="field"><label for="p-org">Into organization</label>
       <select id="p-org" name="org"><option value="">none</option>{{$sel := .Form.Get "org"}}{{range .OrgChoices}}<option value="{{.Handle}}"{{if eq .Handle $sel}} selected{{end}}>{{.Handle}}</option>{{end}}</select></div>
-    <label class="field-check"><input type="checkbox" name="site_admin"{{if eq (.Form.Get "site_admin") "on"}} checked{{end}}> Site admin</label>
+    <label class="field-check"><input type="checkbox" name="site_admin"{{if eq (.Form.Get "site_admin") "on"}} checked{{end}}> Superadmin</label>
     <button class="btn primary" type="submit">Add person</button>
-    <p class="field-hint">vx creates the person with a first token and shows it once, on the next page. A site admin sees this page and every organization.</p>
+    <p class="field-hint">vx creates the person with a first token and shows it once, on the next page. A superadmin sees this page and every organization.</p>
   </form>
   {{else}}
   <p class="panel-note muted small">Agents cannot add people; sign in as the person to do that.</p>
@@ -84,7 +85,7 @@
     <tbody>
     {{range .Invites}}
       <tr>
-        <td class="cell-main mono">{{.GitHubLogin}}{{if .SiteAdmin}} <span class="badge badge-owner">site admin</span>{{end}}</td>
+        <td class="cell-main mono">{{.GitHubLogin}}{{if .SiteAdmin}} <span class="badge badge-owner">superadmin</span>{{end}}</td>
         <td class="small">{{if .Note}}{{.Note}}{{else}}<span class="muted">none</span>{{end}}</td>
         <td class="muted small nowrap">{{ago .CreatedAt}}</td>
         <td class="num">{{if $.IsHuman}}<form method="post" action="/ui/admin/invites/withdraw" class="inline-form">

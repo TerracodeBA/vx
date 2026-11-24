@@ -47,9 +47,9 @@ of 0 mean no limit. Flags you leave out keep their value. Without flags it
 shows the scope, like vx agent show.
 
 A scope only narrows what you may do: the agent still needs a role on the
-repository. Only you (the agent's person) and site admins can change it;
+repository. Only you (the agent's person) and superadmins can change it;
 the agent itself cannot. Name an agent of someone else by handle
-(alice/backend), as a site admin.`,
+(alice/backend), as a superadmin.`,
 		Example: `  vx agent scope backend --allow 'internal/api/**' --allow 'docs/api.md' --deny 'internal/api/gen/**'
   vx agent scope backend --max-lands-per-day 20 --max-lines 400 --max-files 15 --max-workspaces 2
   vx agent scope backend --clear`,
@@ -119,7 +119,7 @@ func (a *App) agentShowCmd() *cobra.Command {
 		Short: "Show an agent's path scope, budgets and what is left of them today",
 		Long: `Show an agent's path scope, its budgets and how much of them it used
 today. Without NAME, an agent shows its own. People see their own agents'
-(by name, backend, or handle, alice/backend); site admins anyone's.`,
+(by name, backend, or handle, alice/backend); superadmins anyone's.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()

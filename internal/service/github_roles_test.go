@@ -171,7 +171,7 @@ func TestGitHubRolesWhoSeesWhat(t *testing.T) {
 		}
 	}
 	// A person without a GitHub link has no role, even as owner of the vx
-	// organization; a site admin keeps admin without one.
+	// organization; a superadmin has no role from being one either.
 	dave := e.person("dave")
 	root := e.person("root")
 	if err := e.svc.Store.SetSiteAdmin(e.ctx, root.ID, true); err != nil {
@@ -181,7 +181,10 @@ func TestGitHubRolesWhoSeesWhat(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.want(dave, "acme/api", service.RoleNone)
-	e.want(root, "acme/secret", service.RoleAdmin)
+	e.want(root, "acme/secret", service.RoleNone)
+	if got := e.listed(root); len(got) != 0 {
+		t.Errorf("superadmin lists %v", got)
+	}
 	if got := e.listed(dave); len(got) != 0 {
 		t.Errorf("dave (no GitHub link) lists %v", got)
 	}
@@ -403,12 +406,17 @@ func TestGitHubRolesWhenGitHubIsDown(t *testing.T) {
 	if got := e.listed(e.bobAgent); len(got) != 0 {
 		t.Errorf("bob's agent lists %v with GitHub down and an old cache", got)
 	}
-	// Site admins do not need GitHub.
+	// Support access does not need GitHub: a superadmin with a support
+	// grant keeps it while GitHub is down.
 	root := e.person("root")
 	if err := e.svc.Store.SetSiteAdmin(e.ctx, root.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	e.want(root, "acme/api", service.RoleAdmin)
+	e.want(root, "acme/api", service.RoleNone)
+	if _, err := e.svc.Store.SetSupportGrant(e.ctx, e.api.ID, root.ID, "read", e.now.Add(time.Hour), "", nil); err != nil {
+		t.Fatal(err)
+	}
+	e.want(root, "acme/api", service.RoleRead)
 }
 
 // TestGitHubRolesInstallation checks suspension, removal and invalidation

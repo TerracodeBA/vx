@@ -168,11 +168,11 @@ type GitHubAppGap struct {
 }
 
 // GitHubAppGaps lists the permissions and events this vx needs that the
-// App lacks (site admins): those GitHub refused, and those the App's
+// App lacks (superadmins): those GitHub refused, and those the App's
 // settings on GitHub do not have.
 func (s *Service) GitHubAppGaps(ctx context.Context, actor Actor) ([]GitHubAppGap, error) {
-	if !s.IsSiteAdmin(ctx, actor) {
-		return nil, errf(CodePermission, "only site admins can see the GitHub App's settings")
+	if !s.IsSuperadmin(ctx, actor) {
+		return nil, errf(CodePermission, "only superadmins can see the GitHub App's settings")
 	}
 	app, err := s.GitHubApp(ctx)
 	if err != nil {

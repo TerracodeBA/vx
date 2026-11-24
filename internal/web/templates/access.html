@@ -63,6 +63,48 @@
   {{end}}
 </section>
 
+<section class="panel" id="support">
+  <div class="panel-head"><h2>Support access</h2><span class="muted small">{{len .Support}} in effect</span></div>
+  <p class="panel-note muted small">Superadmins run this vx server but have no access to its repositories. To let one of them help with this repository, give them read or write here for a limited time; it ends by itself, is recorded in the operation log, and you can end it at any time.</p>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Superadmin</th><th>Role</th><th>Until</th><th>Reason</th>{{if .IsHuman}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Support}}
+      <tr>
+        <td class="cell-main"><span class="row-link">{{if .Person.DisplayName}}{{.Person.DisplayName}}{{else}}{{.Person.Handle}}{{end}}</span><div class="cell-sub mono">{{.Person.Handle}}{{with .GrantedBy}} · granted by {{principal .}}{{end}}</div></td>
+        <td><span class="badge">operator (support access)</span> <span class="badge">{{.Role}}</span></td>
+        <td class="nowrap">{{.ExpiresAt.UTC.Format "2006-01-02 15:04 UTC"}}</td>
+        <td class="small">{{if .Reason}}{{.Reason}}{{else}}<span class="muted">none</span>{{end}}</td>
+        {{if $.IsHuman}}
+        <td class="num"><form method="post" action="/ui/repos/{{$repo}}/access/support/revoke" class="row-form">
+          <input type="hidden" name="person" value="{{.Person.Handle}}">
+          <button class="btn ghost small-btn" type="submit">End now</button>
+        </form></td>
+        {{end}}
+      </tr>
+    {{else}}
+      <tr><td colspan="5" class="muted">None. No superadmin can see this repository.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .IsHuman}}
+  <form method="post" action="/ui/repos/{{$repo}}/access/support" class="admin-form">
+    <div class="field"><label for="support-person">Superadmin</label>
+      <input id="support-person" name="person" type="text" required maxlength="100" autocomplete="off" placeholder="root" value="{{.Form.Get "person"}}"></div>
+    <div class="field"><label for="support-role">Role</label>
+      <select id="support-role" name="role"><option value="read">read</option><option value="write">write</option></select></div>
+    <div class="field"><label for="support-for">For</label>
+      <select id="support-for" name="for">{{range .SupportDurations}}<option value="{{.Value}}"{{if eq .Value "24h"}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+    <div class="field"><label for="support-reason">Reason</label>
+      <input id="support-reason" name="reason" type="text" maxlength="200" autocomplete="off" placeholder="ticket 4711: land fails" value="{{.Form.Get "reason"}}"></div>
+    <button class="btn primary" type="submit">Give support access</button>
+    <p class="field-hint">read: see the repository, its efforts, changes and board. write: also land. Support access is never admin, so it cannot change who has access.</p>
+  </form>
+  {{end}}
+</section>
+
 <section class="panel" id="effective">
   <div class="panel-head"><h2>Everyone with access</h2><span class="muted small">{{len .Entries}} {{if eq (len .Entries) 1}}person{{else}}people{{end}}</span></div>
   <div class="table-wrap">

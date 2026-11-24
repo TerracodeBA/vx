@@ -80,8 +80,8 @@ type Repo struct {
 	// GitHubRepoID is set for a repository linked to GitHub, and
 	// GitHubInstallationID while an installation of the App reaches it.
 	// Such a repository is GitHub-backed: roles on it come from GitHub,
-	// never from vx grants. Without an installation nobody but site admins
-	// has a role on it (it stays GitHub-backed, so access fails closed).
+	// never from vx grants. Without an installation nobody but service
+	// principals and support grants has a role on it (it stays GitHub-backed, so access fails closed).
 	GitHubRepoID         *int64
 	GitHubInstallationID *int64
 }

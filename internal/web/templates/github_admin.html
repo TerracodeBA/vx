@@ -3,10 +3,11 @@
 <div class="page-head">
   <div class="page-title">
     <h1>GitHub</h1>
-    <p class="muted">The vx GitHub App lets people sign in with GitHub, takes roles on installed repositories from GitHub, and keeps them in sync through webhooks. Only site admins see this page.</p>
+    <p class="muted">The vx GitHub App lets people sign in with GitHub, takes roles on installed repositories from GitHub, and keeps them in sync through webhooks. Only superadmins see this page.</p>
   </div>
   <div class="page-actions"><a class="btn ghost" href="/ui/admin/people">People</a></div>
 </div>
+{{if .SuperadminReview}}{{template "superadmin-review" .}}{{end}}
 {{template "admin-flash" .Flash}}
 {{with .LoadErr}}<p class="note bad" role="alert">{{.}}</p>{{end}}
 

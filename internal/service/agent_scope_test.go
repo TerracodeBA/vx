@@ -218,7 +218,7 @@ func TestAgentScopeWhoMaySet(t *testing.T) {
 		t.Fatalf("alice: %v", err)
 	}
 	_, err := e.svc.SetAgentScope(e.ctx, bob, "alice/claude", in)
-	wantErr(t, err, service.CodePermission, "user:bob cannot change the scope of agent:alice/claude: only user:alice and site admins can")
+	wantErr(t, err, service.CodePermission, "user:bob cannot change the scope of agent:alice/claude: only user:alice and superadmins can")
 	_, err = e.svc.GetAgent(e.ctx, bob, "alice/claude")
 	wantErr(t, err, service.CodePermission, "user:bob cannot see the scope of agent:alice/claude")
 	// "claude" from bob means bob/claude, which does not exist.

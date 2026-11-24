@@ -73,10 +73,10 @@ func (h *Handlers) ref(ctx context.Context, id uuid.UUID) string {
 
 // ---------- Auth ----------
 
-// principal is principalPB with the site admin flag filled in.
+// principal is principalPB with the superadmin flag filled in.
 func (h *Handlers) principal(ctx context.Context, a service.Actor) *vxv1.Principal {
 	out := principalPB(a)
-	out.SiteAdmin = h.svc.IsSiteAdmin(ctx, a)
+	out.SiteAdmin = h.svc.IsSuperadmin(ctx, a)
 	return out
 }
 

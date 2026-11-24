@@ -31,4 +31,8 @@
 {{define "modeswitch"}}<div class="modeswitch" role="group" aria-label="Diff layout"><button type="button" data-diff-mode="unified">Unified</button><button type="button" data-diff-mode="split">Split</button></div>{{end}}
 
 {{/* admin-flash shows the outcome of an admin form: a fixed success text or the service's error. */}}
+{{define "superadmin-review"}}<section class="note warn review-banner" role="status" id="superadmin-review">
+  <p><strong>Review after the upgrade:</strong> site admins no longer have access to repositories; grant support access per repository if needed. Superadmins run the server: people, invites and sign-up, the GitHub App, server settings and the operation log. Organization owners and admins keep their access; a repository's admins give a superadmin support access on its access page or with <code>vx repo support REPO PERSON --role read --for 24h</code>.</p>
+  {{if .IsHuman}}<form method="post" action="/ui/admin/review" class="inline-form"><button class="btn ghost small-btn" type="submit">Mark as reviewed</button></form>{{end}}
+</section>{{end}}
 {{define "admin-flash"}}{{with .OK}}<p class="note ok" role="status">{{.}}</p>{{end}}{{with .Err}}<p class="note bad" role="alert">{{.}}</p>{{end}}{{end}}
