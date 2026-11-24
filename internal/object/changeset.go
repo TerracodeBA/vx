@@ -72,6 +72,39 @@ type Changeset struct {
 	// merged it onto newer work so Tree differs. Evidence describes this
 	// tree, not Tree.
 	SnapshotTree hash.Hash `json:"snapshot_tree,omitempty"`
+	// Rebase is set on a change that a rebase of its effort replayed onto a
+	// newer base. Tree is the replayed tree; the evidence still describes
+	// the tree of the change it was replayed from.
+	Rebase *Rebase `json:"rebase,omitempty"`
+}
+
+// Rebase records how a change got onto a new base: which target commit the
+// effort was rebased onto, which changeset this one replays, who ran the
+// rebase and, when the replay conflicted, who resolved it.
+type Rebase struct {
+	Onto       hash.Hash `json:"onto"`                   // target changeset the effort was rebased onto
+	OntoGitSHA string    `json:"onto_git_sha,omitempty"` // its git commit, when it came from upstream
+	Branch     string    `json:"branch,omitempty"`       // the target branch, e.g. "main"
+	From       hash.Hash `json:"from"`                   // the changeset this one replays
+	By         string    `json:"by,omitempty"`           // principal that ran the rebase
+	ResolvedBy string    `json:"resolved_by,omitempty"`  // principal that resolved a conflict on this change during the rebase
+	At         time.Time `json:"at"`
+}
+
+// Rebased reports whether a rebase replayed this change onto a newer base,
+// so its evidence was gathered before the rebase.
+func (c *Changeset) Rebased() bool { return c.Rebase != nil }
+
+// RebasedOnto names the target a rebased change sits on: the git commit
+// when known, the changeset hash otherwise. Empty when not rebased.
+func (c *Changeset) RebasedOnto() string {
+	if c.Rebase == nil {
+		return ""
+	}
+	if c.Rebase.OntoGitSHA != "" {
+		return c.Rebase.OntoGitSHA
+	}
+	return c.Rebase.Onto.String()
 }
 
 // Merged reports whether the server merged the author's snapshot onto newer
@@ -101,6 +134,9 @@ func (c *Changeset) Validate() error {
 	if c.CreatedAt.IsZero() {
 		return errors.New("changeset has no timestamp")
 	}
+	if r := c.Rebase; r != nil && (r.Onto.IsZero() || r.From.IsZero() || r.At.IsZero()) {
+		return errors.New("changeset rebase needs onto, from and a timestamp")
+	}
 	for _, p := range c.Parents {
 		if p.IsZero() {
 			return errors.New("changeset has a zero parent")
@@ -116,6 +152,11 @@ func (c *Changeset) Encode() ([]byte, error) {
 	}
 	cc := *c
 	cc.CreatedAt = c.CreatedAt.UTC().Truncate(time.Microsecond) // Postgres precision
+	if c.Rebase != nil {
+		r := *c.Rebase
+		r.At = r.At.UTC().Truncate(time.Microsecond)
+		cc.Rebase = &r
+	}
 	if cc.Evidence != nil && cc.Evidence.IsEmpty() {
 		cc.Evidence = nil
 	}
@@ -135,6 +176,9 @@ func (c *Changeset) Hash() (hash.Hash, error) {
 // back from the database hashes to the same value.
 func (c *Changeset) Normalize() {
 	c.CreatedAt = c.CreatedAt.UTC().Truncate(time.Microsecond)
+	if c.Rebase != nil {
+		c.Rebase.At = c.Rebase.At.UTC().Truncate(time.Microsecond)
+	}
 	if c.Evidence != nil && c.Evidence.IsEmpty() {
 		c.Evidence = nil
 	}

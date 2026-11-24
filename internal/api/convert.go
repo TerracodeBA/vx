@@ -124,6 +124,10 @@ func changesetPB(h hash.Hash, cs *object.Changeset, effort string, files []store
 		CreatedAt: ts(cs.CreatedAt), Effort: effort,
 		SnapshotTree: cs.SnapshotTree.String(), Merged: cs.Merged(),
 	}
+	if r := cs.Rebase; r != nil {
+		out.Rebased, out.RebasedOnto, out.RebasedOntoBranch = true, cs.RebasedOnto(), r.Branch
+		out.RebasedFrom, out.RebasedBy, out.ResolvedBy = r.From.String(), r.By, r.ResolvedBy
+	}
 	for _, p := range cs.Parents {
 		out.Parents = append(out.Parents, p.String())
 	}

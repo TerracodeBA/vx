@@ -264,8 +264,10 @@ type Effort struct {
 	OpenWorkspaces int32                  `protobuf:"varint,11,opt,name=open_workspaces,json=openWorkspaces,proto3" json:"open_workspaces,omitempty"`
 	CreatedAt      string                 `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      string                 `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The rebase in progress (running or stopped on a conflict), if any.
+	Rebase        *Rebase `protobuf:"bytes,14,opt,name=rebase,proto3" json:"rebase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Effort) Reset() {
@@ -387,6 +389,13 @@ func (x *Effort) GetUpdatedAt() string {
 		return x.UpdatedAt
 	}
 	return ""
+}
+
+func (x *Effort) GetRebase() *Rebase {
+	if x != nil {
+		return x.Rebase
+	}
+	return nil
 }
 
 type Author struct {
@@ -730,7 +739,16 @@ type Changeset struct {
 	Merged       bool   `protobuf:"varint,15,opt,name=merged,proto3" json:"merged,omitempty"`
 	// Problems the server found in the tree when this change landed, such as
 	// a Go function declared twice. Stored beside the changeset, not hashed.
-	Warnings      []*Warning `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Warnings []*Warning `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Set when a rebase of the effort replayed this change onto a newer base:
+	// the evidence was gathered before the rebase, on rebased_from's tree.
+	Rebased           bool   `protobuf:"varint,17,opt,name=rebased,proto3" json:"rebased,omitempty"`
+	RebasedOnto       string `protobuf:"bytes,18,opt,name=rebased_onto,json=rebasedOnto,proto3" json:"rebased_onto,omitempty"` // git commit of the target, or its changeset hash
+	RebasedOntoBranch string `protobuf:"bytes,19,opt,name=rebased_onto_branch,json=rebasedOntoBranch,proto3" json:"rebased_onto_branch,omitempty"`
+	RebasedFrom       string `protobuf:"bytes,20,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"` // the changeset this one replays
+	RebasedBy         string `protobuf:"bytes,21,opt,name=rebased_by,json=rebasedBy,proto3" json:"rebased_by,omitempty"`
+	// Who resolved a conflict on this change during the rebase, if one did.
+	ResolvedBy    string `protobuf:"bytes,22,opt,name=resolved_by,json=resolvedBy,proto3" json:"resolved_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -875,6 +893,48 @@ func (x *Changeset) GetWarnings() []*Warning {
 		return x.Warnings
 	}
 	return nil
+}
+
+func (x *Changeset) GetRebased() bool {
+	if x != nil {
+		return x.Rebased
+	}
+	return false
+}
+
+func (x *Changeset) GetRebasedOnto() string {
+	if x != nil {
+		return x.RebasedOnto
+	}
+	return ""
+}
+
+func (x *Changeset) GetRebasedOntoBranch() string {
+	if x != nil {
+		return x.RebasedOntoBranch
+	}
+	return ""
+}
+
+func (x *Changeset) GetRebasedFrom() string {
+	if x != nil {
+		return x.RebasedFrom
+	}
+	return ""
+}
+
+func (x *Changeset) GetRebasedBy() string {
+	if x != nil {
+		return x.RebasedBy
+	}
+	return ""
+}
+
+func (x *Changeset) GetResolvedBy() string {
+	if x != nil {
+		return x.ResolvedBy
+	}
+	return ""
 }
 
 type Workspace struct {
@@ -6327,6 +6387,706 @@ func (x *ListTasksResponse) GetTasks() []*Task {
 	return nil
 }
 
+type Rebase struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	State      string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"` // running, stopped, done, aborted
+	OntoBranch string                 `protobuf:"bytes,3,opt,name=onto_branch,json=ontoBranch,proto3" json:"onto_branch,omitempty"`
+	Onto       string                 `protobuf:"bytes,4,opt,name=onto,proto3" json:"onto,omitempty"` // target changeset hash
+	OntoGitSha string                 `protobuf:"bytes,5,opt,name=onto_git_sha,json=ontoGitSha,proto3" json:"onto_git_sha,omitempty"`
+	OldBase    string                 `protobuf:"bytes,6,opt,name=old_base,json=oldBase,proto3" json:"old_base,omitempty"`
+	OldHead    string                 `protobuf:"bytes,7,opt,name=old_head,json=oldHead,proto3" json:"old_head,omitempty"`
+	NewHead    string                 `protobuf:"bytes,8,opt,name=new_head,json=newHead,proto3" json:"new_head,omitempty"` // tip of the rebased chain so far
+	Replayed   int32                  `protobuf:"varint,9,opt,name=replayed,proto3" json:"replayed,omitempty"`             // changes replayed so far
+	Pending    int32                  `protobuf:"varint,10,opt,name=pending,proto3" json:"pending,omitempty"`              // changes still to replay, the stopped one included
+	StartedBy  string                 `protobuf:"bytes,11,opt,name=started_by,json=startedBy,proto3" json:"started_by,omitempty"`
+	UpdatedBy  string                 `protobuf:"bytes,12,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	CreatedAt  string                 `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt  string                 `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// When stopped: the change whose replay conflicts, its conflicts, and the
+	// three trees whose merge with conflict markers reproduces them.
+	StoppedAt     *Changeset        `protobuf:"bytes,15,opt,name=stopped_at,json=stoppedAt,proto3" json:"stopped_at,omitempty"`
+	Conflicts     []*RebaseConflict `protobuf:"bytes,16,rep,name=conflicts,proto3" json:"conflicts,omitempty"`
+	BaseTree      string            `protobuf:"bytes,17,opt,name=base_tree,json=baseTree,proto3" json:"base_tree,omitempty"`       // the stopped change's parent tree
+	ChangeTree    string            `protobuf:"bytes,18,opt,name=change_tree,json=changeTree,proto3" json:"change_tree,omitempty"` // the stopped change's tree
+	OntoTree      string            `protobuf:"bytes,19,opt,name=onto_tree,json=ontoTree,proto3" json:"onto_tree,omitempty"`       // the rebased chain so far
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Rebase) Reset() {
+	*x = Rebase{}
+	mi := &file_vx_v1_vx_proto_msgTypes[100]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Rebase) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Rebase) ProtoMessage() {}
+
+func (x *Rebase) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[100]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Rebase.ProtoReflect.Descriptor instead.
+func (*Rebase) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{100}
+}
+
+func (x *Rebase) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Rebase) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Rebase) GetOntoBranch() string {
+	if x != nil {
+		return x.OntoBranch
+	}
+	return ""
+}
+
+func (x *Rebase) GetOnto() string {
+	if x != nil {
+		return x.Onto
+	}
+	return ""
+}
+
+func (x *Rebase) GetOntoGitSha() string {
+	if x != nil {
+		return x.OntoGitSha
+	}
+	return ""
+}
+
+func (x *Rebase) GetOldBase() string {
+	if x != nil {
+		return x.OldBase
+	}
+	return ""
+}
+
+func (x *Rebase) GetOldHead() string {
+	if x != nil {
+		return x.OldHead
+	}
+	return ""
+}
+
+func (x *Rebase) GetNewHead() string {
+	if x != nil {
+		return x.NewHead
+	}
+	return ""
+}
+
+func (x *Rebase) GetReplayed() int32 {
+	if x != nil {
+		return x.Replayed
+	}
+	return 0
+}
+
+func (x *Rebase) GetPending() int32 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *Rebase) GetStartedBy() string {
+	if x != nil {
+		return x.StartedBy
+	}
+	return ""
+}
+
+func (x *Rebase) GetUpdatedBy() string {
+	if x != nil {
+		return x.UpdatedBy
+	}
+	return ""
+}
+
+func (x *Rebase) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *Rebase) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *Rebase) GetStoppedAt() *Changeset {
+	if x != nil {
+		return x.StoppedAt
+	}
+	return nil
+}
+
+func (x *Rebase) GetConflicts() []*RebaseConflict {
+	if x != nil {
+		return x.Conflicts
+	}
+	return nil
+}
+
+func (x *Rebase) GetBaseTree() string {
+	if x != nil {
+		return x.BaseTree
+	}
+	return ""
+}
+
+func (x *Rebase) GetChangeTree() string {
+	if x != nil {
+		return x.ChangeTree
+	}
+	return ""
+}
+
+func (x *Rebase) GetOntoTree() string {
+	if x != nil {
+		return x.OntoTree
+	}
+	return ""
+}
+
+type RebaseConflict struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Path   string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Kind   string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Detail string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	// The file says "// Code generated ... DO NOT EDIT.": regenerate it
+	// instead of editing conflict markers.
+	Generated     bool `protobuf:"varint,4,opt,name=generated,proto3" json:"generated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RebaseConflict) Reset() {
+	*x = RebaseConflict{}
+	mi := &file_vx_v1_vx_proto_msgTypes[101]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RebaseConflict) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RebaseConflict) ProtoMessage() {}
+
+func (x *RebaseConflict) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[101]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RebaseConflict.ProtoReflect.Descriptor instead.
+func (*RebaseConflict) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{101}
+}
+
+func (x *RebaseConflict) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *RebaseConflict) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RebaseConflict) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *RebaseConflict) GetGenerated() bool {
+	if x != nil {
+		return x.Generated
+	}
+	return false
+}
+
+type RebaseEffortRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Onto          string                 `protobuf:"bytes,3,opt,name=onto,proto3" json:"onto,omitempty"` // branch; empty: the effort's base branch
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RebaseEffortRequest) Reset() {
+	*x = RebaseEffortRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[102]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RebaseEffortRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RebaseEffortRequest) ProtoMessage() {}
+
+func (x *RebaseEffortRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[102]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RebaseEffortRequest.ProtoReflect.Descriptor instead.
+func (*RebaseEffortRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{102}
+}
+
+func (x *RebaseEffortRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *RebaseEffortRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *RebaseEffortRequest) GetOnto() string {
+	if x != nil {
+		return x.Onto
+	}
+	return ""
+}
+
+type RebaseEffortResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rebase        *Rebase                `protobuf:"bytes,1,opt,name=rebase,proto3" json:"rebase,omitempty"` // empty when up_to_date
+	Effort        *Effort                `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	UpToDate      bool                   `protobuf:"varint,3,opt,name=up_to_date,json=upToDate,proto3" json:"up_to_date,omitempty"` // the effort already sits on the branch head
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RebaseEffortResponse) Reset() {
+	*x = RebaseEffortResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[103]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RebaseEffortResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RebaseEffortResponse) ProtoMessage() {}
+
+func (x *RebaseEffortResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[103]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RebaseEffortResponse.ProtoReflect.Descriptor instead.
+func (*RebaseEffortResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{103}
+}
+
+func (x *RebaseEffortResponse) GetRebase() *Rebase {
+	if x != nil {
+		return x.Rebase
+	}
+	return nil
+}
+
+func (x *RebaseEffortResponse) GetEffort() *Effort {
+	if x != nil {
+		return x.Effort
+	}
+	return nil
+}
+
+func (x *RebaseEffortResponse) GetUpToDate() bool {
+	if x != nil {
+		return x.UpToDate
+	}
+	return false
+}
+
+type ContinueRebaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	StoppedAt     string                 `protobuf:"bytes,3,opt,name=stopped_at,json=stoppedAt,proto3" json:"stopped_at,omitempty"` // hash of the change that was resolved (Rebase.stopped_at.hash)
+	Tree          string                 `protobuf:"bytes,4,opt,name=tree,proto3" json:"tree,omitempty"`                            // resolved tree on top of Rebase.onto_tree; objects must be uploaded
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContinueRebaseRequest) Reset() {
+	*x = ContinueRebaseRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContinueRebaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContinueRebaseRequest) ProtoMessage() {}
+
+func (x *ContinueRebaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContinueRebaseRequest.ProtoReflect.Descriptor instead.
+func (*ContinueRebaseRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{104}
+}
+
+func (x *ContinueRebaseRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *ContinueRebaseRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *ContinueRebaseRequest) GetStoppedAt() string {
+	if x != nil {
+		return x.StoppedAt
+	}
+	return ""
+}
+
+func (x *ContinueRebaseRequest) GetTree() string {
+	if x != nil {
+		return x.Tree
+	}
+	return ""
+}
+
+type ContinueRebaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rebase        *Rebase                `protobuf:"bytes,1,opt,name=rebase,proto3" json:"rebase,omitempty"`
+	Effort        *Effort                `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContinueRebaseResponse) Reset() {
+	*x = ContinueRebaseResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[105]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContinueRebaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContinueRebaseResponse) ProtoMessage() {}
+
+func (x *ContinueRebaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[105]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContinueRebaseResponse.ProtoReflect.Descriptor instead.
+func (*ContinueRebaseResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{105}
+}
+
+func (x *ContinueRebaseResponse) GetRebase() *Rebase {
+	if x != nil {
+		return x.Rebase
+	}
+	return nil
+}
+
+func (x *ContinueRebaseResponse) GetEffort() *Effort {
+	if x != nil {
+		return x.Effort
+	}
+	return nil
+}
+
+type AbortRebaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AbortRebaseRequest) Reset() {
+	*x = AbortRebaseRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[106]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AbortRebaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AbortRebaseRequest) ProtoMessage() {}
+
+func (x *AbortRebaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[106]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AbortRebaseRequest.ProtoReflect.Descriptor instead.
+func (*AbortRebaseRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{106}
+}
+
+func (x *AbortRebaseRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *AbortRebaseRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+type AbortRebaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rebase        *Rebase                `protobuf:"bytes,1,opt,name=rebase,proto3" json:"rebase,omitempty"`
+	Effort        *Effort                `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AbortRebaseResponse) Reset() {
+	*x = AbortRebaseResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[107]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AbortRebaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AbortRebaseResponse) ProtoMessage() {}
+
+func (x *AbortRebaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[107]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AbortRebaseResponse.ProtoReflect.Descriptor instead.
+func (*AbortRebaseResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{107}
+}
+
+func (x *AbortRebaseResponse) GetRebase() *Rebase {
+	if x != nil {
+		return x.Rebase
+	}
+	return nil
+}
+
+func (x *AbortRebaseResponse) GetEffort() *Effort {
+	if x != nil {
+		return x.Effort
+	}
+	return nil
+}
+
+type GetRebaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRebaseRequest) Reset() {
+	*x = GetRebaseRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[108]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRebaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRebaseRequest) ProtoMessage() {}
+
+func (x *GetRebaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[108]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRebaseRequest.ProtoReflect.Descriptor instead.
+func (*GetRebaseRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{108}
+}
+
+func (x *GetRebaseRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *GetRebaseRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+type GetRebaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rebase        *Rebase                `protobuf:"bytes,1,opt,name=rebase,proto3" json:"rebase,omitempty"` // empty if the effort was never rebased
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRebaseResponse) Reset() {
+	*x = GetRebaseResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[109]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRebaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRebaseResponse) ProtoMessage() {}
+
+func (x *GetRebaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[109]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRebaseResponse.ProtoReflect.Descriptor instead.
+func (*GetRebaseResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{109}
+}
+
+func (x *GetRebaseResponse) GetRebase() *Rebase {
+	if x != nil {
+		return x.Rebase
+	}
+	return nil
+}
+
 var File_vx_v1_vx_proto protoreflect.FileDescriptor
 
 const file_vx_v1_vx_proto_rawDesc = "" +
@@ -6350,7 +7110,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
 	"\x06remote\x18\x03 \x01(\tR\x06remote\x12%\n" +
 	"\x0edefault_branch\x18\x04 \x01(\tR\rdefaultBranch\x12)\n" +
-	"\bbranches\x18\x05 \x03(\v2\r.vx.v1.BranchR\bbranches\"\xce\x02\n" +
+	"\bbranches\x18\x05 \x03(\v2\r.vx.v1.BranchR\bbranches\"\xf5\x02\n" +
 	"\x06Effort\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
@@ -6368,7 +7128,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\f \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\tR\tupdatedAt\"\xa2\x01\n" +
+	"updated_at\x18\r \x01(\tR\tupdatedAt\x12%\n" +
+	"\x06rebase\x18\x0e \x01(\v2\r.vx.v1.RebaseR\x06rebase\"\xa2\x01\n" +
 	"\x06Author\x12\x1c\n" +
 	"\tprincipal\x18\x01 \x01(\tR\tprincipal\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -6397,7 +7158,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bnew_hash\x18\x04 \x01(\tR\anewHash\x12\x12\n" +
 	"\x04mode\x18\x05 \x01(\tR\x04mode\x12\x14\n" +
 	"\x05added\x18\x06 \x01(\x05R\x05added\x12\x18\n" +
-	"\adeleted\x18\a \x01(\x05R\adeleted\"\xef\x03\n" +
+	"\adeleted\x18\a \x01(\x05R\adeleted\"\xbf\x05\n" +
 	"\tChangeset\x12\x12\n" +
 	"\x04hash\x18\x01 \x01(\tR\x04hash\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x18\n" +
@@ -6417,7 +7178,15 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06effort\x18\r \x01(\tR\x06effort\x12#\n" +
 	"\rsnapshot_tree\x18\x0e \x01(\tR\fsnapshotTree\x12\x16\n" +
 	"\x06merged\x18\x0f \x01(\bR\x06merged\x12*\n" +
-	"\bwarnings\x18\x10 \x03(\v2\x0e.vx.v1.WarningR\bwarnings\"\xf8\x01\n" +
+	"\bwarnings\x18\x10 \x03(\v2\x0e.vx.v1.WarningR\bwarnings\x12\x18\n" +
+	"\arebased\x18\x11 \x01(\bR\arebased\x12!\n" +
+	"\frebased_onto\x18\x12 \x01(\tR\vrebasedOnto\x12.\n" +
+	"\x13rebased_onto_branch\x18\x13 \x01(\tR\x11rebasedOntoBranch\x12!\n" +
+	"\frebased_from\x18\x14 \x01(\tR\vrebasedFrom\x12\x1d\n" +
+	"\n" +
+	"rebased_by\x18\x15 \x01(\tR\trebasedBy\x12\x1f\n" +
+	"\vresolved_by\x18\x16 \x01(\tR\n" +
+	"resolvedBy\"\xf8\x01\n" +
 	"\tWorkspace\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
@@ -6814,7 +7583,70 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06states\x18\x03 \x03(\tR\x06states\x12\x12\n" +
 	"\x04mine\x18\x04 \x01(\bR\x04mine\"6\n" +
 	"\x11ListTasksResponse\x12!\n" +
-	"\x05tasks\x18\x01 \x03(\v2\v.vx.v1.TaskR\x05tasks2\xfc\x03\n" +
+	"\x05tasks\x18\x01 \x03(\v2\v.vx.v1.TaskR\x05tasks\"\xc9\x04\n" +
+	"\x06Rebase\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x1f\n" +
+	"\vonto_branch\x18\x03 \x01(\tR\n" +
+	"ontoBranch\x12\x12\n" +
+	"\x04onto\x18\x04 \x01(\tR\x04onto\x12 \n" +
+	"\fonto_git_sha\x18\x05 \x01(\tR\n" +
+	"ontoGitSha\x12\x19\n" +
+	"\bold_base\x18\x06 \x01(\tR\aoldBase\x12\x19\n" +
+	"\bold_head\x18\a \x01(\tR\aoldHead\x12\x19\n" +
+	"\bnew_head\x18\b \x01(\tR\anewHead\x12\x1a\n" +
+	"\breplayed\x18\t \x01(\x05R\breplayed\x12\x18\n" +
+	"\apending\x18\n" +
+	" \x01(\x05R\apending\x12\x1d\n" +
+	"\n" +
+	"started_by\x18\v \x01(\tR\tstartedBy\x12\x1d\n" +
+	"\n" +
+	"updated_by\x18\f \x01(\tR\tupdatedBy\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x0e \x01(\tR\tupdatedAt\x12/\n" +
+	"\n" +
+	"stopped_at\x18\x0f \x01(\v2\x10.vx.v1.ChangesetR\tstoppedAt\x123\n" +
+	"\tconflicts\x18\x10 \x03(\v2\x15.vx.v1.RebaseConflictR\tconflicts\x12\x1b\n" +
+	"\tbase_tree\x18\x11 \x01(\tR\bbaseTree\x12\x1f\n" +
+	"\vchange_tree\x18\x12 \x01(\tR\n" +
+	"changeTree\x12\x1b\n" +
+	"\tonto_tree\x18\x13 \x01(\tR\bontoTree\"n\n" +
+	"\x0eRebaseConflict\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1c\n" +
+	"\tgenerated\x18\x04 \x01(\bR\tgenerated\"U\n" +
+	"\x13RebaseEffortRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x12\n" +
+	"\x04onto\x18\x03 \x01(\tR\x04onto\"\x82\x01\n" +
+	"\x14RebaseEffortResponse\x12%\n" +
+	"\x06rebase\x18\x01 \x01(\v2\r.vx.v1.RebaseR\x06rebase\x12%\n" +
+	"\x06effort\x18\x02 \x01(\v2\r.vx.v1.EffortR\x06effort\x12\x1c\n" +
+	"\n" +
+	"up_to_date\x18\x03 \x01(\bR\bupToDate\"v\n" +
+	"\x15ContinueRebaseRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x1d\n" +
+	"\n" +
+	"stopped_at\x18\x03 \x01(\tR\tstoppedAt\x12\x12\n" +
+	"\x04tree\x18\x04 \x01(\tR\x04tree\"f\n" +
+	"\x16ContinueRebaseResponse\x12%\n" +
+	"\x06rebase\x18\x01 \x01(\v2\r.vx.v1.RebaseR\x06rebase\x12%\n" +
+	"\x06effort\x18\x02 \x01(\v2\r.vx.v1.EffortR\x06effort\"@\n" +
+	"\x12AbortRebaseRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\"c\n" +
+	"\x13AbortRebaseResponse\x12%\n" +
+	"\x06rebase\x18\x01 \x01(\v2\r.vx.v1.RebaseR\x06rebase\x12%\n" +
+	"\x06effort\x18\x02 \x01(\v2\r.vx.v1.EffortR\x06effort\">\n" +
+	"\x10GetRebaseRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\":\n" +
+	"\x11GetRebaseResponse\x12%\n" +
+	"\x06rebase\x18\x01 \x01(\v2\r.vx.v1.RebaseR\x06rebase2\xfc\x03\n" +
 	"\vAuthService\x127\n" +
 	"\x06WhoAmI\x12\x14.vx.v1.WhoAmIRequest\x1a\x15.vx.v1.WhoAmIResponse\"\x00\x12F\n" +
 	"\vCreateAgent\x12\x19.vx.v1.CreateAgentRequest\x1a\x1a.vx.v1.CreateAgentResponse\"\x00\x12C\n" +
@@ -6837,13 +7669,17 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\aGetRepo\x12\x15.vx.v1.GetRepoRequest\x1a\x16.vx.v1.GetRepoResponse\"\x00\x12@\n" +
 	"\tListRepos\x12\x17.vx.v1.ListReposRequest\x1a\x18.vx.v1.ListReposResponse\"\x00\x12C\n" +
 	"\n" +
-	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x002\xdf\x02\n" +
+	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x002\x85\x05\n" +
 	"\rEffortService\x12I\n" +
 	"\fCreateEffort\x12\x1a.vx.v1.CreateEffortRequest\x1a\x1b.vx.v1.CreateEffortResponse\"\x00\x12@\n" +
 	"\tGetEffort\x12\x17.vx.v1.GetEffortRequest\x1a\x18.vx.v1.GetEffortResponse\"\x00\x12F\n" +
 	"\vListEfforts\x12\x19.vx.v1.ListEffortsRequest\x1a\x1a.vx.v1.ListEffortsResponse\"\x00\x12.\n" +
 	"\x03Log\x12\x11.vx.v1.LogRequest\x1a\x12.vx.v1.LogResponse\"\x00\x12I\n" +
-	"\fGetChangeset\x12\x1a.vx.v1.GetChangesetRequest\x1a\x1b.vx.v1.GetChangesetResponse\"\x002\xd6\x02\n" +
+	"\fGetChangeset\x12\x1a.vx.v1.GetChangesetRequest\x1a\x1b.vx.v1.GetChangesetResponse\"\x00\x12I\n" +
+	"\fRebaseEffort\x12\x1a.vx.v1.RebaseEffortRequest\x1a\x1b.vx.v1.RebaseEffortResponse\"\x00\x12O\n" +
+	"\x0eContinueRebase\x12\x1c.vx.v1.ContinueRebaseRequest\x1a\x1d.vx.v1.ContinueRebaseResponse\"\x00\x12F\n" +
+	"\vAbortRebase\x12\x19.vx.v1.AbortRebaseRequest\x1a\x1a.vx.v1.AbortRebaseResponse\"\x00\x12@\n" +
+	"\tGetRebase\x12\x17.vx.v1.GetRebaseRequest\x1a\x18.vx.v1.GetRebaseResponse\"\x002\xd6\x02\n" +
 	"\x10WorkspaceService\x12L\n" +
 	"\rOpenWorkspace\x12\x1b.vx.v1.OpenWorkspaceRequest\x1a\x1c.vx.v1.OpenWorkspaceResponse\"\x00\x12I\n" +
 	"\fGetWorkspace\x12\x1a.vx.v1.GetWorkspaceRequest\x1a\x1b.vx.v1.GetWorkspaceResponse\"\x00\x12:\n" +
@@ -6884,7 +7720,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 100)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 110)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),               // 0: vx.v1.Principal
 	(*Branch)(nil),                  // 1: vx.v1.Branch
@@ -6986,159 +7822,187 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*UpdateTaskResponse)(nil),      // 97: vx.v1.UpdateTaskResponse
 	(*ListTasksRequest)(nil),        // 98: vx.v1.ListTasksRequest
 	(*ListTasksResponse)(nil),       // 99: vx.v1.ListTasksResponse
+	(*Rebase)(nil),                  // 100: vx.v1.Rebase
+	(*RebaseConflict)(nil),          // 101: vx.v1.RebaseConflict
+	(*RebaseEffortRequest)(nil),     // 102: vx.v1.RebaseEffortRequest
+	(*RebaseEffortResponse)(nil),    // 103: vx.v1.RebaseEffortResponse
+	(*ContinueRebaseRequest)(nil),   // 104: vx.v1.ContinueRebaseRequest
+	(*ContinueRebaseResponse)(nil),  // 105: vx.v1.ContinueRebaseResponse
+	(*AbortRebaseRequest)(nil),      // 106: vx.v1.AbortRebaseRequest
+	(*AbortRebaseResponse)(nil),     // 107: vx.v1.AbortRebaseResponse
+	(*GetRebaseRequest)(nil),        // 108: vx.v1.GetRebaseRequest
+	(*GetRebaseResponse)(nil),       // 109: vx.v1.GetRebaseResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
 	1,   // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
-	5,   // 1: vx.v1.Evidence.checks:type_name -> vx.v1.Check
-	4,   // 2: vx.v1.Changeset.author:type_name -> vx.v1.Author
-	6,   // 3: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
-	7,   // 4: vx.v1.Changeset.files:type_name -> vx.v1.FileChange
-	11,  // 5: vx.v1.Changeset.warnings:type_name -> vx.v1.Warning
-	0,   // 6: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
-	16,  // 7: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
-	0,   // 8: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
-	15,  // 9: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
-	15,  // 10: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
-	0,   // 11: vx.v1.CreateTokenResponse.principal:type_name -> vx.v1.Principal
-	15,  // 12: vx.v1.CreateTokenResponse.token:type_name -> vx.v1.Token
-	0,   // 13: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
-	0,   // 14: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
-	12,  // 15: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
-	12,  // 16: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
-	2,   // 17: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
-	2,   // 18: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
-	2,   // 19: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
-	1,   // 20: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
-	3,   // 21: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
-	3,   // 22: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
-	9,   // 23: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
-	3,   // 24: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
-	8,   // 25: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
-	8,   // 26: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
-	9,   // 27: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,   // 28: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,   // 29: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
-	6,   // 30: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
-	8,   // 31: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
-	10,  // 32: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
-	11,  // 33: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
-	86,  // 34: vx.v1.LandResponse.overlapping_claims:type_name -> vx.v1.Claim
-	9,   // 35: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
-	8,   // 36: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
-	63,  // 37: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
-	10,  // 38: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
-	11,  // 39: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
-	64,  // 40: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	65,  // 41: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
-	64,  // 42: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	65,  // 43: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
-	0,   // 44: vx.v1.Note.author:type_name -> vx.v1.Principal
-	72,  // 45: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
-	72,  // 46: vx.v1.AskResponse.question:type_name -> vx.v1.Note
-	72,  // 47: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
-	72,  // 48: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
-	72,  // 49: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
-	72,  // 50: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
-	72,  // 51: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
-	72,  // 52: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
-	72,  // 53: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
-	84,  // 54: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
-	8,   // 55: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
-	86,  // 56: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
-	0,   // 57: vx.v1.Claim.owner:type_name -> vx.v1.Principal
-	86,  // 58: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
-	86,  // 59: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
-	86,  // 60: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
-	86,  // 61: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
-	0,   // 62: vx.v1.Task.owner:type_name -> vx.v1.Principal
-	0,   // 63: vx.v1.Task.created_by:type_name -> vx.v1.Principal
-	93,  // 64: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
-	93,  // 65: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
-	93,  // 66: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
-	93,  // 67: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
-	25,  // 68: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	27,  // 69: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	17,  // 70: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	19,  // 71: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	21,  // 72: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	23,  // 73: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	13,  // 74: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	29,  // 75: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	31,  // 76: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	33,  // 77: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	35,  // 78: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	37,  // 79: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	39,  // 80: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	41,  // 81: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	43,  // 82: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	45,  // 83: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	47,  // 84: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	49,  // 85: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	51,  // 86: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	53,  // 87: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	55,  // 88: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	57,  // 89: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	59,  // 90: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	61,  // 91: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	66,  // 92: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	68,  // 93: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	70,  // 94: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	73,  // 95: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	75,  // 96: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	77,  // 97: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	79,  // 98: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	81,  // 99: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	83,  // 100: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	87,  // 101: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
-	89,  // 102: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
-	91,  // 103: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
-	94,  // 104: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
-	96,  // 105: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
-	98,  // 106: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
-	26,  // 107: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	28,  // 108: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	18,  // 109: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	20,  // 110: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	22,  // 111: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	24,  // 112: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	14,  // 113: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	30,  // 114: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	32,  // 115: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	34,  // 116: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	36,  // 117: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	38,  // 118: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	40,  // 119: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	42,  // 120: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	44,  // 121: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	46,  // 122: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	48,  // 123: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	50,  // 124: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	52,  // 125: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	54,  // 126: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	56,  // 127: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	58,  // 128: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	60,  // 129: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	62,  // 130: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	67,  // 131: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	69,  // 132: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	71,  // 133: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	74,  // 134: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	76,  // 135: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	78,  // 136: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	80,  // 137: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	82,  // 138: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	85,  // 139: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	88,  // 140: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
-	90,  // 141: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
-	92,  // 142: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
-	95,  // 143: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
-	97,  // 144: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
-	99,  // 145: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
-	107, // [107:146] is the sub-list for method output_type
-	68,  // [68:107] is the sub-list for method input_type
-	68,  // [68:68] is the sub-list for extension type_name
-	68,  // [68:68] is the sub-list for extension extendee
-	0,   // [0:68] is the sub-list for field type_name
+	100, // 1: vx.v1.Effort.rebase:type_name -> vx.v1.Rebase
+	5,   // 2: vx.v1.Evidence.checks:type_name -> vx.v1.Check
+	4,   // 3: vx.v1.Changeset.author:type_name -> vx.v1.Author
+	6,   // 4: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
+	7,   // 5: vx.v1.Changeset.files:type_name -> vx.v1.FileChange
+	11,  // 6: vx.v1.Changeset.warnings:type_name -> vx.v1.Warning
+	0,   // 7: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
+	16,  // 8: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
+	0,   // 9: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
+	15,  // 10: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
+	15,  // 11: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
+	0,   // 12: vx.v1.CreateTokenResponse.principal:type_name -> vx.v1.Principal
+	15,  // 13: vx.v1.CreateTokenResponse.token:type_name -> vx.v1.Token
+	0,   // 14: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
+	0,   // 15: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
+	12,  // 16: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
+	12,  // 17: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
+	2,   // 18: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
+	2,   // 19: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
+	2,   // 20: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
+	1,   // 21: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
+	3,   // 22: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
+	3,   // 23: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
+	9,   // 24: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
+	3,   // 25: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
+	8,   // 26: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
+	8,   // 27: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
+	9,   // 28: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 29: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 30: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
+	6,   // 31: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
+	8,   // 32: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
+	10,  // 33: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
+	11,  // 34: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
+	86,  // 35: vx.v1.LandResponse.overlapping_claims:type_name -> vx.v1.Claim
+	9,   // 36: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
+	8,   // 37: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
+	63,  // 38: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
+	10,  // 39: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
+	11,  // 40: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
+	64,  // 41: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	65,  // 42: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
+	64,  // 43: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	65,  // 44: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
+	0,   // 45: vx.v1.Note.author:type_name -> vx.v1.Principal
+	72,  // 46: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
+	72,  // 47: vx.v1.AskResponse.question:type_name -> vx.v1.Note
+	72,  // 48: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
+	72,  // 49: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
+	72,  // 50: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
+	72,  // 51: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
+	72,  // 52: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
+	72,  // 53: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
+	72,  // 54: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
+	84,  // 55: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
+	8,   // 56: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
+	86,  // 57: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
+	0,   // 58: vx.v1.Claim.owner:type_name -> vx.v1.Principal
+	86,  // 59: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
+	86,  // 60: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
+	86,  // 61: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
+	86,  // 62: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
+	0,   // 63: vx.v1.Task.owner:type_name -> vx.v1.Principal
+	0,   // 64: vx.v1.Task.created_by:type_name -> vx.v1.Principal
+	93,  // 65: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
+	93,  // 66: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
+	93,  // 67: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
+	93,  // 68: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
+	8,   // 69: vx.v1.Rebase.stopped_at:type_name -> vx.v1.Changeset
+	101, // 70: vx.v1.Rebase.conflicts:type_name -> vx.v1.RebaseConflict
+	100, // 71: vx.v1.RebaseEffortResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 72: vx.v1.RebaseEffortResponse.effort:type_name -> vx.v1.Effort
+	100, // 73: vx.v1.ContinueRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 74: vx.v1.ContinueRebaseResponse.effort:type_name -> vx.v1.Effort
+	100, // 75: vx.v1.AbortRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 76: vx.v1.AbortRebaseResponse.effort:type_name -> vx.v1.Effort
+	100, // 77: vx.v1.GetRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	25,  // 78: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	27,  // 79: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	17,  // 80: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	19,  // 81: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	21,  // 82: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	23,  // 83: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	13,  // 84: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	29,  // 85: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	31,  // 86: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	33,  // 87: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	35,  // 88: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	37,  // 89: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	39,  // 90: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	41,  // 91: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	43,  // 92: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	45,  // 93: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	47,  // 94: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	49,  // 95: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	51,  // 96: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	102, // 97: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
+	104, // 98: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
+	106, // 99: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
+	108, // 100: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
+	53,  // 101: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	55,  // 102: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	57,  // 103: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	59,  // 104: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	61,  // 105: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	66,  // 106: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	68,  // 107: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	70,  // 108: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	73,  // 109: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	75,  // 110: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	77,  // 111: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	79,  // 112: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	81,  // 113: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	83,  // 114: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	87,  // 115: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	89,  // 116: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	91,  // 117: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	94,  // 118: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	96,  // 119: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	98,  // 120: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	26,  // 121: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	28,  // 122: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	18,  // 123: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	20,  // 124: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	22,  // 125: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	24,  // 126: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	14,  // 127: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	30,  // 128: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	32,  // 129: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	34,  // 130: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	36,  // 131: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	38,  // 132: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	40,  // 133: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	42,  // 134: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	44,  // 135: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	46,  // 136: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	48,  // 137: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	50,  // 138: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	52,  // 139: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	103, // 140: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
+	105, // 141: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
+	107, // 142: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
+	109, // 143: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
+	54,  // 144: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	56,  // 145: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	58,  // 146: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	60,  // 147: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	62,  // 148: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	67,  // 149: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	69,  // 150: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	71,  // 151: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	74,  // 152: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	76,  // 153: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	78,  // 154: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	80,  // 155: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	82,  // 156: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	85,  // 157: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	88,  // 158: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	90,  // 159: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	92,  // 160: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	95,  // 161: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	97,  // 162: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	99,  // 163: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	121, // [121:164] is the sub-list for method output_type
+	78,  // [78:121] is the sub-list for method input_type
+	78,  // [78:78] is the sub-list for extension type_name
+	78,  // [78:78] is the sub-list for extension extendee
+	0,   // [0:78] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -7152,7 +8016,7 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   100,
+			NumMessages:   110,
 			NumExtensions: 0,
 			NumServices:   8,
 		},

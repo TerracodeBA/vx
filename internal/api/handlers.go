@@ -269,6 +269,7 @@ func (h *Handlers) GetEffort(ctx context.Context, req *connect.Request[vxv1.GetE
 		return nil, toConnect(err)
 	}
 	out := &vxv1.GetEffortResponse{Effort: effortPB(v.Repo.Name, v.Effort, h.ref(ctx, v.Effort.OwnerID), len(v.Workspaces))}
+	out.Effort.Rebase = h.activeRebasePB(ctx, v)
 	for _, w := range v.Workspaces {
 		out.OpenWorkspaces = append(out.OpenWorkspaces, workspacePB(v.Repo.Name, v.Effort.Slug, w, h.ref(ctx, w.OwnerID)))
 	}
