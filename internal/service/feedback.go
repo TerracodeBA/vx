@@ -490,6 +490,18 @@ func (s *Service) feedbackShipment(ctx context.Context, pr PRRef) (store.Shipmen
 	if eff.State != store.EffortOpen && eff.State != store.EffortShipping {
 		return store.Shipment{}, store.Effort{}, false, nil
 	}
+	if sh.ProviderRef == "" && pr.Number != "" && pr.HeadBranch == sh.Branch {
+		// Pushed without a pull request (plain git, or opening it failed),
+		// and a person opened one: later events that only carry the
+		// number (conversation comments) find it now.
+		if err := s.Store.LearnShipmentPR(ctx, sh.ID, pr.Number, pr.URL); err != nil {
+			return store.Shipment{}, store.Effort{}, false, err
+		}
+		sh.ProviderRef = pr.Number
+		if sh.URL == "" {
+			sh.URL = pr.URL
+		}
+	}
 	return sh.Shipment, eff, true, nil
 }
 

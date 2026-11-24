@@ -36,6 +36,15 @@ func (q Q) ShipmentByPR(ctx context.Context, repoID uuid.UUID, number, branch st
 	return q.shipmentWhere(ctx, `e.repo_id = $1 and s.branch = $2`, repoID, branch)
 }
 
+// LearnShipmentPR records the pull request number (and its URL, when the
+// shipment has none) of a shipment pushed without one: a person opened the
+// pull request on the host from vx's branch.
+func (q Q) LearnShipmentPR(ctx context.Context, id uuid.UUID, number, url string) error {
+	_, err := q.db.Exec(ctx, `update shipments set provider_ref = $2, url = case when url = '' then $3 else url end, updated_at = now()
+		where id = $1 and provider_ref = ''`, id, number, url)
+	return err
+}
+
 // ShipmentsByHeadSHA returns the repository's shipments whose pushed head
 // commit is sha, newest first.
 func (q Q) ShipmentsByHeadSHA(ctx context.Context, repoID uuid.UUID, sha string) ([]ShipmentRef, error) {

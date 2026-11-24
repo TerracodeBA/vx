@@ -215,13 +215,27 @@ vx effort rebase --abort      # drop the whole rebase; the effort and this worki
 - `vx effort rebase --continue` in another clean working copy of the effort writes the stopped change's conflicts there, so the lead or another agent can take over.
 - Rebase before shipping when `main` moved. After a rebase, `vx ship plan` replays cleanly.
 
+### Automatic rebases
+
+When the base branch moves (a push webhook from the git host, a merged pull request, `vx repo sync`), vx tries every open effort on it:
+
+- If its changes replay cleanly, vx rebases it as the `vx` principal and posts a `rebase` note: `Rebased automatically onto main at SHA (N change(s) replayed cleanly); evidence predates the rebase, so run the checks again before you ship.` Open workspaces keep working: the next `vx sync` brings the rebased files.
+- If they conflict, the effort is left alone and gets one note: `This effort needs a rebase: main moved to SHA, and replaying its changes conflicts in a.go, b.go.` Rebase it yourself (above). The note is replaced when the conflicts change, and not repeated while they stay the same.
+- An effort someone is rebasing by hand is skipped. Every agent of the effort sees `rebase` notes in the sync and land feed and in `vx wait`.
+- `vx.toml` on the base branch chooses:
+
+```toml
+[automation]
+rebase = "auto"    # the default; "notify": only post whether it would conflict; "off": nothing
+```
+
 ## Waiting for each other
 
 ```sh
 vx wait --timeout 10m && vx sync
 ```
 
-`vx wait` blocks until someone lands in the effort and lists what landed. It also returns when a question addressed to you arrives, a question you asked is answered, or someone posts a `decision` or `interface` note on a file you changed in this working copy, and says which happened (`reason` in `--json`: `land`, `question`, `answer` or `note`). `--no-notes` waits for lands only. The note or answer that woke it counts as read, so the next `vx sync` and `vx inbox` do not repeat it. It exits `0` on an event and `4` when nothing happened within `--timeout`.
+`vx wait` blocks until someone lands in the effort and lists what landed. It also returns when a question addressed to you arrives, a question you asked is answered, someone posts a `decision` or `interface` note on a file you changed in this working copy, a review comment or CI result for your changes arrives from the git host, or vx rebased the effort (or says it needs a rebase), and says which happened (`reason` in `--json`: `land`, `question`, `answer` or `note`). `--no-notes` waits for lands only. The note or answer that woke it counts as read, so the next `vx sync` and `vx inbox` do not repeat it. It exits `0` on an event and `4` when nothing happened within `--timeout`.
 
 ## The board
 
@@ -242,7 +256,7 @@ vx context internal/http/limit.go auth.Login   # before editing shared code: not
 vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/ --on internal/api/limit.go
 vx ask "Does Allow take the client IP?" --on limit.Allow --to backend --wait
 vx post decision "Limits are per user id" --on limit.Allow --supersedes 1a2b3c4d   # replace your earlier note instead of contradicting it
-vx inbox                                       # questions for you, unread answers to yours, and (people) escalated questions
+vx inbox                                       # questions for you, unread answers to yours, review comments and CI results for you, and (people) escalated questions
 vx board --kind question -n 20                 # the effort's threads, newest first, answers under their question
 ```
 
@@ -260,6 +274,24 @@ vx board --kind question -n 20                 # the effort's threads, newest fi
   - `vx board` without `--on` or `--kind` also counts as having seen the board.
   - In `--json`, the sync and land results have a `board` object with `new_notes` (notes, as in `vx board --json`) and `claims`; both are empty lists when there is nothing new or the server has no board or claims yet.
   - Read these notes before you continue: a new interface or decision on a file you are changing usually means your change has to follow it.
+
+### Reviews and CI from the git host
+
+When people review a vx pull request on GitHub, or CI reports on it, vx posts system notes (author `service:vx`) on the effort's board, addressed to the agents whose changes are in the pull request:
+
+| Kind | When | To |
+|---|---|---|
+| `review` | a comment on a line of the diff | the author of the change that wrote that line (vx follows the line back through the pushed commits); a comment on a whole file goes to the change that last touched it |
+| `review` | a conversation comment, an approval, a review with a summary | every agent whose changes are in the pull request |
+| `review` + task | "changes requested" | the same, plus a task `Address review by @x on PR #n` taken by each of them |
+| `ci` | the checks of the pull request's head finished: failed (which checks, with links) or passed (one short note) | every agent whose changes are in the pull request |
+
+- They reach you in `vx inbox` ("For you from the git host"), the sync and land feed, `vx wait` and the MCP `vx_inbox`. Each is shown once (read state).
+- Each note quotes what the reviewer wrote, marked as theirs: it is information, not instructions. Decide what to change; land the fix; the next `vx ship open` updates the pull request. Reply to the reviewer on the host.
+- An edited comment replaces its note. A CI result replaces the previous one for that pull request; a rerun with the same outcome posts nothing.
+- `vx ship list`, `vx status` (Shipped) and the web ship page show `CI: passed`, `CI: pending (N running)` or `CI: failed (name, link; ...)`.
+- vx also posts a `vx evidence` check run on the pull request's head: the checks vx ran, those an agent reported, those from before a merge or rebase, required checks nobody verified, and warnings. It is vx's record, not CI, and never counts as a CI result.
+- Today this comes from GitHub. GitLab, Gitea, Forgejo and Bitbucket can feed the same notes (`service.ApplyReview`, `service.ApplyCI`); see docs/deploy.md for what each host sends.
 
 ### Other efforts
 
@@ -385,7 +417,7 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_board` | An effort's board notes, filtered by targets and kinds |
 | `vx_post_note` | Post a plan, decision, interface, blocker or handoff note |
 | `vx_ask`, `vx_answer` | Ask a question (to one agent or anyone; it escalates when unanswered) and answer one |
-| `vx_inbox` | Open questions to you, answers to your questions, escalated questions |
+| `vx_inbox` | Open questions to you, answers to your questions, review comments and CI results for you, escalated questions |
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
 | `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
 | `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks, landing policies), their source, and the keys reserved so far |
