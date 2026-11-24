@@ -78,7 +78,7 @@ If you have the vx MCP tools (`vx_context`, `vx_status`, `vx_log`, `vx_show`, `v
     ```
   Resolve them by understanding both changes (read `vx log --files` and `vx show <change-id>` for theirs), run the tests, then `vx land` again. `vx land` refuses files that still contain markers.
 - **`Kept both insertions (check the order): PATH...`** after `vx land` or `vx sync` means both sides inserted different lines at the same place and vx kept both, the effort's first. Nothing is lost, but open each listed file and check the order, separators and anything that must stay unique or sorted; fix it in a new workspace if needed.
-- **The text merged but the code broke** (for example both sides added the same helper): for Go, `vx land` prints `Warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)` when a package declares a top-level name twice; the change has landed anyway. Other breakage vx cannot see; your `--run` checks catch it. Fix it in a new workspace and land.
+- **The text merged but the code broke** (for example both sides added the same helper): for Go, `vx sync` and `vx land` print `Warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)` (or `duplicate method T.Name`) when a package declares a name twice; after a sync, remove one before landing; after a land, the change has landed anyway. Other breakage vx cannot see; your `--run` checks catch it. Fix it in a new workspace and land.
 - **Waiting for someone else's change:** `vx wait --timeout 10m && vx sync` instead of polling in a loop. `vx wait` also returns when a question for you arrives, yours is answered, or a decision or interface is posted on a file you changed, and says which; read or answer it, then wait again.
 
 ## Useful flags

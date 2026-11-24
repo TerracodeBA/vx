@@ -415,6 +415,9 @@ type syncResult struct {
 	// keptBoth are the merged files where both sides inserted different
 	// lines at the same place and the merge kept both, effort side first.
 	keptBoth []string
+	// warnings are problems the merge created in Go packages you changed,
+	// such as a function or method now declared in two files.
+	warnings []engine.Warning
 }
 
 func (r syncResult) json() map[string]any {
@@ -430,7 +433,11 @@ func (r syncResult) json() map[string]any {
 	if keptBoth == nil {
 		keptBoth = []string{}
 	}
-	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth}
+	wj := []map[string]any{}
+	for _, w := range r.warnings {
+		wj = append(wj, map[string]any{"path": w.Path, "kind": string(w.Kind), "name": w.Name, "decl": w.Decl, "files": w.Files, "detail": w.Detail})
+	}
+	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth, "warnings": wj}
 }
 
 // syncWorkingCopy brings the working copy to the effort head, merging local
@@ -496,7 +503,46 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	a.printf(".\n")
 	a.printPaths("Merged with your edits", merged)
 	a.printKeptBoth(keptBoth)
-	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth}, nil
+	warnings := syncWarnings(ctx, wc, result, local, incoming, conflicts)
+	for _, w := range warnings {
+		a.printf("Warning: %s\n", w.Detail)
+	}
+	if len(warnings) > 0 {
+		a.printf("  The text merged cleanly but the code will not build: your edits and the incoming changes both declare it. Remove one before landing.\n")
+	}
+	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, warnings: warnings}, nil
+}
+
+// syncWarnings runs the land-time Go check on the merged tree, for the Go
+// packages of your local changes, when the sync brought in changes: a clean
+// text merge can still declare the same function or method twice (two
+// agents each adding a helper in a different file). Files that still have
+// conflict markers are left out; the check never fails a sync.
+func syncWarnings(ctx context.Context, wc *workcopy.WorkingCopy, tree hash.Hash, local, incoming []object.Change, conflicts []engine.Conflict) []engine.Warning {
+	if len(local) == 0 || len(incoming) == 0 {
+		return nil
+	}
+	conflicted := map[string]bool{}
+	for _, cf := range conflicts {
+		conflicted[cf.Path] = true
+	}
+	var paths []string
+	for _, ch := range local {
+		if ch.Op != object.OpDelete && !conflicted[ch.Path] {
+			paths = append(paths, ch.Path)
+		}
+	}
+	ws, err := engine.CheckGo(ctx, wc.Objects, tree, paths)
+	if err != nil {
+		return nil
+	}
+	var out []engine.Warning
+	for _, w := range ws {
+		if w.Kind == engine.WarningDuplicate {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // printPaths prints "LABEL: PATH" for one path, or LABEL and an indented
