@@ -171,7 +171,7 @@ func (a *App) rebaseContinue(ctx context.Context, c *client.Client, wc *workcopy
 	if err != nil {
 		return err
 	}
-	if _, err := c.Upload(ctx, wc.Objects, append(trees, blobs...)); err != nil {
+	if _, err := c.Upload(ctx, wc.Config.Repo, wc.Objects, append(trees, blobs...)); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 	resp, err := c.Efforts.ContinueRebase(ctx, connect.NewRequest(&vxv1.ContinueRebaseRequest{
@@ -199,7 +199,7 @@ func (a *App) rebaseAbort(ctx context.Context, c *client.Client, wc *workcopy.Wo
 		if err != nil {
 			return err
 		}
-		if err := c.FetchTree(ctx, wc.Objects, saved); err != nil {
+		if err := c.FetchTree(ctx, wc.Config.Repo, wc.Objects, saved); err != nil {
 			return err
 		}
 		cur, _, err := wc.Snapshot(ctx)
@@ -290,7 +290,7 @@ func (a *App) leaveRebase(ctx context.Context, c *client.Client, wc *workcopy.Wo
 	if err != nil {
 		return err
 	}
-	if err := c.FetchTree(ctx, wc.Objects, tree); err != nil {
+	if err := c.FetchTree(ctx, wc.Config.Repo, wc.Objects, tree); err != nil {
 		return err
 	}
 	cur, _, err := wc.Snapshot(ctx)
@@ -331,7 +331,7 @@ func (a *App) writeRebaseConflicts(ctx context.Context, c *client.Client, wc *wo
 		if err != nil || h.IsZero() {
 			return fmt.Errorf("the rebase state lacks its trees (%q): upgrade vx-server", s)
 		}
-		if err := c.FetchTree(ctx, wc.Objects, h); err != nil {
+		if err := c.FetchTree(ctx, wc.Config.Repo, wc.Objects, h); err != nil {
 			return err
 		}
 		trees[i] = h

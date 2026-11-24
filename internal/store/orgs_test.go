@@ -11,7 +11,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/store/storetest"
 )
 
-// TestOrgsMigrationKeepsAccess runs migration 008 on a database with
+// TestOrgsMigrationKeepsAccess runs migration 009 on a database with
 // people and repositories and checks that nobody loses access: every
 // person owns every organization the repositories went to and is a site
 // admin, and everyone has a personal organization.

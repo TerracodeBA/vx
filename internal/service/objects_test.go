@@ -303,7 +303,7 @@ func TestObjectBackfill(t *testing.T) {
 	}
 }
 
-// A database from before migration 009: a repository with a changeset whose
+// A database from before migration 010: a repository with a changeset whose
 // objects were stored without any membership. After the migration the
 // repository is queued, and its first object request backfills it.
 func TestRepoObjectsMigrationBackfillsOldRepos(t *testing.T) {
@@ -313,7 +313,7 @@ func TestRepoObjectsMigrationBackfillsOldRepos(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	if err := st.MigrateTo(ctx, 8); err != nil {
+	if err := st.MigrateTo(ctx, 9); err != nil {
 		t.Fatal(err)
 	}
 	blobs := blob.NewMem()

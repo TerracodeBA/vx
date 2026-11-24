@@ -133,7 +133,7 @@ func (s *Service) ContinueRebase(ctx context.Context, actor Actor, in ContinueIn
 	if err != nil {
 		return RebaseView{}, err
 	}
-	if err := s.checkUploaded(ctx, cur.Tree, in.Tree); err != nil {
+	if err := s.checkInRepo(ctx, v.Repo, cur.Tree, in.Tree); err != nil {
 		return RebaseView{}, err
 	}
 	seen := r.Version
@@ -332,6 +332,11 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 			}
 			if !mr.Clean() {
 				return hash.Zero, s.rebaseConflicts(ctx, mr.Conflicts), nil
+			}
+			// Merged trees are new objects: make them part of the repo, as
+			// land and ship do, or nobody could fetch the rebased files.
+			if err := s.recordTree(ctx, repo.ID, cur.Tree, mr.Tree); err != nil {
+				return hash.Zero, nil, err
 			}
 			next = mr.Tree
 		}
