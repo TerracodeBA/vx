@@ -5,12 +5,14 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // PrincipalKind is the type of an identity.
@@ -152,15 +154,85 @@ func (q Q) CreateToken(ctx context.Context, principalID uuid.UUID, name string) 
 
 // Authenticate resolves a token to its principal.
 func (q Q) Authenticate(ctx context.Context, secret string) (Principal, error) {
+	p, _, err := q.AuthenticateToken(ctx, secret)
+	return p, err
+}
+
+// AuthenticateToken resolves a token to its principal and also returns the
+// token's id, so callers know which token a request was made with.
+func (q Q) AuthenticateToken(ctx context.Context, secret string) (Principal, uuid.UUID, error) {
 	if !strings.HasPrefix(secret, TokenPrefix) {
-		return Principal{}, fmt.Errorf("token: %w", ErrNotFound)
+		return Principal{}, uuid.Nil, fmt.Errorf("token: %w", ErrNotFound)
 	}
 	row := q.db.QueryRow(ctx, `update tokens set last_used_at = now()
 		where secret_hash = $1 and revoked_at is null
-		returning principal_id`, hashToken(secret))
-	var id uuid.UUID
-	if err := row.Scan(&id); err != nil {
-		return Principal{}, notFound(err, "token")
+		returning id, principal_id`, hashToken(secret))
+	var tokenID, id uuid.UUID
+	if err := row.Scan(&tokenID, &id); err != nil {
+		return Principal{}, uuid.Nil, notFound(err, "token")
 	}
-	return q.PrincipalByID(ctx, id)
+	p, err := q.PrincipalByID(ctx, id)
+	return p, tokenID, err
+}
+
+// Token describes a token without its secret, which is never stored.
+type Token struct {
+	ID          uuid.UUID
+	PrincipalID uuid.UUID
+	Name        string
+	CreatedAt   time.Time
+	LastUsedAt  *time.Time
+	RevokedAt   *time.Time
+}
+
+// Active reports whether the token can still be used.
+func (t Token) Active() bool { return t.RevokedAt == nil }
+
+const tokenCols = `id, principal_id, name, created_at, last_used_at, revoked_at`
+
+func scanToken(row interface{ Scan(...any) error }) (Token, error) {
+	var t Token
+	err := row.Scan(&t.ID, &t.PrincipalID, &t.Name, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt)
+	return t, err
+}
+
+// ListTokens returns the tokens of the given principals, active ones first,
+// then newest first.
+func (q Q) ListTokens(ctx context.Context, principalIDs ...uuid.UUID) ([]Token, error) {
+	rows, err := q.db.Query(ctx, `select `+tokenCols+` from tokens where principal_id = any($1)
+		order by revoked_at is not null, created_at desc, id`, principalIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Token
+	for rows.Next() {
+		t, err := scanToken(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// TokenByID looks a token up by id.
+func (q Q) TokenByID(ctx context.Context, id uuid.UUID) (Token, error) {
+	t, err := scanToken(q.db.QueryRow(ctx, `select `+tokenCols+` from tokens where id = $1`, id))
+	return t, notFound(err, "token "+id.String())
+}
+
+// RevokeToken marks a token revoked and returns it. Revoking a token twice
+// keeps the first revocation time; revoked reports whether this call did it.
+func (q Q) RevokeToken(ctx context.Context, id uuid.UUID) (t Token, revoked bool, err error) {
+	t, err = scanToken(q.db.QueryRow(ctx, `update tokens set revoked_at = now()
+		where id = $1 and revoked_at is null returning `+tokenCols, id))
+	if err == nil {
+		return t, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return Token{}, false, err
+	}
+	t, err = q.TokenByID(ctx, id)
+	return t, false, err
 }

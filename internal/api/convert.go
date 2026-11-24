@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/internal/engine"
 	"github.com/TerracodeBA/vx/internal/hash"
@@ -17,6 +19,20 @@ func ts(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func tsp(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return ts(*t)
+}
+
+func tokenPB(t store.Token, owner string, current uuid.UUID) *vxv1.Token {
+	return &vxv1.Token{
+		Id: t.ID.String(), Principal: owner, Name: t.Name, CreatedAt: ts(t.CreatedAt),
+		LastUsedAt: tsp(t.LastUsedAt), RevokedAt: tsp(t.RevokedAt), Current: current != uuid.Nil && t.ID == current,
+	}
 }
 
 func principalPB(a service.Actor) *vxv1.Principal {

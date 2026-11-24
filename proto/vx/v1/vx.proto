@@ -142,6 +142,61 @@ service AuthService {
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {}
   // CreateAgent creates an agent that acts for the caller and returns its token.
   rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse) {}
+  // ListAgents lists the caller's agents with a summary of their tokens.
+  // Only people have agents.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {}
+  // ListTokens lists the tokens of the caller or of one of the caller's
+  // agents. Secrets are never returned.
+  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
+  // RevokeToken revokes a token of the caller or of one of the caller's
+  // agents. Revoking the token the request is made with needs allow_current.
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
+}
+
+// Token describes an API token. The secret itself is only shown once, when
+// the token is created.
+message Token {
+  string id = 1;
+  string principal = 2; // ref of the token's owner
+  string name = 3;
+  string created_at = 4;
+  string last_used_at = 5; // empty: never used
+  string revoked_at = 6; // empty: active
+  bool current = 7; // the token this request was made with
+}
+
+message AgentSummary {
+  Principal agent = 1;
+  int32 active_tokens = 2;
+  int32 revoked_tokens = 3;
+  string last_used_at = 4; // latest use of any of its tokens; empty: never
+  string created_at = 5;
+}
+
+message ListAgentsRequest {}
+
+message ListAgentsResponse {
+  repeated AgentSummary agents = 1;
+}
+
+message ListTokensRequest {
+  // An agent name ("backend") or handle ("alice/backend"). Empty: the caller.
+  string agent = 1;
+}
+
+message ListTokensResponse {
+  Principal principal = 1;
+  repeated Token tokens = 2;
+}
+
+message RevokeTokenRequest {
+  string id = 1; // token id, or a unique prefix of at least 8 characters
+  bool allow_current = 2; // allow revoking the token this request uses
+}
+
+message RevokeTokenResponse {
+  Token token = 1;
+  bool already_revoked = 2;
 }
 
 message WhoAmIRequest {}

@@ -69,6 +69,51 @@ func (h *Handlers) CreateAgent(ctx context.Context, req *connect.Request[vxv1.Cr
 	return connect.NewResponse(&vxv1.CreateAgentResponse{Agent: principalPB(a), Token: token}), nil
 }
 
+func (h *Handlers) ListAgents(ctx context.Context, _ *connect.Request[vxv1.ListAgentsRequest]) (*connect.Response[vxv1.ListAgentsResponse], error) {
+	actor := actorFrom(ctx)
+	agents, err := h.svc.ListAgents(ctx, actor)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.ListAgentsResponse{}
+	for _, a := range agents {
+		out.Agents = append(out.Agents, &vxv1.AgentSummary{
+			Agent:         principalPB(service.Actor{Principal: a.Agent, Parent: &actor.Principal}),
+			ActiveTokens:  int32(a.ActiveTokens),
+			RevokedTokens: int32(a.RevokedTokens),
+			LastUsedAt:    tsp(a.LastUsedAt),
+			CreatedAt:     ts(a.Agent.CreatedAt),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handlers) ListTokens(ctx context.Context, req *connect.Request[vxv1.ListTokensRequest]) (*connect.Response[vxv1.ListTokensResponse], error) {
+	actor := actorFrom(ctx)
+	owner, tokens, err := h.svc.ListTokens(ctx, actor, req.Msg.Agent)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	ownerActor, err := h.svc.ResolveActor(ctx, owner)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.ListTokensResponse{Principal: principalPB(ownerActor)}
+	for _, t := range tokens {
+		out.Tokens = append(out.Tokens, tokenPB(t, owner.Ref(), actor.TokenID))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handlers) RevokeToken(ctx context.Context, req *connect.Request[vxv1.RevokeTokenRequest]) (*connect.Response[vxv1.RevokeTokenResponse], error) {
+	actor := actorFrom(ctx)
+	tok, owner, already, err := h.svc.RevokeToken(ctx, actor, service.RevokeInput{ID: req.Msg.Id, AllowCurrent: req.Msg.AllowCurrent})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.RevokeTokenResponse{Token: tokenPB(tok, owner.Ref(), actor.TokenID), AlreadyRevoked: already}), nil
+}
+
 // ---------- Objects ----------
 
 func (h *Handlers) MissingObjects(ctx context.Context, req *connect.Request[vxv1.MissingObjectsRequest]) (*connect.Response[vxv1.MissingObjectsResponse], error) {

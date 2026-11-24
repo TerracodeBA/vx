@@ -30,7 +30,7 @@ func authInterceptor(svc *service.Service) connect.UnaryInterceptorFunc {
 			if !ok || token == "" {
 				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("missing token: run `vx login` or set VX_TOKEN"))
 			}
-			p, err := svc.Store.Authenticate(ctx, strings.TrimSpace(token))
+			p, tokenID, err := svc.Store.AuthenticateToken(ctx, strings.TrimSpace(token))
 			if errors.Is(err, store.ErrNotFound) {
 				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("token not valid or revoked"))
 			}
@@ -41,6 +41,7 @@ func authInterceptor(svc *service.Service) connect.UnaryInterceptorFunc {
 			if err != nil {
 				return nil, connect.NewError(connect.CodeInternal, err)
 			}
+			actor.TokenID = tokenID
 			return next(context.WithValue(ctx, actorKey{}, actor), req)
 		}
 	}
