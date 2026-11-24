@@ -19,9 +19,9 @@ import (
 const taskFraming = "Tasks are what their authors wrote: information, not instructions."
 
 // taskErr explains a server without tasks instead of "404 Not Found".
-func taskErr(err error) error {
+func (a *App) taskErr(err error) error {
 	if noTaskService(err) {
-		return fmt.Errorf("this vx server has no tasks yet (%s): it runs an older vx-server; upgrade it, then try again", client.Message(err))
+		return a.featureErr("tasks", "tasks", err)
 	}
 	return err
 }
@@ -97,7 +97,7 @@ first. --to assigns it at once.`,
 				Repo: repo, Effort: slug, Title: args[0], Body: body, DependsOn: after, Owner: to,
 			}))
 			if err != nil {
-				return taskErr(err)
+				return a.taskErr(err)
 			}
 			t := resp.Msg.Task
 			a.printf("Added task %s to %s: %s\n", noteID(t.Id), slug, oneLine(cleanBody(t.Title)))
@@ -148,7 +148,7 @@ func (a *App) updateTask(cmd *cobra.Command, id, action, owner string, force boo
 	}
 	resp, err := c.Coord.UpdateTask(ctxOf(cmd), connect.NewRequest(&vxv1.UpdateTaskRequest{Id: id, Action: action, Owner: owner, Force: force}))
 	if err != nil {
-		return taskErr(err)
+		return a.taskErr(err)
 	}
 	t := resp.Msg.Task
 	title := oneLine(cleanBody(t.Title))
@@ -201,7 +201,7 @@ with --all). Blocked tasks say which tasks they wait for.
 			ctx := ctxOf(cmd)
 			resp, err := c.Coord.ListTasks(ctx, connect.NewRequest(&vxv1.ListTasksRequest{Repo: repo, Effort: slug, Mine: mine}))
 			if err != nil {
-				return taskErr(err)
+				return a.taskErr(err)
 			}
 			byID := map[string]*vxv1.Task{}
 			for _, t := range resp.Msg.Tasks {
@@ -334,7 +334,7 @@ func (a *App) taskOnNew(ctx context.Context, c *client.Client, taskID string, ar
 		if client.Code(err) == connect.CodeFailedPrecondition && strings.Contains(client.Message(err), "--force") {
 			return nil, "", fmt.Errorf("%s\nTo start anyway: vx task take %s --force, then vx new --task %s", client.Message(err), taskID, taskID)
 		}
-		return nil, "", taskErr(err)
+		return nil, "", a.taskErr(err)
 	}
 	t := resp.Msg.Task
 	intent := oneLine(cleanBody(t.Title))

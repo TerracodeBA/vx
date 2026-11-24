@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,40 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
-	"github.com/TerracodeBA/vx/internal/client"
 )
-
-func (a *App) loginCmd() *cobra.Command {
-	var server, token string
-	cmd := &cobra.Command{
-		Use:   "login",
-		Short: "Save the server address and your token",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if server == "" || token == "" {
-				return errors.New("both --server and --token are needed")
-			}
-			c := client.New(server, token)
-			resp, err := c.Auth.WhoAmI(ctxOf(cmd), connect.NewRequest(&vxv1.WhoAmIRequest{}))
-			if err != nil {
-				return err
-			}
-			path := a.settingsPath()
-			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-				return err
-			}
-			data, _ := json.MarshalIndent(Settings{Server: server, Token: token}, "", "  ")
-			if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
-				return err
-			}
-			a.printf("Logged in to %s as %s\n", server, resp.Msg.Principal.Ref)
-			a.emit(resp.Msg)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&server, "server", "", "server URL, e.g. http://localhost:7070")
-	cmd.Flags().StringVar(&token, "token", "", "your vx token")
-	return cmd
-}
 
 func (a *App) whoamiCmd() *cobra.Command {
 	return &cobra.Command{

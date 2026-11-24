@@ -17,6 +17,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/version"
 )
 
 // Client talks to one vx server as one principal.
@@ -30,18 +31,24 @@ type Client struct {
 	Board      vxv1connect.BoardServiceClient
 	Coord      vxv1connect.CoordinationServiceClient
 	Orgs       vxv1connect.OrgServiceClient
+	Public     vxv1connect.PublicServiceClient // needs no token
 }
 
 const maxMessage = 64 << 20
 
-// New returns a client for baseURL that sends token on every call.
+// New returns a client for baseURL that sends token on every call (none
+// when token is empty: only Public works then) and this vx's version, so
+// the server can refuse versions it no longer works with.
 func New(baseURL, token string) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 	auth := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+token)
-			req.Header().Set("User-Agent", "vx-cli")
+			if token != "" {
+				req.Header().Set("Authorization", "Bearer "+token)
+			}
+			req.Header().Set("User-Agent", "vx-cli/"+version.Version)
+			req.Header().Set(version.Header, version.Version)
 			return next(ctx, req)
 		}
 	})
@@ -61,6 +68,7 @@ func New(baseURL, token string) *Client {
 		Board:      vxv1connect.NewBoardServiceClient(httpClient, baseURL, opts...),
 		Coord:      vxv1connect.NewCoordinationServiceClient(httpClient, baseURL, opts...),
 		Orgs:       vxv1connect.NewOrgServiceClient(httpClient, baseURL, opts...),
+		Public:     vxv1connect.NewPublicServiceClient(httpClient, baseURL, opts...),
 	}
 }
 

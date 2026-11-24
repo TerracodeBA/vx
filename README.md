@@ -59,12 +59,14 @@ docker compose up -d
 docker compose exec vx vx-server user-add alice --name "Alice"   # prints a token
 ```
 
-Install the CLI from the [latest release](https://github.com/TerracodeBA/vx/releases) or with Go 1.26+:
+Install the CLI from your server and log in; `vx login` opens your browser, where you approve the code it shows:
 
 ```sh
-go install github.com/TerracodeBA/vx/cmd/vx@latest
-vx login --server http://127.0.0.1:7070 --token <token>
+curl -fsSL http://127.0.0.1:7070/install.sh | sh   # into ~/.local/bin; it says if that is not on your PATH
+vx login --server http://127.0.0.1:7070
 ```
+
+Without a browser: `vx login --server URL --no-browser` prints the link, and `vx login --server URL --token <token>` logs in with the token from `user-add`. With Go 1.26+ you can also `go install github.com/TerracodeBA/vx/cmd/vx@latest`.
 
 Connect a repository, start an effort and work in it:
 

@@ -34,13 +34,13 @@ func claimFlags(cmd *cobra.Command, o *claimOptions) {
 }
 
 // coordErr explains a server without claims instead of a bare error.
-func coordErr(err error) error {
+func (a *App) coordErr(err error) error {
 	switch client.Code(err) {
 	case connect.CodeUnimplemented:
-		return fmt.Errorf("this vx server has no claims yet (%s): it runs an older vx-server; upgrade it, then try again", client.Message(err))
+		return a.featureErr("claims", "claims", err)
 	case connect.CodeUnavailable:
 		if strings.Contains(client.Message(err), "not implemented") {
-			return fmt.Errorf("this vx server has no claims yet (%s): it runs an older vx-server; upgrade it, then try again", client.Message(err))
+			return a.featureErr("claims", "claims", err)
 		}
 	}
 	return err
@@ -54,7 +54,7 @@ func (a *App) makeClaim(ctx context.Context, c *client.Client, repo, slug, works
 		TtlSeconds: int32(o.ttl / time.Second), WorkspaceId: workspace,
 	}))
 	if err != nil {
-		return nil, coordErr(err)
+		return nil, a.coordErr(err)
 	}
 	m := resp.Msg
 	tie := "not tied to a workspace; release it with `vx release " + noteID(m.Claim.Id) + "`"
@@ -149,7 +149,7 @@ the effort.`,
 			case len(args) == 1:
 				resp, err := c.Coord.Release(ctx, connect.NewRequest(&vxv1.ReleaseRequest{Id: args[0]}))
 				if err != nil {
-					return coordErr(err)
+					return a.coordErr(err)
 				}
 				released = resp.Msg.Released
 			case all:
@@ -159,7 +159,7 @@ the effort.`,
 				}
 				list, err := c.Coord.ListClaims(ctx, connect.NewRequest(&vxv1.ListClaimsRequest{Repo: repo, Effort: slug}))
 				if err != nil {
-					return coordErr(err)
+					return a.coordErr(err)
 				}
 				for _, cl := range list.Msg.Claims {
 					if cl.Trust != "self" {
@@ -167,7 +167,7 @@ the effort.`,
 					}
 					resp, err := c.Coord.Release(ctx, connect.NewRequest(&vxv1.ReleaseRequest{Id: cl.Id}))
 					if err != nil {
-						return coordErr(err)
+						return a.coordErr(err)
 					}
 					released = append(released, resp.Msg.Released...)
 				}
@@ -178,7 +178,7 @@ the effort.`,
 				}
 				resp, err := c.Coord.Release(ctx, connect.NewRequest(&vxv1.ReleaseRequest{WorkspaceId: wc.Config.Workspace}))
 				if err != nil {
-					return coordErr(err)
+					return a.coordErr(err)
 				}
 				released = resp.Msg.Released
 			}
@@ -215,7 +215,7 @@ func (a *App) claimsCmd() *cobra.Command {
 			}
 			resp, err := c.Coord.ListClaims(ctxOf(cmd), connect.NewRequest(&vxv1.ListClaimsRequest{Repo: repo, Effort: slug, Targets: args}))
 			if err != nil {
-				return coordErr(err)
+				return a.coordErr(err)
 			}
 			cs := resp.Msg.Claims
 			switch {

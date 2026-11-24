@@ -72,6 +72,8 @@ func toConnect(err error) error {
 			code = connect.CodeFailedPrecondition
 		case service.CodeUnavailable:
 			code = connect.CodeUnavailable
+		case service.CodeTooMany:
+			code = connect.CodeResourceExhausted
 		}
 		return connect.NewError(code, errors.New(se.Error()))
 	}

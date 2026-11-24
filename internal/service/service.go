@@ -25,6 +25,7 @@ const (
 	CodePermission
 	CodeFailedPrecondition
 	CodeUnavailable
+	CodeTooMany // rate limited: try again later
 )
 
 // Error is a service error with a code and a message meant for the caller.

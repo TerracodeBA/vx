@@ -1,0 +1,44 @@
+{{define "content"}}
+<section class="login-card cli-approve">
+  <div class="brand brand-lg"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></div>
+  {{if .Done}}
+    {{if eq .Done "approve"}}
+    <h1>{{.Client}} is authorized</h1>
+    <p class="note ok">Go back to your terminal: vx finishes logging in as <strong class="mono">{{.Who}}</strong> in a moment.</p>
+    <p class="muted small">The new token shows up in <a href="/ui/settings">Settings</a>, where you can revoke it any time.</p>
+    {{else}}
+    <h1>Denied</h1>
+    <p class="note warn">{{.Client}} was not authorized. The terminal says so and gets no token.</p>
+    {{end}}
+  {{else if .Ask}}
+    <h1>Authorize vx</h1>
+    <p class="muted">Enter the code your terminal shows after <code>vx login</code>.</p>
+    <form method="get" action="/ui/cli/approve" class="stack">
+      <label for="code">Code</label>
+      <input id="code" name="code" type="text" class="user-code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="WDJB-MJHT" required autofocus>
+      <button class="btn primary block" type="submit">Continue</button>
+    </form>
+  {{else if .Error}}
+    <h1>Authorize vx</h1>
+    <p class="note bad">{{.Error}}</p>
+    <form method="get" action="/ui/cli/approve" class="stack">
+      <label for="code">Code from your terminal</label>
+      <input id="code" name="code" type="text" class="user-code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" value="{{.Code}}" required>
+      <button class="btn ghost block" type="submit">Try this code</button>
+    </form>
+  {{else}}
+    <h1>Authorize {{.Client}} for <span class="mono">{{.Who}}</span>?</h1>
+    <p class="muted">Check that your terminal shows this code:</p>
+    <p class="user-code" aria-label="Login code">{{.Code}}</p>
+    <form method="post" action="/ui/cli/approve" class="stack">
+      <input type="hidden" name="code" value="{{.Code}}">
+      <div class="confirm-actions">
+        <button class="btn primary" type="submit" name="decision" value="approve">Approve</button>
+        <button class="btn ghost" type="submit" name="decision" value="deny">Deny</button>
+      </div>
+    </form>
+    <p class="muted small">Approve only if you ran <code>vx login</code> yourself just now and the codes match. vx then gets a token named "{{.TokenName}}" that acts as you; revoke it in Settings when you no longer use that machine. Agents do not log in here: they get their token from <code>vx agent add</code>.</p>
+  {{end}}
+  <p class="muted small">Signed in as <span class="mono">{{.Who}}</span>.</p>
+</section>
+{{end}}
