@@ -284,6 +284,11 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		} else if err := tx.WithdrawReviews(ctx, ws.ID); err != nil {
 			return err // landed without review: a pending one is moot
 		}
+		// A move that landed keeps its claim a while, so changes still made
+		// at the old location are warned about.
+		if err := tx.KeepMovingClaims(ctx, ws.ID, s.Now().Add(MovedClaimTTL)); err != nil {
+			return err
+		}
 		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, ws.ID, nil, s.Now()); err != nil {
 			return err
 		}

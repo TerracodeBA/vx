@@ -266,7 +266,7 @@ Every effort has a board: short typed notes agents leave for each other about pa
 | `interface` | `vx post interface ...` | a signature others can rely on |
 | `blocker` | `vx post blocker ...` | what you are waiting on |
 | `handoff` | `vx post handoff ...` | work left for the next agent |
-| `question` | `vx ask "QUESTION" --on TARGET [--to NAME] [--within 5m] [--wait]` | ask instead of guessing |
+| `question` | `vx ask "QUESTION" [--on TARGET] [--to NAME] [--within 5m] [--wait [--timeout 10m]]` | ask instead of guessing |
 | `answer` | `vx answer NOTE_ID "TEXT"` | the reply to a question |
 
 ```sh
@@ -274,7 +274,7 @@ vx context internal/http/limit.go auth.Login   # before editing shared code: not
 vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/ --on internal/api/limit.go
 vx ask "Does Allow take the client IP?" --on limit.Allow --to backend --wait
 vx post decision "Limits are per user id" --on limit.Allow --supersedes 1a2b3c4d   # replace your earlier note instead of contradicting it
-vx inbox                                       # questions for you, unread answers to yours, review comments and CI results for you, and (people) escalated questions
+vx inbox                                       # questions for you, unread answers to yours, review comments and CI results for you, claims of yours that lapsed, and (people) questions to their agents that are not working, escalated questions
 vx board --kind question -n 20                 # the effort's threads, newest first, answers under their question
 ```
 
@@ -284,8 +284,9 @@ vx board --kind question -n 20                 # the effort's threads, newest fi
 - **Replace a note instead of contradicting it.** When a plan or decision changes, `vx post KIND "TEXT" --supersedes ID` (id or 8+ character prefix) replaces your earlier note. You can replace your own notes and those of your person's other agents, in the same effort; a replaced note cannot be replaced again (replace the newer one). The old note shows "replaced by" the new one and is left out of `vx context`, `vx board`, the sync and land feed and the MCP tools; `vx board --all` (MCP: `vx_board` with `all`) still lists it. Questions and answers cannot be replaced.
 - **Read state.** The server remembers which notes each agent was shown: by `vx board`, `vx context`, the sync and land feed, what `vx status` printed in full, the note or answer that woke `vx wait` or `vx ask --wait`, `vx inbox`, the MCP read tools, and questions you answered. A note you were shown is not brought up again in full: the feed skips it, `vx status` counts only unread notes by others on your files (never your own), `vx board`, `vx context` and `vx inbox` print it (and your own notes) on one line, and `vx inbox` lists only unread answers and escalated questions, ending with "N read (vx inbox --all)", and lists each note once. Open questions for you stay in the inbox until answered. `read` is in every note's JSON. To read a note in full again: `vx board ID` (or `vx board --full`).
 
-- `vx ask --to` takes an agent name, a handle (`alice/backend`) or a ref; without it the question is for anyone in the effort. A question nobody answers within `--within` (default 5 minutes) **escalates**: it moves to the top of the web UI's Board tab, where people answer it, and into their `vx inbox`.
-- `vx ask --wait` blocks until the question is answered (exit `0`, the answer is printed) or escalates without an answer (exit `3`).
+- `vx ask --to` takes an agent name, a handle (`alice/backend`) or a ref; without it the question is for anyone in the effort. `--on` is optional: a question without targets is about the effort as a whole (it is still on the board and in the addressee's inbox; `vx context PATH` only shows questions on PATH). A question nobody answers within `--within` (default 5 minutes) **escalates**: it moves to the top of the web UI's Board tab, where people answer it, and into their `vx inbox`.
+- **Asking an agent that is not working.** An agent is working when it has an open workspace that did something (sync, land, status, a vx command) in the last 2 hours, or used its token in the last 15 minutes. A question to an agent that is not is still posted, but `vx ask` says so at once, `Note: agent:alice/bench-t2 is not working right now (last seen 40 min ago); the question also goes to user:alice.`, and the question is copied to the agent's person right away instead of only when it escalates. That person sees it in `vx inbox` under **"For your agents (not working now)"** (and not again under "Questions for you"); once overdue it moves to "Escalated". `--json` has `notice`, `to_last_seen` and `copied_to`; MCP `vx_ask` returns `notice`, `vx_inbox` returns `for_agents`. Questions to people, and a person's questions to their own agents, are never copied.
+- `vx ask --wait` blocks until the question is answered (exit `0`, the answer is printed) or escalates without an answer (exit `3`). `--timeout`, as for `vx wait`, stops waiting earlier (exit `4`, the question stays open); `--within` stays the deadline for escalation.
 - **Notes come to you.** You do not have to poll `vx board`: the commands you already run show what is new. A working copy remembers when it last showed you the board (`board_seen_at` in `.vx/config.json`) and the server what you were shown, so each note is shown once, wherever you saw it first.
   - `vx sync` and `vx land` show **"New on the board since your last sync"** right before their result line: notes posted since then on the files you changed locally or just landed, questions to you, and every `decision` and `interface` in the effort. Up to ten, newest first, **one line each**: trust label, kind, author, targets (the first, by its file name, and how many more), age, id and the first 80 characters of the body:
 
@@ -339,7 +340,8 @@ A claim says "I am changing these paths or symbols now". Make one before a large
 
 ```sh
 vx new "Move clientIP into httpx" --claim internal/httpx/ --claim internal/api/limit.go   # open a workspace and claim in one go
-vx claim auth.Login --reason "splitting Login into two steps" --for 1h                      # claim for the open workspace
+vx claim auth.Login --reason "splitting Login into two steps" --for 1h                      # claim for the open workspace (--on auth.Login works too)
+vx claim --moving service.planShip --to internal/service/ship_plan.go                      # say where code is going
 vx claims                                      # the effort's active claims; vx claims PATH for those on a path
 vx release 1a2b3c4d                            # end one of your claims (id or 8+ character prefix)
 vx release                                     # end your claims tied to the open workspace; --all: every claim of yours
@@ -347,6 +349,8 @@ vx release                                     # end your claims tied to the ope
 
 - Targets match like note targets: a directory (`internal/http/`) covers the files under it, a symbol (`auth`) the symbols under it. Up to 20 targets per claim.
 - By default a claim is tied to the open workspace and **lasts as long as the workspace**: it is renewed while the workspace is open (shown as "while its workspace is open") and ends when the workspace lands or is abandoned, or with `vx release`. `--no-workspace` makes it last `--for` (default 30 minutes, at most 4 hours) or until you release it. Only the owner releases a claim; others' claims simply expire.
+- **A workspace nobody works in stops holding code.** When a workspace has done nothing for 2 hours (no `vx sync`, `vx land`, `vx status`, `vx claim` or `vx wait` in it, and its owner used no token), its claims past their own `--for` **lapse**: they end, and the owner gets a note (kind `claim`, by `vx`) in `vx inbox` under "About your claims": `Your claim on auth.Login lapsed: workspace 6znt-7x9p ("...") did nothing ... for 2 hours ... Still on it? Claim again: vx claim auth.Login`. The lapse happens when anyone next reads or makes claims in the effort.
+- **Moving code.** `vx claim --moving pkg.Func --to PATH` (or `--to pkg2.Func`) claims code you are moving and says where it goes. Whoever lands a change to the old location while the claim is active gets `Warning: pkg.Func is being moved to PATH by agent:... (claim 1a2b3c4d). Your change landed at the old location: make it at PATH too, or tell them: ...`, and you get a note (kind `claim`) naming the change, so you carry it over. A moving claim outlives the land of the move by 2 hours, for workspaces that still edit the old code; `vx release` ends it sooner. `--json` and MCP: `moving_to` on the claim (`vx_claim` takes `moving_to`).
 - `vx claim` always gets you the claim. When others already claim overlapping targets it lists theirs: talk to them (`vx ask ... --to OWNER`) before you edit the same lines.
 - A **symbol claim** (`--on`-style target `pkg.Func`, `pkg.Type`, `pkg.Type.Method`) only counts against a land that changes the lines of that symbol: for Go, vx compares the declaration (with its doc comment) before and after the land, so two agents changing different functions of one file are not landing over each other's claims. In other languages a symbol stands for the whole file named like its package part (`limit.Allow` and `web/limit.ts`). Path and directory claims count against any change to their files.
 - `vx land` lands over others' claims and then prints `Warning: you landed over claims of others:` with each claim's owner, targets and reason. Tell them what you changed. In `--json` they are in `overlapping_claims`.
@@ -443,9 +447,9 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_context` | Before editing shared code: board notes on the paths or symbols you name, active claims on them, open workspaces, recent changes touching them. Bodies of questions to you and of your own person's notes come whole; the others are cut to 80 characters with `truncated: true` (`full: true` returns them whole) |
 | `vx_board` | An effort's board notes, filtered by targets and kinds; with `ids`, those notes whole, with a question's answers |
 | `vx_post_note` | Post a plan, decision, interface, blocker or handoff note |
-| `vx_ask`, `vx_answer` | Ask a question (to one agent or anyone; it escalates when unanswered) and answer one |
-| `vx_inbox` | Open questions to you, answers to your questions, review comments and CI results for you, escalated questions |
-| `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
+| `vx_ask`, `vx_answer` | Ask a question (to one agent or anyone; it escalates when unanswered; `notice` says when the agent asked is not working and its person got a copy) and answer one |
+| `vx_inbox` | Open questions to you, answers to your questions, review comments, CI results and lapsed claims for you, escalated questions, and (people) `for_agents`: questions to their agents that are not working |
+| `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims; `moving_to` for code you are moving), end your claims, list an effort's active claims |
 | `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
 | `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks, landing policies), their source, and the keys reserved so far |
 | `vx_reserve` | Reserve the next free key of a `[[unique]]` rule for an effort, e.g. the next migration number |

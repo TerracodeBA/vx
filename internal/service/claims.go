@@ -8,6 +8,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -31,6 +32,19 @@ func (s *Service) MakeClaim(ctx context.Context, actor Actor, in ClaimInput) (Cl
 	reason, err := cleanReason(in.Reason)
 	if err != nil {
 		return Claim{}, nil, err
+	}
+	movingTo := ""
+	if strings.TrimSpace(in.MovingTo) != "" {
+		to, err := cleanTargets([]string{in.MovingTo})
+		if err != nil {
+			return Claim{}, nil, errf(CodeInvalid, "where the code is moving: %s", strings.TrimPrefix(err.Error(), "target 1 is empty; "))
+		}
+		movingTo = to[0]
+		for _, t := range targets {
+			if t == movingTo {
+				return Claim{}, nil, errf(CodeInvalid, "%s is moving to itself; give the new location with --to", t)
+			}
+		}
 	}
 	ttl := in.TTL
 	switch {
@@ -63,12 +77,15 @@ func (s *Service) MakeClaim(ctx context.Context, actor Actor, in ClaimInput) (Cl
 		var err error
 		row, err = tx.InsertClaim(ctx, store.Claim{
 			EffortID: v.Effort.ID, OwnerID: actor.ID, WorkspaceID: wsID, Targets: targets, Reason: reason,
-			CreatedAt: now, ExpiresAt: now.Add(ttl),
+			CreatedAt: now, ExpiresAt: now.Add(ttl), MovingTo: movingTo,
 		})
 		if err != nil {
 			return err
 		}
 		after := map[string]any{"effort": row.EffortSlug, "targets": row.Targets, "expires_at": row.ExpiresAt}
+		if movingTo != "" {
+			after["moving_to"] = movingTo
+		}
 		if wsID != nil {
 			after["workspace"] = wsID.String()
 		}
@@ -174,8 +191,12 @@ func (s *Service) ListClaims(ctx context.Context, actor Actor, repo, effort stri
 }
 
 // activeClaims lists an effort's active claims whose targets match want
-// (all when want is empty), leaving out those of skip.
+// (all when want is empty), leaving out those of skip. Claims of
+// workspaces idle for WorkspaceIdleAfter lapse first.
 func (s *Service) activeClaims(ctx context.Context, q store.Q, effortID uuid.UUID, want []string, skip uuid.UUID) ([]store.Claim, error) {
+	if err := s.lapseIdleClaims(ctx, q, effortID); err != nil {
+		return nil, err
+	}
 	rows, err := q.ActiveClaims(ctx, effortID, s.Now())
 	if err != nil {
 		return nil, err
@@ -214,7 +235,31 @@ func (s *Service) landedOverClaims(ctx context.Context, tx *store.Tx, actor Acto
 	if len(hit) == 0 {
 		return nil, nil
 	}
-	return s.newNoteCache().claims(ctx, hit)
+	out, err := s.newNoteCache().claims(ctx, hit)
+	if err != nil {
+		return nil, err
+	}
+	// Whoever is moving the code would otherwise not know a change landed
+	// at the old place: tell them.
+	vx, err := s.systemPrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range out {
+		if c.MovingTo == "" {
+			continue
+		}
+		owner := c.Owner.ID
+		body := fmt.Sprintf("%s landed a change to %s, which you are moving to %s (your claim %s). Carry the change over to the new location when you move it; vx log and vx show have it.",
+			actor.Ref(), strings.Join(c.Targets, ", "), c.MovingTo, shortID(c.ID))
+		if _, err := tx.InsertNote(ctx, store.Note{
+			EffortID: effortID, Kind: string(NoteClaim), Targets: append(append([]string{}, c.Targets...), c.MovingTo), AuthorID: vx.ID, ToID: &owner,
+			Body: finishNote(body), State: NoteOpen, CreatedAt: s.Now(), System: true,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // releaseWorkspaceClaims releases a workspace's active claims inside tx and
@@ -304,6 +349,7 @@ func (c *noteCache) claim(ctx context.Context, r store.Claim) (Claim, error) {
 	out := Claim{
 		ID: r.ID, RepoName: r.RepoName, EffortSlug: r.EffortSlug, EffortID: r.EffortID, Targets: r.Targets,
 		WorkspaceID: r.WorkspaceID, Reason: r.Reason, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, ReleasedAt: r.ReleasedAt,
+		MovingTo: r.MovingTo,
 	}
 	// A claim tied to an open workspace lasts as long as the workspace: it
 	// is renewed, always at least DefaultClaimTTL ahead, while it is open.

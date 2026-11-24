@@ -195,15 +195,36 @@ type Workspace struct {
 	// changed, at ChangedPathsAt; nil ChangedPathsAt: never reported.
 	ChangedPaths   []string
 	ChangedPathsAt *time.Time
+	// ActiveAt is when the workspace last synced, landed or reported its
+	// files; nil: not since it was created.
+	ActiveAt *time.Time
 }
 
-const workspaceCols = `id, effort_id, owner_id, intent, change_id, base, state, landed_as, created_at, updated_at, changed_paths, changed_paths_at`
+// LastActive is when the workspace last did something: ActiveAt,
+// ChangedPathsAt or, failing both, when it was created.
+func (w Workspace) LastActive() time.Time {
+	t := w.CreatedAt
+	for _, at := range []*time.Time{w.ActiveAt, w.ChangedPathsAt} {
+		if at != nil && at.After(t) {
+			t = *at
+		}
+	}
+	return t
+}
+
+const workspaceCols = `id, effort_id, owner_id, intent, change_id, base, state, landed_as, created_at, updated_at, changed_paths, changed_paths_at, active_at`
 
 func scanWorkspace(row interface{ Scan(...any) error }) (Workspace, error) {
 	var w Workspace
 	err := row.Scan(&w.ID, &w.EffortID, &w.OwnerID, &w.Intent, &w.ChangeID, &w.Base, &w.State, &w.LandedAs, &w.CreatedAt, &w.UpdatedAt,
-		&w.ChangedPaths, &w.ChangedPathsAt)
+		&w.ChangedPaths, &w.ChangedPathsAt, &w.ActiveAt)
 	return w, err
+}
+
+// TouchWorkspace records that an open workspace did something at at.
+func (q Q) TouchWorkspace(ctx context.Context, id uuid.UUID, at time.Time) error {
+	_, err := q.db.Exec(ctx, `update workspaces set active_at = $2 where id = $1 and state = 'open' and (active_at is null or active_at < $2)`, id, at)
+	return err
 }
 
 // SetWorkspaceChangedPaths records the files an open workspace's working

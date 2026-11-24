@@ -36,11 +36,14 @@ type Note struct {
 	Supersedes   *uuid.UUID
 	SupersededBy *uuid.UUID
 	System       bool // posted by vx itself
+	// CCID is the person a question was copied to because the agent it is
+	// addressed to was not working when it was asked.
+	CCID *uuid.UUID
 }
 
 const noteCols = `n.id, n.seq, n.repo_id, n.effort_id, n.thread_id, n.kind, n.targets, n.author_id, n.to_id,
 	n.body, n.state, n.answer_by, n.created_at, r.name, e.slug, n.supersedes,
-	(select s.id from notes s where s.supersedes = n.id order by s.created_at desc, s.seq desc limit 1), n.system`
+	(select s.id from notes s where s.supersedes = n.id order by s.created_at desc, s.seq desc limit 1), n.system, n.cc_id`
 
 // notSuperseded is a where clause that leaves out notes a newer one replaced.
 const notSuperseded = `not exists (select 1 from notes s where s.supersedes = n.id)`
@@ -50,7 +53,7 @@ const noteFrom = ` from notes n join efforts e on e.id = n.effort_id join repos 
 func scanNote(row interface{ Scan(...any) error }) (Note, error) {
 	var n Note
 	err := row.Scan(&n.ID, &n.Seq, &n.RepoID, &n.EffortID, &n.ThreadID, &n.Kind, &n.Targets, &n.AuthorID, &n.ToID,
-		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug, &n.Supersedes, &n.SupersededBy, &n.System)
+		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug, &n.Supersedes, &n.SupersededBy, &n.System, &n.CCID)
 	if n.Targets == nil {
 		n.Targets = []string{}
 	}
@@ -95,10 +98,10 @@ func (q Q) InsertNote(ctx context.Context, n Note) (Note, error) {
 	if !n.CreatedAt.IsZero() {
 		created = &n.CreatedAt
 	}
-	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at, supersedes, system)
-		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now()), $12::uuid, $13::boolean
+	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at, supersedes, system, cc_id)
+		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now()), $12::uuid, $13::boolean, $14::uuid
 		from efforts e where e.id = $2::uuid`,
-		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created, n.Supersedes, n.System)
+		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created, n.Supersedes, n.System, n.CCID)
 	if err != nil {
 		return Note{}, err
 	}
@@ -197,6 +200,13 @@ func (q Q) ListNotes(ctx context.Context, f NoteFilter) ([]Note, error) {
 func (q Q) OpenQuestionsTo(ctx context.Context, to []uuid.UUID, limit int) ([]Note, error) {
 	return q.queryNotes(ctx, `select `+noteCols+noteFrom+`where n.to_id = any($1) and n.state = 'open' and n.kind = 'question'
 		order by n.created_at desc, n.seq desc limit $2`, to, limit)
+}
+
+// OpenQuestionsCopiedTo returns open questions copied to person (their
+// agent was not working when they were asked), newest first.
+func (q Q) OpenQuestionsCopiedTo(ctx context.Context, person uuid.UUID, limit int) ([]Note, error) {
+	return q.queryNotes(ctx, `select `+noteCols+noteFrom+`where n.cc_id = $1 and n.state = 'open' and n.kind = 'question'
+		order by n.created_at desc, n.seq desc limit $2`, person, limit)
 }
 
 // AnswersToQuestionsBy returns answers created at or after since in threads
