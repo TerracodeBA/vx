@@ -33,6 +33,11 @@ func (s *Service) ConsoleSetSuperadmin(ctx context.Context, handle string, on bo
 		if p.Kind != store.KindHuman {
 			return errf(CodeInvalid, "%s is a %s, and only people can be superadmins", p.Ref(), p.Kind)
 		}
+		if disabled, _, err := tx.PrincipalDisabled(ctx, p.ID); err != nil {
+			return err
+		} else if disabled && on {
+			return errf(CodeFailedPrecondition, "%s was merged into another account and is disabled; grant the account it was merged into", p.Ref())
+		}
 		if p.SiteAdmin == on {
 			return nil
 		}

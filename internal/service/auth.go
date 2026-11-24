@@ -35,8 +35,13 @@ func (s *Service) CreateAgent(ctx context.Context, actor Actor, name, displayNam
 		if err != nil {
 			return err
 		}
-		token, err = tx.CreateToken(ctx, agent.ID, "created by "+actor.Ref())
+		tok, secret, err := tx.IssueToken(ctx, agent.ID, "created by "+actor.Ref())
 		if err != nil {
+			return err
+		}
+		token = secret
+		// Single sign-on carries over from the token that made it.
+		if err := tx.CopyTokenSSO(ctx, actor.TokenID, tok.ID); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, nil, &actor.ID, "agent.create", agent.Ref(), nil, nil)
@@ -164,6 +169,9 @@ func (s *Service) CreateToken(ctx context.Context, actor Actor, agent, name stri
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		var err error
 		if tok, secret, err = tx.IssueToken(ctx, target.ID, name); err != nil {
+			return err
+		}
+		if err := tx.CopyTokenSSO(ctx, actor.TokenID, tok.ID); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, nil, &actor.ID, "token.create", target.Ref(), nil,

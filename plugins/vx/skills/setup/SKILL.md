@@ -156,6 +156,7 @@ Run `vx-server serve` in the background (a terminal, tmux, or a systemd user ser
 ## Troubleshooting
 
 - `vx: not logged in`: run `vx login --server URL`, or set `VX_SERVER` and `VX_TOKEN`.
+- `organization ORG requires single sign-on`: the user runs `! vx login --server URL` and chooses single sign-on on the approval page; agent tokens are then made again from that login (`vx agent add NAME --env-file FILE`). Owners set single sign-on up on the organization page (docs/organizations.md, Single sign-on).
 - `vx: no profile "NAME"`: `vx profiles` lists the saved ones; `vx login --server URL --profile NAME` adds it.
 - `vx: command not found` after installing: `~/.local/bin` is not on PATH; add the line the installer printed, or run `~/.local/bin/vx`.
 - `this vx ... is too old for this server` or a `vx: notice:` about a newer server: run the installer again, `curl -fsSL SERVER/install.sh | sh`.

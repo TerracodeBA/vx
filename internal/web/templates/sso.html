@@ -1,0 +1,45 @@
+{{define "content"}}
+<section class="login-card">
+  <div class="brand brand-lg"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></div>
+  {{with .Problem}}
+  <h1>{{.Title}}</h1>
+  <p class="note bad" role="alert">{{.Message}}</p>
+  <div class="confirm-actions">
+    <a class="btn primary" href="{{.Retry}}">Try again</a>
+    <a class="btn ghost" href="/ui/login">Other ways to sign in</a>
+  </div>
+  {{end}}
+  {{with .Exists}}
+  <h1>This looks like you</h1>
+  <p>An account with <strong>{{.Email}}</strong> already exists on this server: <span class="mono">user:{{.Handle}}</span>. So that you keep one account (with its agents, tokens and organizations), vx did not create a second one.</p>
+  <ol class="steps">
+    <li>Sign in to <span class="mono">user:{{.Handle}}</span> the way you did before{{with .GitHubLogin}}: with GitHub as <span class="mono">{{.}}</span>{{else}}: with its token, or <code>vx ui</code> in a terminal where vx is logged in{{end}}.</li>
+    <li>{{if .Org}}vx then connects your {{.Org}} single sign-on to it.{{else}}Choose <strong>Settings &gt; Connect GitHub</strong> to connect this GitHub account to it.{{end}}</li>
+  </ol>
+  <div class="confirm-actions">
+    <a class="btn primary" href="{{$.SignInLink}}">Sign in to user:{{.Handle}}</a>
+  </div>
+  <p class="muted small">Not your account? Ask a superadmin of this server; they can merge or separate accounts.</p>
+  {{end}}
+  {{with .Required}}
+  <h1>{{.Org}} requires single sign-on</h1>
+  <p>Organization <span class="mono">{{.Org}}</span> asks its members to sign in through its identity provider before they reach its repositories. You are signed in as <span class="mono">{{$.Who}}</span>, but not through it.</p>
+  <form method="post" action="/ui/login/sso" class="stack">
+    <input type="hidden" name="org" value="{{.Org}}">
+    <input type="hidden" name="next" value="{{$.Next}}">
+    <button class="btn primary block" type="submit">Sign in with {{.Org}} single sign-on</button>
+  </form>
+  <p class="muted small">For the CLI, run <code>vx login --server {{$.Server}}</code> and sign in with single sign-on in the browser; tokens you create after that work for {{.Org}} too.</p>
+  {{end}}
+  {{with .Confirm}}
+  <h1>Single sign-on for {{.Org}}</h1>
+  <p>You are signed in as <span class="mono">{{$.Who}}</span>. Continue to sign in through {{.Org}}'s identity provider; the first time, it is connected to this account.</p>
+  <form method="post" action="/ui/login/sso" class="stack">
+    <input type="hidden" name="org" value="{{.Org}}">
+    <input type="hidden" name="next" value="{{$.Next}}">
+    <button class="btn primary block" type="submit">Continue to {{.Org}} single sign-on</button>
+  </form>
+  <p><a href="/ui">Not now</a></p>
+  {{end}}
+</section>
+{{end}}

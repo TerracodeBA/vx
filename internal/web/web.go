@@ -201,6 +201,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	if err := u.mountPhone(mux, funcs); err != nil {
 		return err
 	}
+	u.mountSSO(mux)
 	if err := u.mountGitHubApp(mux); err != nil {
 		return err
 	}
@@ -228,7 +229,8 @@ func (u *UI) auth(next handler) http.HandlerFunc {
 			return
 		}
 		actor.TokenID = tokenID
-		next(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)), actor)
+		r = r.WithContext(context.WithValue(r.Context(), actorKey{}, actor))
+		next(&reqWriter{ResponseWriter: w, r: r}, r, actor)
 	}
 }
 
@@ -278,6 +280,9 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 }
 
 func (u *UI) fail(w http.ResponseWriter, err error) {
+	if u.ssoRequiredFrom(w, err) {
+		return
+	}
 	status := http.StatusInternalServerError
 	var se *service.Error
 	if errors.As(service.Classify(err), &se) {
@@ -302,7 +307,7 @@ func (u *UI) fail(w http.ResponseWriter, err error) {
 
 func (u *UI) loginPage(w http.ResponseWriter, r *http.Request) {
 	u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": r.URL.Query().Get("next"), "Expired": r.URL.Query().Get("expired") != "",
-		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Signup": string(u.svc.SignupModeOrDefault())})
+		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Signup": string(u.svc.SignupModeOrDefault()), "SSO": u.svc.SSOAvailable(r.Context())})
 }
 
 func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {

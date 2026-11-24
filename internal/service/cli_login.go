@@ -253,6 +253,11 @@ func (s *Service) PollCLILogin(ctx context.Context, deviceCode string) (status, 
 		if err != nil {
 			return err
 		}
+		if approver, err := tx.CLILoginApprover(ctx, h); err == nil {
+			if err := tx.CopyTokenSSO(ctx, approver, tok.ID); err != nil {
+				return err
+			}
+		}
 		token, status = secret, CLILoginApproved
 		return tx.LogOp(ctx, nil, &p.ID, "token.create", p.Ref(), nil,
 			map[string]string{"token": tok.ID.String(), "name": tok.Name, "via": "browser login"})
@@ -317,6 +322,12 @@ func (s *Service) ApproveCLILogin(ctx context.Context, actor Actor, userCode str
 		}
 		if !ok {
 			return errf(CodeNotFound, "this login was decided a moment ago; run vx login again if needed")
+		}
+		if approve {
+			// The CLI's token inherits this session's single sign-on.
+			if err := tx.SetCLILoginApprover(ctx, l.DeviceHash, actor.TokenID); err != nil {
+				return err
+			}
 		}
 		return tx.LogOp(ctx, nil, &actor.ID, op, actor.Ref(), nil,
 			map[string]string{"client": l.ClientName, "user_code": l.UserCode, "ip": l.ClientIP})

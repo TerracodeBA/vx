@@ -208,9 +208,45 @@ Who sees what:
 
 Entries are kept forever unless the server sets a retention (`VX_AUDIT_RETENTION`, for example `365d`; at least 7 days); older entries are deleted once an hour.
 
+## Single sign-on
+
+An organization can sign its people in through its own identity provider: Google Workspace, Okta, Microsoft Entra ID, or any OpenID Connect issuer with discovery (`/.well-known/openid-configuration`).
+
+**Set up (organization owners).** At your provider, register vx as a web application (OpenID Connect, authorization code flow) with the redirect URI `https://YOUR-VX/auth/oidc/callback` (the organization page shows it) and the scopes `openid email profile`. Then, on the organization page (`/ui/orgs/ORG`, **Single sign-on**), enter:
+
+- **Issuer URL**, exactly as the provider names it: `https://accounts.google.com` (Google Workspace), `https://YOUR-ORG.okta.com` (Okta), `https://login.microsoftonline.com/TENANT-ID/v2.0` (Microsoft Entra ID). vx reads the discovery document when you save, so a wrong issuer fails there.
+- **Client id** and **client secret** of that app. The secret is kept encrypted with the server key (`VX_SECRET_KEY`; without one the server refuses to store it) and never shown again; leave the field empty to keep it.
+- **Email domains** (`acme.com, acme.de`): only addresses there may sign in through it. Leave it empty to accept any verified email the provider sends. Providers that do not say whether an email is verified (Entra ID often does not) need domains.
+- **Require single sign-on for members.** You can turn it on only after signing in through it once yourself (the same page has **Sign in with single sign-on**), so you know it works.
+
+Only owners change it, not admins and not superadmins. Turning it off keeps people's linked identities, so turning it on again keeps their accounts. Every change is in the operation log (`org.sso_update`, `org.sso_remove`).
+
+**Signing in.** The sign-in page has **Sign in with single sign-on**: enter a work email (vx finds the organization by its domain) or the organization's handle. vx sends the browser to the provider with the authorization code flow and PKCE, checks the ID token (signature against the provider's published keys, picking up rotated keys by itself; issuer; audience; expiry; a nonce that works once) and the email rules, then:
+
+- A person already linked to that identity (by issuer and subject, so a changed email keeps the account) is signed in.
+- Someone new gets an account (handle from the email, unless sign-up is closed: `VX_SIGNUP=closed`) and joins the organization as a member. People who sign in through the provider later and are not members yet join as members too: the provider vouches for them, so remove people at the provider.
+- If a person with that email already exists, vx does not create a second account: it shows **This looks like you** with a link to sign in to that account first (with GitHub or a token); vx then connects the identity to it.
+
+Signed in already (with GitHub or a token), **Sign in with single sign-on** connects the identity to you and marks your current session.
+
+**Requiring it.** When an organization requires single sign-on, its members and admins reach its repositories only with a session or token that came through it:
+
+- In the web UI, a page of one of its repositories asks them to sign in with the organization's single sign-on first, then brings them back.
+- The CLI gets: `organization ORG requires single sign-on, and this session or token was not issued through it ... run vx login --server URL and sign in with single sign-on in the browser`. `vx login` works unchanged: on the approval page, choose single sign-on; the CLI's new token carries it.
+- Tokens inherit single sign-on from the session or token that made them: `vx login` (browser), `vx ui`, `vx agent add`, `vx token create`, and the Settings page. Agent tokens made before single sign-on was required need to be made again from such a login.
+- Owners are exempt, so a broken provider cannot lock everyone out; they fix the settings. Superadmins have no repository role anyway (see [Superadmins](#superadmins-and-support-access)). Repositories the person reaches only through a direct grant without being a member are not affected.
+
+Limits: one provider per organization; sessions stay marked until they end (there is no re-check with the provider yet); no SCIM, so people and teams are not provisioned from the provider.
+
+## Duplicate accounts
+
+Signing in with GitHub, or single sign-on, for the first time in a browser without a vx session never creates a second account for an email that already has one: vx shows **This looks like you** and asks the person to sign in to that account and connect GitHub (Settings > Connect GitHub) or single sign-on there. GitHub no-reply addresses do not count.
+
+When someone has two accounts anyway, a superadmin merges them on **Admin > People > Merge duplicate accounts**: the merged account's tokens, agents (their handles stay, so authorship stays readable), organization and team memberships, repository grants, single sign-on identities and, when the kept account has none, its GitHub account move to the kept one; where both had a role, the higher one stays. Changes, notes and the op log keep naming the merged account, which is disabled (its tokens moved, and it cannot sign in). The merge is logged as `person.merge`. Superadmins cannot merge their own account with another one this way.
+
 ## Limits today
 
-- **Sign-in.** With a GitHub App set up, people sign in with GitHub (see [getting-started.md](getting-started.md#signing-in)); new accounts follow the sign-up mode (invite, open or closed). Otherwise tokens: superadmins create people with `vx-server user-add`, the web UI (Admin, People) or the API.
+- **Sign-in.** With a GitHub App set up, people sign in with GitHub (see [getting-started.md](getting-started.md#signing-in)); new accounts follow the sign-up mode (invite, open or closed). Organizations can add [single sign-on](#single-sign-on) through their identity provider. Otherwise tokens: superadmins create people with `vx-server user-add`, the web UI (Admin, People) or the API.
 - **Agents.** A person can limit each agent to some paths and give it budgets for lands per day, lines and files per land and open workspaces (see [agents.md](agents.md#scopes-and-budgets)). There are no budgets per person, for check minutes or for storage yet.
 - **Scale.** Objects live on the server's disk, so one instance. It scales up well; it does not scale out yet.
 - **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants on the GitHub side.
@@ -221,7 +257,7 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 
 ### 1. Single sign-on
 
-- OIDC login for the web UI (Okta, Microsoft Entra ID, Google Workspace, GitHub).
+- OIDC login per organization (Okta, Microsoft Entra ID, Google Workspace, any OIDC issuer): done, see [Single sign-on](#single-sign-on).
 - CLI login through the browser: done. `vx login --server URL` shows a code and opens an approval page; see [getting-started.md](getting-started.md#3-install-the-cli-and-log-in).
 - Short-lived tokens for agents, issued from the person's session, with expiry and revocation.
 - SCIM provisioning so people and teams follow the identity provider.
@@ -304,6 +340,9 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
 | Give a superadmin support access, list it, end it (read or write, at most 30 days; also on GitHub-backed repositories) | `vx repo support`, Support access on the access page | admin (the superadmin may end their own) |
 | Run the server: people, invites and sign-up, the GitHub App, server settings, operation log metadata, the upgrade review | `vx-server`, Admin pages, `CreatePerson`, `ListPeople`, `vx org list --all` | superadmin (no repository role) |
+| Merge two accounts (never the superadmin's own) | Admin > People > Merge duplicate accounts, `MergePeople` | superadmin (no repository role) |
+| Set up, require or turn off an organization's single sign-on | the organization page, `SetOrgSSO`, `RemoveOrgSSO` | organization owner |
+| Reach a repository of an organization that requires single sign-on | every row above | the row's role, with a session or token that came through it (members and admins; owners exempt) |
 
 A superadmin has none of the repository roles in this table from being one: every repository operation reports "not found" to them until they have a role or support access (tested in `TestAuthzMatrix` and `TestAuthzMatrixGitHub`).
 | See an organization's quotas and usage (no repository role: members of the organization and superadmins) | the organization page, `vx-server quota ORG` | member or superadmin |

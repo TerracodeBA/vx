@@ -209,6 +209,9 @@ func (s *Service) gitHubPerson(ctx context.Context, u GitHubUser) (p store.Princ
 	if !errors.Is(err, store.ErrNotFound) {
 		return store.Principal{}, false, "", err
 	}
+	if err := s.gitHubDuplicate(ctx, u); err != nil {
+		return store.Principal{}, false, "", err
+	}
 	p, err = s.gitHubSignup(ctx, u)
 	if errors.Is(err, errLinkedMeanwhile) {
 		// The same GitHub user signed up in another tab a moment ago.
@@ -241,6 +244,25 @@ func (s *Service) refreshGitHubPerson(ctx context.Context, p *store.Principal, u
 }
 
 var errLinkedMeanwhile = errors.New("GitHub user was linked meanwhile")
+
+// gitHubDuplicate refuses a first GitHub sign-in whose verified email
+// already belongs to a person: they sign in to that account and connect
+// GitHub there instead of getting a second account.
+func (s *Service) gitHubDuplicate(ctx context.Context, u GitHubUser) error {
+	email := strings.TrimSpace(u.Email)
+	if email == "" || strings.HasSuffix(strings.ToLower(email), "@users.noreply.github.com") {
+		return nil
+	}
+	people, err := s.Store.PeopleByEmail(ctx, email)
+	if err != nil || len(people) == 0 {
+		return err
+	}
+	e := &AccountExistsError{Email: strings.ToLower(email), Handle: people[0].Handle, Via: "GitHub"}
+	if l, ok, _ := s.Store.GitHubLinkOf(ctx, people[0].ID); ok {
+		e.GitHubLogin = l.Login
+	}
+	return &Error{Code: CodeExists, Err: e, Msg: e.Error()}
+}
 
 // gitHubSignup creates a person for a GitHub user, per the signup mode.
 func (s *Service) gitHubSignup(ctx context.Context, u GitHubUser) (store.Principal, error) {

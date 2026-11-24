@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -87,6 +89,9 @@ func errStatus(err error) int {
 // failPage is u.fail with errStatus: an unavailable service is a 503
 // with its message, not a 500.
 func (u *UI) failPage(w http.ResponseWriter, err error) {
+	if u.ssoRequiredFrom(w, err) {
+		return
+	}
 	status := errStatus(err)
 	if status == http.StatusInternalServerError {
 		u.fail(w, err)
@@ -127,6 +132,9 @@ var okMessages = map[string]string{
 	"support-ended":  "Support access ended.",
 	"reviewed":       "Marked as reviewed.",
 	"quota":          "Quotas saved.",
+	"sso":            "Single sign-on saved.",
+	"sso-removed":    "Single sign-on turned off.",
+	"merged":         "Accounts merged. The merged account is disabled; its tokens, agents and memberships now belong to the account you kept.",
 }
 
 func flashFrom(r *http.Request) flash { return flash{OK: okMessages[r.URL.Query().Get("ok")]} }
@@ -274,13 +282,15 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		repos = append(repos, orgRepoRow{Repo: repo, MyRole: role, Admin: role.Includes(service.RoleAdmin)})
 	}
 	manage := canManageOrg(actor, d.MyRole)
-	u.renderStatus(w, r, f.Status, "org", map[string]any{
+	data := map[string]any{
 		"Actor": actor, "Title": d.Org.Handle, "Section": "orgs", "Flash": f,
 		"O": d.Org, "MyRole": d.MyRole, "Members": members, "Teams": d.Teams, "Repos": repos,
 		"Owners": owners, "Manage": manage, "IsOwner": d.MyRole == service.OrgOwner,
 		"IsHuman": actor.Kind == store.KindHuman, "OrgRoles": orgRoles, "DefaultRoles": defaultRoles,
 		"Quota": u.orgQuota(r, actor, d.Org.Handle),
-	})
+	}
+	u.orgSSO(r, actor, d.MyRole, data)
+	u.renderStatus(w, r, f.Status, "org", data)
 }
 
 // orgDone redirects back to the organization page after a change, or shows
@@ -532,6 +542,9 @@ type personRow struct {
 	GitHub string // GitHub login, when linked
 	Agents int
 	Orgs   []string // "acme (owner)"; personal organizations left out
+	// MergedInto is the handle of the account this one was merged into;
+	// such accounts are disabled.
+	MergedInto string
 }
 
 func (u *UI) peoplePage(w http.ResponseWriter, r *http.Request, actor service.Actor) {
@@ -586,6 +599,20 @@ func (u *UI) renderPeople(w http.ResponseWriter, r *http.Request, actor service.
 	data["SuperadminReview"] = u.svc.SuperadminReviewPending(ctx, actor)
 	data["OrgCount"], data["OrgChoices"] = len(shared), shared
 	u.peopleGitHub(r, actor, rows, data)
+	if merged, err := u.svc.Store.MergedPeople(ctx); err == nil {
+		byID := map[uuid.UUID]string{}
+		for _, p := range people {
+			byID[p.ID] = p.Handle
+		}
+		for i := range rows {
+			if into, ok := merged[rows[i].ID]; ok {
+				rows[i].MergedInto = byID[into]
+				if rows[i].MergedInto == "" {
+					rows[i].MergedInto = "another account"
+				}
+			}
+		}
+	}
 	u.renderStatus(w, r, f.Status, "people", data)
 }
 
