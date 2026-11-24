@@ -156,10 +156,10 @@ func (s *Service) newForecastRun() *forecastRun {
 // forecastSide is one effort as the forecast sees it.
 type forecastSide struct {
 	eff       store.Effort
-	chain     []store.ChangesetRow // newest first, back to the base
+	chain     []store.ChangesetRow // newest first, back to the base; loaded when simulated
 	changed   map[string]bool      // paths changed since the base tree
 	dirs      map[string]bool      // their directories
-	firstLand time.Time            // when its oldest vx change landed
+	firstLand time.Time            // when its oldest vx change landed; with chain
 }
 
 func (r *forecastRun) side(ctx context.Context, repo store.Repo, eff store.Effort) (*forecastSide, error) {
@@ -177,17 +177,28 @@ func (r *forecastRun) side(ctx context.Context, repo store.Repo, eff store.Effor
 			sd.changed[c.Path] = true
 			sd.dirs[path.Dir(c.Path)] = true
 		}
-		if sd.chain, err = s.Store.Chain(ctx, repo.ID, eff.Head, eff.Base, 100000); err != nil {
-			return nil, err
-		}
-		for _, c := range sd.chain {
-			if c.Origin == object.OriginVX {
-				sd.firstLand = c.CreatedAt
-			}
-		}
 	}
 	r.sides[eff.ID] = sd
 	return sd, nil
+}
+
+// loadChain reads the side's changes back to its base, once, for a pair
+// that needs a simulation.
+func (r *forecastRun) loadChain(ctx context.Context, repo store.Repo, sd *forecastSide) error {
+	if sd.chain != nil || sd.eff.Head == sd.eff.Base {
+		return nil
+	}
+	chain, err := r.s.Store.Chain(ctx, repo.ID, sd.eff.Head, sd.eff.Base, 100000)
+	if err != nil {
+		return err
+	}
+	for _, c := range chain {
+		if c.Origin == object.OriginVX {
+			sd.firstLand = c.CreatedAt
+		}
+	}
+	sd.chain = chain
+	return nil
 }
 
 // branch forecasts every open effort of repo based on branch.
@@ -308,6 +319,12 @@ func (r *forecastRun) compute(ctx context.Context, repo store.Repo, branch store
 	}
 	target, err := s.Store.GetChangeset(ctx, repo.ID, branch.Head)
 	if err != nil {
+		return fc, err
+	}
+	if err := r.loadChain(ctx, repo, a); err != nil {
+		return fc, err
+	}
+	if err := r.loadChain(ctx, repo, b); err != nil {
 		return fc, err
 	}
 	first, second := a, b
