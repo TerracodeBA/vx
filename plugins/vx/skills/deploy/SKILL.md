@@ -46,11 +46,14 @@ vx.example.com {
 
 ## 4. People and agents
 
-For each person:
+Ask the user for the team's organization handle (lowercase, e.g. `acme`). The first person is a site admin and creates the organization as its owner; everyone else joins it as a member:
 
 ```sh
-docker compose exec vx vx-server user-add HANDLE --name "Full Name" --email EMAIL
+docker compose exec vx vx-server user-add FIRST --admin --org ORG --name "Full Name" --email EMAIL
+docker compose exec vx vx-server user-add HANDLE --org ORG --name "Full Name" --email EMAIL
 ```
+
+Members get the organization's default role, `read`, on its repositories. Owners and admins change roles with `vx org member ORG PERSON --role admin`, `vx org set-default ORG write`, teams (`vx team create ORG/TEAM`) and grants (`vx repo grant REPO team:ORG/TEAM --role write`). Every person also has a personal organization named like them.
 
 Send each token to its person through a private channel (not the chat with you). Each person then runs `vx login --server https://vx.example.com --token ...` and creates tokens for their own agents with `vx agent add NAME`.
 
@@ -74,9 +77,11 @@ docker compose pull && docker compose up -d
 
 Migrations run automatically when vx-server starts. Back up first.
 
+Upgrading from v0.1 (no organizations) to v0.2 keeps everyone's access: every existing person becomes an owner of the organizations made from repository owner names and a site admin. Tell the user to prune afterwards as described in docs/deploy.md, "Upgrading to v0.2" (`vx org list --all`, `vx org remove`, `vx org set-default ORG none`).
+
 ## Current limits (tell the user)
 
-- Every signed-in user can see every repository and effort on the server. Use one server per trust boundary for now.
+- People see only repositories they have a role on (organization membership, team or direct grant), but site admins see everything. Keep site admins few.
 - Sign-in is by token. There is no single sign-on yet.
 - File contents are stored on the server's disk, so one server instance; scale up, not out.
 - Agents are not yet limited to paths, and there are no per-agent budgets.

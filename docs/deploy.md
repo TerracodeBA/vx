@@ -1,6 +1,6 @@
 # Deploying for a team
 
-One vx server that a team shares. Everyone signs in with their own token, and each person's agents get their own tokens. Read [organizations.md](organizations.md) first for the current limits.
+One vx server that a team shares. Everyone signs in with their own token, and each person's agents get their own tokens. Each repository belongs to an organization, and people see only the repositories they have a role on. Read [organizations.md](organizations.md) for how roles work and for the current limits.
 
 Prefer to have Claude do it? Install the plugin and ask *"deploy vx on my server vx.example.com for my team"* (skill `vx:deploy`).
 
@@ -37,9 +37,17 @@ The CLI and API use HTTP/2 (connect protocol) over the same address, so one host
 ## Users and agents
 
 ```sh
-docker compose exec vx vx-server user-add alice --name "Alice Example" --email alice@example.com
+docker compose exec vx vx-server user-add alice --admin --org acme --name "Alice Example" --email alice@example.com
+docker compose exec vx vx-server user-add bob --org acme --name "Bob Example"
 docker compose exec vx vx-server token-create alice      # another token for an existing user
 ```
+
+`user-add` creates the person, their personal organization (named like them) and a first token.
+
+- `--admin` makes them a site admin: admin on every repository, and allowed to manage people and every organization. Make the first person one.
+- `--org ORG` adds them to an organization as a member. When the organization does not exist yet, it is created with them as its owner, which is how the first person sets up the team's organization.
+
+Members get the organization's default role (`read` unless changed) on its repositories. Owners and admins manage the rest with `vx org`, `vx team` and `vx repo grant`; see [organizations.md](organizations.md).
 
 Once signed in, people create further tokens for themselves and their agents with `vx token create` or the Settings page, without an admin. The web UI marks its session cookie `Secure` when the proxy sends `X-Forwarded-Proto: https` (Caddy does by default).
 
@@ -105,6 +113,25 @@ docker compose pull && docker compose up -d
 ```
 
 Database migrations run when `vx-server` starts. Back up before upgrading.
+
+### Upgrading to v0.2
+
+v0.2 adds organizations and repository roles. The migration keeps everyone's access as it was: each owner part of existing repository names becomes an organization (repositories without one go to `default`), every existing person becomes an owner of all of them, and every existing person becomes a site admin. Prune afterwards, signed in as someone who stays a site admin:
+
+```sh
+vx org list --all                              # what the upgrade created
+vx org show acme                               # who is in it
+vx org member acme bob --role member           # owners only where they should be
+vx org remove acme carol                       # people who do not belong
+vx org set-default acme none                   # if members should not see every repository
+vx repo grant acme/api team:acme/backend --role write
+```
+
+Site admin is a flag on the person. Until the admin pages cover it, take it away for everyone except the real admins in Postgres:
+
+```sh
+docker compose exec -T postgres psql -U vx vx -c "update principals set site_admin = false where handle not in ('alice')"
+```
 
 ## Configuration
 

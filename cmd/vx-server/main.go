@@ -101,31 +101,49 @@ func root() *cobra.Command {
 		},
 	}
 
-	var name, email string
+	var name, email, userOrg string
+	var siteAdmin bool
 	userAdd := &cobra.Command{
 		Use:   "user-add HANDLE",
-		Short: "Create a person and print their first token",
-		Args:  cobra.ExactArgs(1),
+		Short: "Create a person, their personal organization and a first token",
+		Long: `Create a person and print their first token. Every person gets a personal
+organization named like them. --admin makes them a site admin (may manage
+people and every organization). --org adds them to an organization as a
+member, or creates it with them as owner when it does not exist yet.
+
+The first person on a new server: vx-server user-add alice --admin --org acme`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st, err := openMigrated(cmd.Context(), dbURL)
 			if err != nil {
 				return err
 			}
 			defer st.Close()
-			p, err := st.CreatePrincipal(cmd.Context(), store.Principal{Kind: store.KindHuman, Handle: args[0], DisplayName: name, Email: email})
+			svc := service.New(st, nil, nil)
+			p, tok, createdOrg, err := svc.AddPerson(cmd.Context(), nil, service.NewPerson{
+				Handle: args[0], DisplayName: name, Email: email, SiteAdmin: siteAdmin, Org: userOrg, CreateOrg: true,
+			})
 			if err != nil {
 				return err
 			}
-			tok, err := st.CreateToken(cmd.Context(), p.ID, "created by vx-server user-add")
-			if err != nil {
-				return err
+			fmt.Printf("Created %s with personal organization %s.\n", p.Ref(), p.Handle)
+			if p.SiteAdmin {
+				fmt.Println("They are a site admin.")
 			}
-			fmt.Printf("Created %s.\nToken (shown once): %s\n\n  vx login --server http://%s --token %s\n", p.Ref(), tok, env("VX_ADDR", "127.0.0.1:7070"), tok)
+			switch {
+			case createdOrg:
+				fmt.Printf("Created organization %s with them as owner.\n", userOrg)
+			case userOrg != "":
+				fmt.Printf("Added them to organization %s as a member.\n", userOrg)
+			}
+			fmt.Printf("Token (shown once): %s\n\n  vx login --server http://%s --token %s\n", tok, env("VX_ADDR", "127.0.0.1:7070"), tok)
 			return nil
 		},
 	}
 	userAdd.Flags().StringVar(&name, "name", "", "display name, used as git author name")
 	userAdd.Flags().StringVar(&email, "email", "", "email, used as git author email")
+	userAdd.Flags().BoolVar(&siteAdmin, "admin", false, "make them a site admin")
+	userAdd.Flags().StringVar(&userOrg, "org", "", "add them to this organization (created with them as owner if missing)")
 
 	tokenCreate := &cobra.Command{
 		Use:   "token-create HANDLE",

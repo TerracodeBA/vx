@@ -71,8 +71,10 @@ If the image cannot be pulled, build it locally: `docker compose up -d --build`.
 Ask for the handle (lowercase, e.g. `alice`) and display name. Email is optional and becomes the git author email; suggest their GitHub no-reply address.
 
 ```sh
-docker compose exec vx vx-server user-add HANDLE --name "Display Name" --email EMAIL
+docker compose exec vx vx-server user-add HANDLE --admin --name "Display Name" --email EMAIL
 ```
+
+`--admin` makes the first person a site admin (admin on every repository). Every person also gets a personal organization named like them, where repositories they create go by default. Add `--org ORG` to also create a shared organization they own.
 
 The command prints a token once. Do not repeat it in chat. Ask the user to run the printed `vx login --server http://127.0.0.1:7070 --token ...` line themselves (they can type `! vx login ...` in Claude Code), or have it written straight into the config without echoing it. Then:
 
@@ -89,6 +91,8 @@ vx repo create OWNER/NAME --github OWNER/NAME        # a GitHub repo
 vx repo create NAME --git /path/or/url/to/repo       # any git remote or local path
 vx repo create NAME                                  # vx only, no upstream
 ```
+
+The repository goes into the organization named like OWNER when the user owns or administers it (`--org ORG` picks one), else into their personal organization. To let others in: `vx repo grant OWNER/NAME bob --role write`.
 
 Start an effort and clone it into a working directory the user agrees to:
 
@@ -110,7 +114,7 @@ Needs Go 1.26+ and Postgres 16+.
 cd ~/vx && make db          # Postgres in Docker on 127.0.0.1:54329, or point VX_DATABASE_URL at your own
 make build
 VX_DATA_DIR=~/.vxdata bin/vx-server serve      # listens on 127.0.0.1:7070
-bin/vx-server user-add HANDLE --name "Display Name"
+bin/vx-server user-add HANDLE --admin --name "Display Name"
 ```
 
 Run `vx-server serve` in the background (a terminal, tmux, or a systemd user service). Without `VX_GITHUB_TOKEN`, GitHub access uses the user's SSH agent and `~/.ssh/known_hosts`.
@@ -120,4 +124,5 @@ Run `vx-server serve` in the background (a terminal, tmux, or a systemd user ser
 - `vx: not logged in`: run `vx login`, or set `VX_SERVER` and `VX_TOKEN`.
 - `connect to database`: Postgres is not up; `docker compose ps` and `docker compose logs postgres`.
 - Repo create fails with an SSH error: `ssh -T git@github.com` must succeed for the user running the server, and github.com must be in `known_hosts`.
+- `repo X: not found` for a repository that exists: the user has no role on it. An owner or admin of its organization grants one: `vx repo grant X USER --role write`.
 - Everything else: `docker compose logs vx`.

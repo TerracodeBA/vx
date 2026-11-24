@@ -129,7 +129,7 @@ path. An agent then only needs:
 func (a *App) repoCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "repo", Short: "Register and inspect repositories"}
 
-	var gh, gitURL, branch string
+	var gh, gitURL, branch, org string
 	create := &cobra.Command{
 		Use:   "create NAME",
 		Short: "Register a repository, optionally connected to GitHub or a git remote",
@@ -139,7 +139,7 @@ func (a *App) repoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			req := &vxv1.CreateRepoRequest{Name: args[0], Provider: "none", DefaultBranch: branch}
+			req := &vxv1.CreateRepoRequest{Name: args[0], Provider: "none", DefaultBranch: branch, Org: org}
 			switch {
 			case gh != "" && gitURL != "":
 				return errors.New("use either --github or --git, not both")
@@ -157,6 +157,9 @@ func (a *App) repoCmd() *cobra.Command {
 			if r.Remote != "" {
 				a.printf(" following %s %s", r.Provider, r.Remote)
 			}
+			if r.Org != "" {
+				a.printf(" in organization %s", r.Org)
+			}
 			a.printf(" (default branch %s)\n", r.DefaultBranch)
 			for _, b := range r.Branches {
 				a.printf("  %s at %s %s\n", b.Name, short(b.Head), short(b.GitSha))
@@ -168,6 +171,7 @@ func (a *App) repoCmd() *cobra.Command {
 	create.Flags().StringVar(&gh, "github", "", "GitHub repository as owner/name")
 	create.Flags().StringVar(&gitURL, "git", "", "any git remote URL or local path")
 	create.Flags().StringVar(&branch, "branch", "", "default branch (default: ask the provider)")
+	create.Flags().StringVar(&org, "org", "", "owning organization (default: the one named like NAME's owner part if you own or admin it, else your personal organization)")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -223,6 +227,7 @@ func (a *App) repoCmd() *cobra.Command {
 	sync.Flags().StringVar(&syncBranch, "branch", "", "branch (default: the repo's default branch)")
 
 	cmd.AddCommand(create, list, sync)
+	cmd.AddCommand(a.repoAccessCmds()...)
 	return cmd
 }
 

@@ -1,6 +1,6 @@
 # vx for organizations
 
-vx works well today for individuals and small teams who trust each other. Organizations with many people, many teams and compliance needs require more. This page is honest about where vx stands and lays out the plan.
+vx has organizations, teams and repository roles. People see and change only the repositories they have a role on, and agents act with exactly the role of their person. This page describes what exists today, how to set it up, and what is still planned.
 
 ## Three ways to run vx
 
@@ -9,53 +9,109 @@ vx works well today for individuals and small teams who trust each other. Organi
 | Who | One person and their agents | A small group that trusts each other | Many teams, roles, audits |
 | Where | Laptop or workstation | One shared server | Several replicas behind a load balancer |
 | Sign-in | Token | Token per person | Single sign-on (OIDC, SAML) |
-| Access | Everything | Everyone sees every repo | Per org, team and repo roles |
-| Agents | Your own | Each person's own | Scoped to paths, with budgets |
+| Access | Everything | Per organization, team and repository | Per organization, team and repository |
+| Agents | Your own | Each person's own, with their person's role | Scoped to paths, with budgets |
 | GitHub | SSH or personal token | Shared token | GitHub App per organization |
 | Storage | Local disk | Server disk | Object storage (S3, R2, GCS) |
-| Status | Ready | Ready, with the limits below | Planned |
+| Status | Ready | Ready | Access control ready; SSO, scale-out and the GitHub App planned |
+
+## Organizations
+
+Every repository belongs to one organization.
+
+- **Personal organizations.** Every person has one, named like them (`alice`), with only them in it. A repository you create without naming an organization goes there unless you own or administer the organization named like its owner part.
+- **Shared organizations.** Any person can create one with `vx org create acme` and becomes its owner.
+- **Members.** A member has a role in the organization: `owner`, `admin` or `member`.
+  - Owners and admins are admin on every repository of the organization, change its members and teams, and create repositories in it.
+  - Only owners make, demote or remove owners. The last owner cannot be removed or demoted.
+  - Members get the organization's **default repository role** on all its repositories: `read` (the default for new organizations), `write` or `none`.
+  - Anyone may leave an organization (`vx org remove ORG THEMSELVES`), except its last owner.
+- **Teams** group an organization's members (`acme/backend`) so a repository can be granted to all of them at once. Removing someone from the organization removes them from its teams.
+- **Site admins** are admin on every repository and see every organization and person. They create people from the web UI or API. `vx-server user-add --admin` makes one.
+
+## Repository roles
+
+A repository role is `read`, `write` or `admin`; each includes the one before it. Your role on a repository is the highest of:
+
+1. a direct grant to you (`vx repo grant acme/api alice --role write`),
+2. a grant to a team you are in (`vx repo grant acme/api team:acme/backend --role write`),
+3. the organization's default role, if you are a member,
+4. admin, if you are an owner or admin of the organization,
+5. admin, if you are a site admin.
+
+**Agents** have exactly their person's role. **Service principals** (`service:ci`) have only their direct grants. Grants go to people (`alice` or `user:alice`), service principals (`service:ci`) and teams of the repository's own organization (`team:acme/backend`), never to agents.
+
+A repository you cannot read is reported exactly like one that does not exist. One you can read but need more on gives a permission error that names the role needed and who can grant it.
+
+Only people manage organizations, teams and grants. Agents are refused, like token creation.
+
+## Commands
+
+```sh
+vx org create acme --name "Acme Inc"            # you become its owner
+vx org list                                     # your organizations (site admins: --all)
+vx org show acme                                # members, teams, repositories you can read
+vx org set-default acme none|read|write         # what every member gets
+vx org member acme bob --role owner|admin|member
+vx org remove acme bob                          # also removes bob from acme's teams
+
+vx team create acme/backend
+vx team add acme/backend bob                    # bob must be a member of acme
+vx team remove acme/backend bob
+vx team delete acme/backend                     # also deletes its grants
+
+vx repo create acme/api                         # in acme if you own or administer it
+vx repo create tools --org acme
+vx repo grant acme/api team:acme/backend --role write
+vx repo revoke acme/api user:bob
+vx repo access acme/api                         # direct grants and everyone's role, with why (repository admins)
+```
+
+Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `person.create`).
+
+## Upgrading from v0.1
+
+v0.1 had no access control: everyone saw everything. The upgrade (migration 008) changes nobody's access:
+
+- each distinct owner part of an existing repository name becomes an organization (lowercased: `Acme/api` goes to `acme`); repositories without an owner part go to an organization named `default`,
+- every existing person becomes an owner of every one of those organizations,
+- every existing person becomes a site admin,
+- every person gets a personal organization; an organization from the step above that is named like a person becomes theirs.
+
+Prune afterwards, as a site admin: see [deploy.md](deploy.md#upgrading-to-v02).
 
 ## Limits today
 
-- **Visibility.** Every signed-in user can see and land into every repository on the server. Run one server per trust boundary.
-- **Objects.** File contents are addressed by hash and shared across repositories on a server. Anyone who can sign in and knows a hash can fetch that object.
-- **Sign-in.** Tokens only. Admins create people with `vx-server user-add`; there is no admin UI yet.
-- **Agents.** An agent can change any path, and there are no per-agent budgets for lands or check minutes.
+- **Sign-in.** Tokens only. Site admins create people with `vx-server user-add` or the API; there is no single sign-on yet.
+- **Agents.** An agent can change any path its person can, and there are no per-agent budgets for lands or check minutes.
 - **Scale.** Objects live on the server's disk, so one instance. It scales up well; it does not scale out yet.
-- **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants.
+- **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants on the GitHub side.
 
-## Roadmap to organizations
+## Roadmap
 
 The order below follows what blocks adoption first. Each item is a GitHub issue; contributions are welcome.
 
-### 1. Access control
-
-- Organizations and teams as first-class objects; repositories belong to an organization.
-- Roles per repository: admin, maintainer, member, viewer. Agents inherit at most their person's role.
-- Objects served only through repositories the caller can read.
-- Admin pages in the web UI: people, agents, tokens (create, revoke), repositories.
-
-### 2. Single sign-on
+### 1. Single sign-on
 
 - OIDC login for the web UI (Okta, Microsoft Entra ID, Google Workspace, GitHub).
 - CLI login through the browser (`vx login` opens a device flow) instead of pasted tokens.
 - Short-lived tokens for agents, issued from the person's session, with expiry and revocation.
 - SCIM provisioning so people and teams follow the identity provider.
 
-### 3. Agent governance
+### 2. Agent governance
 
 - Path scopes per agent (`internal/http/**`), checked on every land.
 - Budgets per agent and per person: lands per hour, check minutes, storage.
 - Landing policies per path: `fast`, `gated` (checks before landing) and `human` (approval from an owner).
 - Trust levels: new agents land gated until they have a track record.
 
-### 4. GitHub App and other hosts
+### 3. GitHub App and other hosts
 
 - A vx GitHub App installed per organization: short-lived installation tokens, repository selection, webhooks for upstream pushes and review comments.
 - Review feedback mapped back to the change and the agent that wrote the line.
 - Adapters for GitLab, Bitbucket, Gitea and Forgejo.
 
-### 5. Scale and operations
+### 4. Scale and operations
 
 - Object storage backends (S3, R2, GCS, MinIO), so `vx-server` is stateless and runs as several replicas.
 - A cache tier for objects close to agents and CI.
@@ -63,21 +119,19 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 - Prometheus metrics, structured audit log export (SIEM), retention policies.
 - Backup and restore tooling, and documented disaster recovery.
 
-### 6. Collaboration between agents
+### 5. Collaboration between agents
 
-- The effort board: typed notes between agents (plan, decision, interface, question, answer, blocker, handoff), attached to files and symbols, delivered as information and never as instructions.
 - Leases on paths and symbols, and subscriptions to changes others make.
-- An MCP endpoint so agents query vx directly ("who calls this", "who is working on this").
+- More of the board and history through the MCP endpoint.
 
 ## Running vx in an organization today
 
-If you want to start now:
-
-1. Run one vx server per team or trust boundary, behind your VPN or SSO proxy (for example an identity-aware proxy in front of the web UI).
-2. Use a GitHub token limited to that team's repositories.
-3. Issue tokens per person; have people create their own agents.
-4. Back up Postgres and the data volume daily.
-5. Keep humans as the only ones who merge pull requests, under your branch protection rules. vx never merges.
+1. Run vx behind your VPN or SSO proxy (for example an identity-aware proxy in front of the web UI).
+2. Create one organization per team or department, add people as members, and set the default role to `none` where repositories should be opt-in.
+3. Use a GitHub token limited to the repositories the server connects.
+4. Issue tokens per person; have people create their own agents.
+5. Back up Postgres and the data volume daily.
+6. Keep humans as the only ones who merge pull requests, under your branch protection rules. vx never merges.
 
 ## Get involved
 
