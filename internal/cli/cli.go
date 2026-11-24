@@ -88,7 +88,7 @@ Start here:
 	root.PersistentFlags().StringVarP(&a.chdir, "dir", "C", "", "run as if started in this directory")
 	root.AddCommand(
 		a.loginCmd(), a.whoamiCmd(), a.uiCmd(), a.agentCmd(), a.tokenCmd(),
-		a.repoCmd(), a.effortCmd(),
+		a.repoCmd(), a.orgCmd(), a.teamCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
 		a.postCmd(), a.askCmd(), a.answerCmd(), a.boardCmd(), a.inboxCmd(), a.contextCmd(),
