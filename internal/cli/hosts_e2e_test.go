@@ -182,6 +182,29 @@ func TestShipToFakeGitLab(t *testing.T) {
 		t.Fatalf("main after the push hook = %+v %v, want %s", main, err, newMain)
 	}
 
+	// Review comments and pipelines on the merge request reach the author.
+	head, err := r.Reference(plumbing.NewBranchReferenceName("vx/rate-limiting"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mrRef := map[string]any{"iid": 101, "source_branch": "vx/rate-limiting", "url": gl.PRURL(101), "last_commit": map[string]any{"id": head.Hash().String()}}
+	note := map[string]any{"object_kind": "note", "project": project, "user": map[string]any{"username": "reviewer"}, "merge_request": mrRef,
+		"object_attributes": map[string]any{"id": 9001, "note": "Please count per IP.", "noteable_type": "MergeRequest", "url": gl.PRURL(101) + "#note_9001"}}
+	if code, msg := postHook(t, hooks, map[string]string{"X-Gitlab-Event": "Note Hook", "X-Gitlab-Token": secret[1]}, note); code != http.StatusOK {
+		t.Fatalf("note hook: %d %s", code, msg)
+	}
+	pipeline := map[string]any{"object_kind": "pipeline", "project": project, "merge_request": mrRef,
+		"object_attributes": map[string]any{"id": 77, "status": "failed", "sha": head.Hash().String(), "ref": "vx/rate-limiting"}}
+	if code, msg := postHook(t, hooks, map[string]string{"X-Gitlab-Event": "Pipeline Hook", "X-Gitlab-Token": secret[1]}, pipeline); code != http.StatusOK {
+		t.Fatalf("pipeline hook: %d %s", code, msg)
+	}
+	if out := alice.must("inbox"); !strings.Contains(out, "on GitLab") || !strings.Contains(out, "Please count per IP.") || !strings.Contains(out, "CI failed") {
+		t.Fatalf("vx inbox after GitLab feedback:\n%s", out)
+	}
+	if out := alice.must("ship", "list"); !strings.Contains(out, "CI: failed (GitLab pipeline") {
+		t.Fatalf("vx ship list after the pipeline:\n%s", out)
+	}
+
 	// The merge request is squash-merged on GitLab: the change ids are
 	// gone, so the merge request event closes the effort.
 	gl.SetState(101, "merged")

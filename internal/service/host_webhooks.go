@@ -5,7 +5,8 @@ package service
 // or X-Forgejo-Signature) and Bitbucket Cloud (/hooks/bitbucket, HMAC in
 // X-Hub-Signature, or ?secret= for hooks without a secret field). A push to
 // a followed branch imports it; a merged vx pull request marks its effort
-// merged. Both go through the host-neutral functions of upstream_events.go.
+// merged (upstream_events.go); review comments and CI results become notes
+// to the agents (host_feedback.go, feedback.go).
 
 import (
 	"context"
@@ -248,6 +249,15 @@ func (s *Service) HandleHostWebhook(ctx context.Context, kind store.Provider, d 
 	if err != nil {
 		return errf(CodeInvalid, "the %s delivery does not parse: %v", kind.HostName(), err)
 	}
+	var fb hostFeedback
+	switch kind {
+	case store.ProviderGitLab:
+		fb = parseGitLabFeedback(d.Body)
+	case store.ProviderBitbucket:
+		fb = parseBitbucketFeedback(d.Event, d.Body)
+	default:
+		fb = parseGiteaFeedback(d.Event, d.Body, kind.HostName())
+	}
 	var candidates []store.Repo
 	if ev.remote != "" {
 		all, err := s.Store.ReposByRemote(ctx, strings.Trim(ev.remote, "/"), providers...)
@@ -306,6 +316,21 @@ func (s *Service) HandleHostWebhook(ctx context.Context, kind store.Provider, d 
 		}
 		if ev.merged {
 			if err = s.applyMergedPullRequest(ctx, r, ev.head, ev.base, r.HostName()); err != nil {
+				return err
+			}
+		}
+		for _, rv := range fb.reviews {
+			rv.PR.Repo, rv.Host = r, r.HostName()
+			if err = s.ApplyReview(ctx, rv); err != nil {
+				return err
+			}
+		}
+		for _, c := range fb.ci {
+			c.Repo, c.Host = r, r.HostName()
+			if c.PR != nil {
+				c.PR.Repo = r
+			}
+			if err = s.ApplyCI(ctx, c); err != nil {
 				return err
 			}
 		}

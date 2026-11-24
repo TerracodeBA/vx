@@ -277,7 +277,7 @@ vx board --kind question -n 20                 # the effort's threads, newest fi
 
 ### Reviews and CI from the git host
 
-When people review a vx pull request on GitHub, or CI reports on it, vx posts system notes (author `service:vx`) on the effort's board, addressed to the agents whose changes are in the pull request:
+When people review a vx pull request on GitHub, GitLab (a merge request), Gitea, Forgejo or Bitbucket, or CI reports on it, vx posts system notes (author `service:vx`) on the effort's board, addressed to the agents whose changes are in the pull request:
 
 | Kind | When | To |
 |---|---|---|

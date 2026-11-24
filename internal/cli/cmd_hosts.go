@@ -77,11 +77,11 @@ func (a *App) printHostHook(provider, repo string, h *vxv1.HostHook) {
 	var where, secretField, events string
 	switch provider {
 	case "gitlab":
-		where, secretField, events = "GitLab: Settings > Webhooks > Add new webhook", "Secret token", "Push events, Merge request events"
+		where, secretField, events = "GitLab: Settings > Webhooks > Add new webhook", "Secret token", "Push events, Merge request events, Comments, Pipeline events"
 	case "gitea", "forgejo":
-		where, secretField, events = "the repository: Settings > Webhooks > Add webhook > "+map[string]string{"gitea": "Gitea", "forgejo": "Forgejo"}[provider]+" (POST, application/json)", "Secret", "Push events, Pull request events"
+		where, secretField, events = "the repository: Settings > Webhooks > Add webhook > "+map[string]string{"gitea": "Gitea", "forgejo": "Forgejo"}[provider]+" (POST, application/json)", "Secret", "Push, Pull request, Pull request reviewed, Pull request comment, Commit status"
 	case "bitbucket":
-		where, secretField, events = "Bitbucket: Repository settings > Webhooks > Add webhook", "Secret", "Repository push, Pull request merged"
+		where, secretField, events = "Bitbucket: Repository settings > Webhooks > Add webhook", "Secret", "Repository push, Build status created/updated, Pull request merged, approved, changes request created, comment created/updated"
 	default:
 		return
 	}

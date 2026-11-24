@@ -54,16 +54,16 @@ Git over HTTPS uses the token as the password of `oauth2` (GitLab, Gitea, Forgej
 
 | Host | Where | URL | Secret | Events |
 |---|---|---|---|---|
-| GitLab | Project > Settings > Webhooks > Add new webhook (or a group webhook for many projects) | `https://vx.example.com/hooks/gitlab` | Secret token (sent as `X-Gitlab-Token`) | Push events (all branches), Merge request events |
-| Gitea | Repository > Settings > Webhooks > Add webhook > Gitea, POST, `application/json` | `https://vx.example.com/hooks/gitea` | Secret (HMAC-SHA256 in `X-Gitea-Signature`) | Custom events: Push, Pull Request |
-| Forgejo, Codeberg | the same, webhook type Forgejo | `https://vx.example.com/hooks/forgejo` (or `/hooks/gitea`) | Secret (`X-Forgejo-Signature`) | Custom events: Push, Pull Request |
-| Bitbucket Cloud | Repository settings > Webhooks > Add webhook | `https://vx.example.com/hooks/bitbucket` | Secret (HMAC in `X-Hub-Signature`); a webhook without a secret may use `https://vx.example.com/hooks/bitbucket?secret=SECRET` | Repository: Push; Pull request: Merged |
+| GitLab | Project > Settings > Webhooks > Add new webhook (or a group webhook for many projects) | `https://vx.example.com/hooks/gitlab` | Secret token (sent as `X-Gitlab-Token`) | Push events (all branches), Merge request events, Comments, Pipeline events |
+| Gitea | Repository > Settings > Webhooks > Add webhook > Gitea, POST, `application/json` | `https://vx.example.com/hooks/gitea` | Secret (HMAC-SHA256 in `X-Gitea-Signature`) | Custom events: Push, Pull Request, Pull Request Reviewed, Pull Request Comment (Issue Comment on older versions), Commit Status |
+| Forgejo, Codeberg | the same, webhook type Forgejo | `https://vx.example.com/hooks/forgejo` (or `/hooks/gitea`) | Secret (`X-Forgejo-Signature`) | Custom events: Push, Pull Request, Pull Request Reviewed, Pull Request Comment, Commit Status |
+| Bitbucket Cloud | Repository settings > Webhooks > Add webhook | `https://vx.example.com/hooks/bitbucket` | Secret (HMAC in `X-Hub-Signature`); a webhook without a secret may use `https://vx.example.com/hooks/bitbucket?secret=SECRET` | Repository: Push, Build status created and updated; Pull request: Merged, Approved, Changes request created, Comment created and updated |
 
 Deliveries are matched to vx repositories by the project path in the payload (`group/project`, `owner/repo`, `workspace/repo`) and the host's address, so two servers with the same path are kept apart. A delivery is applied once: redeliveries of the same delivery id are acknowledged and skipped.
 
 **Roles.** These repositories use vx's own roles: grants (`vx repo grant`), teams and the organization's default role, as for repositories without a host. Permissions on GitLab, Gitea or Bitbucket are not read; give the people who work there the vx roles they need. Roles from the host, like GitHub-backed repositories have, are a later step.
 
-**Not yet:** review comments and CI results (pipelines, commit statuses) from these hosts do not reach the board yet (the host-neutral `service.ApplyReview` and `service.ApplyCI` are ready for their webhooks), and vx does not read the host's permissions. Pushes and merges from them already rebase open efforts automatically.
+Review comments, approvals and CI results (GitLab pipelines, Gitea and Forgejo commit statuses, Bitbucket build statuses) on vx pull requests reach the agents whose changes they are about, as on GitHub (see [reviews and CI from the git host](agents.md#reviews-and-ci-from-the-git-host)); pushes and merges rebase open efforts automatically. **Not yet:** vx does not read these hosts' permissions, and posts no `vx evidence` status on their pull requests.
 
 ## HTTPS
 
