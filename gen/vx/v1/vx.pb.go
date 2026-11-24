@@ -10452,6 +10452,110 @@ func (x *ListReservationsResponse) GetReservations() []*Reservation {
 	return nil
 }
 
+type CloseEffortRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"` // merged or abandoned
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseEffortRequest) Reset() {
+	*x = CloseEffortRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[169]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseEffortRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseEffortRequest) ProtoMessage() {}
+
+func (x *CloseEffortRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[169]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseEffortRequest.ProtoReflect.Descriptor instead.
+func (*CloseEffortRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{169}
+}
+
+func (x *CloseEffortRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *CloseEffortRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *CloseEffortRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+type CloseEffortResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Effort        *Effort                `protobuf:"bytes,1,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseEffortResponse) Reset() {
+	*x = CloseEffortResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[170]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseEffortResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseEffortResponse) ProtoMessage() {}
+
+func (x *CloseEffortResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[170]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseEffortResponse.ProtoReflect.Descriptor instead.
+func (*CloseEffortResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{170}
+}
+
+func (x *CloseEffortResponse) GetEffort() *Effort {
+	if x != nil {
+		return x.Effort
+	}
+	return nil
+}
+
 var File_vx_v1_vx_proto protoreflect.FileDescriptor
 
 const file_vx_v1_vx_proto_rawDesc = "" +
@@ -11250,7 +11354,13 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\tR\tcreatedAt\"R\n" +
 	"\x18ListReservationsResponse\x126\n" +
-	"\freservations\x18\x01 \x03(\v2\x12.vx.v1.ReservationR\freservations2\xfc\x03\n" +
+	"\freservations\x18\x01 \x03(\v2\x12.vx.v1.ReservationR\freservations\"V\n" +
+	"\x12CloseEffortRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\"<\n" +
+	"\x13CloseEffortResponse\x12%\n" +
+	"\x06effort\x18\x01 \x01(\v2\r.vx.v1.EffortR\x06effort2\xfc\x03\n" +
 	"\vAuthService\x127\n" +
 	"\x06WhoAmI\x12\x14.vx.v1.WhoAmIRequest\x1a\x15.vx.v1.WhoAmIResponse\"\x00\x12F\n" +
 	"\vCreateAgent\x12\x19.vx.v1.CreateAgentRequest\x1a\x1a.vx.v1.CreateAgentResponse\"\x00\x12C\n" +
@@ -11273,11 +11383,12 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\aGetRepo\x12\x15.vx.v1.GetRepoRequest\x1a\x16.vx.v1.GetRepoResponse\"\x00\x12@\n" +
 	"\tListRepos\x12\x17.vx.v1.ListReposRequest\x1a\x18.vx.v1.ListReposResponse\"\x00\x12C\n" +
 	"\n" +
-	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x002\xd0\x05\n" +
+	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x002\x98\x06\n" +
 	"\rEffortService\x12I\n" +
 	"\fCreateEffort\x12\x1a.vx.v1.CreateEffortRequest\x1a\x1b.vx.v1.CreateEffortResponse\"\x00\x12@\n" +
 	"\tGetEffort\x12\x17.vx.v1.GetEffortRequest\x1a\x18.vx.v1.GetEffortResponse\"\x00\x12F\n" +
-	"\vListEfforts\x12\x19.vx.v1.ListEffortsRequest\x1a\x1a.vx.v1.ListEffortsResponse\"\x00\x12I\n" +
+	"\vListEfforts\x12\x19.vx.v1.ListEffortsRequest\x1a\x1a.vx.v1.ListEffortsResponse\"\x00\x12F\n" +
+	"\vCloseEffort\x12\x19.vx.v1.CloseEffortRequest\x1a\x1a.vx.v1.CloseEffortResponse\"\x00\x12I\n" +
 	"\fListOverlaps\x12\x1a.vx.v1.ListOverlapsRequest\x1a\x1b.vx.v1.ListOverlapsResponse\"\x00\x12.\n" +
 	"\x03Log\x12\x11.vx.v1.LogRequest\x1a\x12.vx.v1.LogResponse\"\x00\x12I\n" +
 	"\fGetChangeset\x12\x1a.vx.v1.GetChangesetRequest\x1a\x1b.vx.v1.GetChangesetResponse\"\x00\x12I\n" +
@@ -11358,7 +11469,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 169)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 171)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),                // 0: vx.v1.Principal
 	(*Branch)(nil),                   // 1: vx.v1.Branch
@@ -11529,6 +11640,8 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*ListReservationsRequest)(nil),  // 166: vx.v1.ListReservationsRequest
 	(*Reservation)(nil),              // 167: vx.v1.Reservation
 	(*ListReservationsResponse)(nil), // 168: vx.v1.ListReservationsResponse
+	(*CloseEffortRequest)(nil),       // 169: vx.v1.CloseEffortRequest
+	(*CloseEffortResponse)(nil),      // 170: vx.v1.CloseEffortResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
 	1,   // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
@@ -11641,145 +11754,148 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	160, // 107: vx.v1.RepoRules.generated:type_name -> vx.v1.GeneratedRule
 	161, // 108: vx.v1.GetRulesResponse.rules:type_name -> vx.v1.RepoRules
 	167, // 109: vx.v1.ListReservationsResponse.reservations:type_name -> vx.v1.Reservation
-	25,  // 110: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	27,  // 111: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	17,  // 112: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	19,  // 113: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	21,  // 114: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	23,  // 115: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	13,  // 116: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	29,  // 117: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	31,  // 118: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	33,  // 119: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	35,  // 120: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	37,  // 121: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	39,  // 122: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	41,  // 123: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	43,  // 124: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	45,  // 125: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	47,  // 126: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	157, // 127: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
-	49,  // 128: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	51,  // 129: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	108, // 130: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
-	110, // 131: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
-	112, // 132: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
-	114, // 133: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
-	55,  // 134: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	57,  // 135: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	59,  // 136: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	61,  // 137: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	63,  // 138: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	53,  // 139: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
-	68,  // 140: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	70,  // 141: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	72,  // 142: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	77,  // 143: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	79,  // 144: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	81,  // 145: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	83,  // 146: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	85,  // 147: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	87,  // 148: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	74,  // 149: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
-	93,  // 150: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
-	95,  // 151: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
-	97,  // 152: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
-	100, // 153: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
-	102, // 154: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
-	104, // 155: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
-	121, // 156: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
-	123, // 157: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
-	125, // 158: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
-	127, // 159: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
-	129, // 160: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
-	131, // 161: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
-	133, // 162: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
-	135, // 163: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
-	137, // 164: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
-	139, // 165: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
-	141, // 166: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
-	143, // 167: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
-	145, // 168: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
-	147, // 169: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
-	149, // 170: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
-	151, // 171: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
-	153, // 172: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
-	155, // 173: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
-	162, // 174: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
-	164, // 175: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
-	166, // 176: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
-	26,  // 177: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	28,  // 178: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	18,  // 179: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	20,  // 180: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	22,  // 181: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	24,  // 182: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	14,  // 183: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	30,  // 184: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	32,  // 185: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	34,  // 186: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	36,  // 187: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	38,  // 188: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	40,  // 189: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	42,  // 190: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	44,  // 191: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	46,  // 192: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	48,  // 193: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	158, // 194: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
-	50,  // 195: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	52,  // 196: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	109, // 197: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
-	111, // 198: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
-	113, // 199: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
-	115, // 200: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
-	56,  // 201: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	58,  // 202: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	60,  // 203: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	62,  // 204: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	64,  // 205: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	54,  // 206: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
-	69,  // 207: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	71,  // 208: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	73,  // 209: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	78,  // 210: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	80,  // 211: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	82,  // 212: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	84,  // 213: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	86,  // 214: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	89,  // 215: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	75,  // 216: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
-	94,  // 217: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
-	96,  // 218: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
-	98,  // 219: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
-	101, // 220: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
-	103, // 221: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
-	105, // 222: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
-	122, // 223: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
-	124, // 224: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
-	126, // 225: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
-	128, // 226: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
-	130, // 227: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
-	132, // 228: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
-	134, // 229: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
-	136, // 230: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
-	138, // 231: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
-	140, // 232: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
-	142, // 233: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
-	144, // 234: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
-	146, // 235: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
-	148, // 236: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
-	150, // 237: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
-	152, // 238: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
-	154, // 239: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
-	156, // 240: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
-	163, // 241: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
-	165, // 242: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
-	168, // 243: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
-	177, // [177:244] is the sub-list for method output_type
-	110, // [110:177] is the sub-list for method input_type
-	110, // [110:110] is the sub-list for extension type_name
-	110, // [110:110] is the sub-list for extension extendee
-	0,   // [0:110] is the sub-list for field type_name
+	3,   // 110: vx.v1.CloseEffortResponse.effort:type_name -> vx.v1.Effort
+	25,  // 111: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	27,  // 112: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	17,  // 113: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	19,  // 114: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	21,  // 115: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	23,  // 116: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	13,  // 117: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	29,  // 118: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	31,  // 119: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	33,  // 120: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	35,  // 121: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	37,  // 122: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	39,  // 123: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	41,  // 124: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	43,  // 125: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	45,  // 126: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	47,  // 127: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	169, // 128: vx.v1.EffortService.CloseEffort:input_type -> vx.v1.CloseEffortRequest
+	157, // 129: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
+	49,  // 130: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	51,  // 131: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	108, // 132: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
+	110, // 133: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
+	112, // 134: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
+	114, // 135: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
+	55,  // 136: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	57,  // 137: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	59,  // 138: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	61,  // 139: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	63,  // 140: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	53,  // 141: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
+	68,  // 142: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	70,  // 143: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	72,  // 144: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	77,  // 145: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	79,  // 146: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	81,  // 147: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	83,  // 148: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	85,  // 149: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	87,  // 150: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	74,  // 151: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
+	93,  // 152: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	95,  // 153: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	97,  // 154: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	100, // 155: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	102, // 156: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	104, // 157: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	121, // 158: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
+	123, // 159: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
+	125, // 160: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
+	127, // 161: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
+	129, // 162: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
+	131, // 163: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
+	133, // 164: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
+	135, // 165: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
+	137, // 166: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
+	139, // 167: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
+	141, // 168: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
+	143, // 169: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
+	145, // 170: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
+	147, // 171: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
+	149, // 172: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
+	151, // 173: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
+	153, // 174: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
+	155, // 175: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
+	162, // 176: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
+	164, // 177: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
+	166, // 178: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
+	26,  // 179: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	28,  // 180: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	18,  // 181: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	20,  // 182: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	22,  // 183: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	24,  // 184: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	14,  // 185: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	30,  // 186: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	32,  // 187: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	34,  // 188: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	36,  // 189: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	38,  // 190: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	40,  // 191: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	42,  // 192: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	44,  // 193: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	46,  // 194: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	48,  // 195: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	170, // 196: vx.v1.EffortService.CloseEffort:output_type -> vx.v1.CloseEffortResponse
+	158, // 197: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
+	50,  // 198: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	52,  // 199: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	109, // 200: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
+	111, // 201: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
+	113, // 202: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
+	115, // 203: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
+	56,  // 204: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	58,  // 205: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	60,  // 206: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	62,  // 207: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	64,  // 208: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	54,  // 209: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
+	69,  // 210: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	71,  // 211: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	73,  // 212: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	78,  // 213: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	80,  // 214: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	82,  // 215: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	84,  // 216: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	86,  // 217: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	89,  // 218: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	75,  // 219: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
+	94,  // 220: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	96,  // 221: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	98,  // 222: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	101, // 223: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	103, // 224: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	105, // 225: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	122, // 226: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
+	124, // 227: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
+	126, // 228: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
+	128, // 229: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
+	130, // 230: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
+	132, // 231: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
+	134, // 232: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
+	136, // 233: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
+	138, // 234: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
+	140, // 235: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
+	142, // 236: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
+	144, // 237: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
+	146, // 238: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
+	148, // 239: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
+	150, // 240: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
+	152, // 241: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
+	154, // 242: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
+	156, // 243: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
+	163, // 244: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
+	165, // 245: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
+	168, // 246: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
+	179, // [179:247] is the sub-list for method output_type
+	111, // [111:179] is the sub-list for method input_type
+	111, // [111:111] is the sub-list for extension type_name
+	111, // [111:111] is the sub-list for extension extendee
+	0,   // [0:111] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -11793,7 +11909,7 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   169,
+			NumMessages:   171,
 			NumExtensions: 0,
 			NumServices:   11,
 		},

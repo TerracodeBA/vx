@@ -191,6 +191,15 @@ var authzOps = []authzOp{
 		_, err := e.svc.CreateEffort(e.ctx, a, service.CreateEffortInput{Repo: "acme/shop", Name: fmt.Sprintf("Effort %d", e.n)})
 		return err
 	}},
+	{"CloseEffort", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		e.n++
+		eff, err := e.svc.CreateEffort(e.ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: fmt.Sprintf("To close %d", e.n)})
+		if err != nil {
+			return err
+		}
+		_, err = e.svc.CloseEffort(e.ctx, a, "acme/shop", eff.Slug, store.EffortAbandoned)
+		return err
+	}},
 	{"OpenWorkspace", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.OpenWorkspace(e.ctx, a, "acme/shop", e.eff.Slug, "Try something")
 		return err

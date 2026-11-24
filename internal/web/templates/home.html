@@ -3,7 +3,7 @@
 <div class="page-head">
   <div>
     <h1>All efforts</h1>
-    <p class="muted">Every effort across your repositories, newest activity first.</p>
+    <p class="muted">{{if .ShowFinished}}Every effort across your repositories, finished ones included, newest activity first. <a href="/ui">Hide finished</a>{{else}}Open efforts across your repositories, newest activity first.{{if .Finished}} <a href="/ui?finished=1">Show {{.Finished}} finished</a>{{end}}{{end}}</p>
   </div>
 </div>
 <div class="kpis">

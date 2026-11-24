@@ -351,6 +351,9 @@ service EffortService {
   rpc CreateEffort(CreateEffortRequest) returns (CreateEffortResponse) {}
   rpc GetEffort(GetEffortRequest) returns (GetEffortResponse) {}
   rpc ListEfforts(ListEffortsRequest) returns (ListEffortsResponse) {}
+  // CloseEffort marks an effort merged or abandoned. vx also marks efforts
+  // merged by itself once their target branch contains every change.
+  rpc CloseEffort(CloseEffortRequest) returns (CloseEffortResponse) {}
   // ListOverlaps returns the forecast collisions of an effort with the
   // repository's other open efforts.
   rpc ListOverlaps(ListOverlapsRequest) returns (ListOverlapsResponse) {}
@@ -1241,4 +1244,14 @@ message Reservation {
 
 message ListReservationsResponse {
   repeated Reservation reservations = 1;
+}
+
+message CloseEffortRequest {
+  string repo = 1;
+  string effort = 2;
+  string state = 3; // merged or abandoned
+}
+
+message CloseEffortResponse {
+  Effort effort = 1;
 }

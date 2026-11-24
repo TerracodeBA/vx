@@ -205,6 +205,7 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Start an effort | `vx effort new` | write |
 | Claim, add and change tasks (also by id) | `vx claim`, `vx release`, `vx task ...`, `vx_claim`, `vx_task_add`, `vx_task_update` | write |
 | Rebase an effort, continue or abort | `vx effort rebase` | write |
+| Close an effort (merged or abandoned) | `vx effort close` | write |
 | Reserve the next key of a vx.toml `[[unique]]` rule for an effort | `vx reserve`, `vx_reserve` | write |
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |

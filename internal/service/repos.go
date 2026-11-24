@@ -129,6 +129,7 @@ func (s *Service) syncBranch(ctx context.Context, actor Actor, repo store.Repo, 
 	}
 	if n > 0 {
 		_ = s.Store.LogOp(ctx, &repo.ID, &actor.ID, "branch.sync", branch, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n})
+		s.markMergedEfforts(ctx, repo, branch)
 		s.scheduleBranchForecast(repo, branch)
 	}
 	return b, n, nil

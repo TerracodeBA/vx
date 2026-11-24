@@ -7,6 +7,7 @@ import (
 
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/internal/service"
+	"github.com/TerracodeBA/vx/internal/store"
 )
 
 // overlapPB converts a forecast collision.
@@ -72,4 +73,13 @@ func (h *Handlers) ListReservations(ctx context.Context, req *connect.Request[vx
 		out = append(out, &vxv1.Reservation{Rule: r.Rule, Value: r.Value, Effort: r.EffortSlug, ReservedBy: r.ReservedBy, CreatedAt: ts(r.CreatedAt)})
 	}
 	return connect.NewResponse(&vxv1.ListReservationsResponse{Reservations: out}), nil
+}
+
+func (h *Handlers) CloseEffort(ctx context.Context, req *connect.Request[vxv1.CloseEffortRequest]) (*connect.Response[vxv1.CloseEffortResponse], error) {
+	m := req.Msg
+	e, err := h.svc.CloseEffort(ctx, actorFrom(ctx), m.Repo, m.Effort, store.EffortState(m.State))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.CloseEffortResponse{Effort: effortPB(m.Repo, e, h.ref(ctx, e.OwnerID), 0)}), nil
 }

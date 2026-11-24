@@ -110,3 +110,11 @@ func (q Q) ListShipments(ctx context.Context, effortID uuid.UUID) ([]Shipment, e
 	}
 	return out, nil
 }
+
+// CloseShipments sets the state of an effort's open shipments (merged when
+// the effort was merged, closed when it was abandoned).
+func (q Q) CloseShipments(ctx context.Context, effortID uuid.UUID, state string) error {
+	_, err := q.db.Exec(ctx, `update shipments set state = $1, updated_at = now()
+		where effort_id = $2 and state in ('open', 'draft', 'pushed')`, state, effortID)
+	return err
+}

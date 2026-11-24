@@ -58,6 +58,7 @@ func (a *App) effortCmd() *cobra.Command {
 	create.Flags().StringVar(&from, "from", "", "base branch")
 
 	var listRepo, state string
+	var all bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List efforts",
@@ -74,18 +75,78 @@ func (a *App) effortCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(resp.Msg.Efforts) == 0 {
+			// Without --state or --all, finished (merged, abandoned) efforts
+			// are hidden; say how many.
+			shown, hidden := resp.Msg.Efforts, 0
+			if state == "" && !all {
+				shown = nil
+				for _, e := range resp.Msg.Efforts {
+					if e.State == "merged" || e.State == "abandoned" {
+						hidden++
+						continue
+					}
+					shown = append(shown, e)
+				}
+			}
+			if len(shown) == 0 && hidden == 0 {
 				a.printf("No efforts in %s yet. Start one with: vx effort new \"NAME\" --repo %s\n", repo, repo)
 			}
-			for _, e := range resp.Msg.Efforts {
+			for _, e := range shown {
 				a.printf("%-36s %-9s %d open  %s\n", e.Slug, e.State, e.OpenWorkspaces, e.Name)
 			}
-			a.emit(resp.Msg)
+			if hidden > 0 {
+				a.printf("%d finished effort(s) hidden (merged or abandoned): vx effort list --all\n", hidden)
+			}
+			a.emit(&vxv1.ListEffortsResponse{Efforts: shown})
 			return nil
 		},
 	}
 	list.Flags().StringVar(&listRepo, "repo", "", "repository")
 	list.Flags().StringVar(&state, "state", "", "open, shipping, merged or abandoned")
+	list.Flags().BoolVar(&all, "all", false, "also list finished (merged and abandoned) efforts")
+
+	var closeRepo string
+	var merged, abandon bool
+	closeCmd := &cobra.Command{
+		Use:   "close [SLUG] (--merged | --abandon)",
+		Short: "Mark an effort merged or abandoned",
+		Long: `Mark an effort finished. Its changes and board stay readable, but nobody
+can land into it any more, and lists, context and overlap forecasts leave
+it out.
+
+vx marks efforts merged by itself once their changes are on the target
+branch (after vx repo sync, a GitHub push or a merged pull request), so
+--merged is for hosts vx does not hear from. --abandon is for work that
+will not ship.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if merged == abandon {
+				return errors.New("say how the effort ends: --merged or --abandon")
+			}
+			c, err := a.client()
+			if err != nil {
+				return err
+			}
+			repo, slug, err := a.resolveEffort(closeRepo, args)
+			if err != nil {
+				return err
+			}
+			st := "merged"
+			if abandon {
+				st = "abandoned"
+			}
+			resp, err := c.Efforts.CloseEffort(ctxOf(cmd), connect.NewRequest(&vxv1.CloseEffortRequest{Repo: repo, Effort: slug, State: st}))
+			if err != nil {
+				return err
+			}
+			a.printf("Effort %s is %s. Its history and board stay readable: vx effort show %s\n", slug, resp.Msg.Effort.State, slug)
+			a.emit(resp.Msg)
+			return nil
+		},
+	}
+	closeCmd.Flags().StringVar(&closeRepo, "repo", "", "repository")
+	closeCmd.Flags().BoolVar(&merged, "merged", false, "its work was merged on the git host")
+	closeCmd.Flags().BoolVar(&abandon, "abandon", false, "its work will not ship")
 
 	var showRepo string
 	show := &cobra.Command{
@@ -127,7 +188,7 @@ func (a *App) effortCmd() *cobra.Command {
 	}
 	show.Flags().StringVar(&showRepo, "repo", "", "repository")
 
-	cmd.AddCommand(create, list, show, a.effortRebaseCmd())
+	cmd.AddCommand(create, list, show, closeCmd, a.effortRebaseCmd())
 	return cmd
 }
 

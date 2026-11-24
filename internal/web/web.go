@@ -342,6 +342,8 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		service.RepoView
 		Efforts []effortRow
 	}
+	// Finished (merged, abandoned) efforts are hidden unless asked for.
+	showFinished, finished := r.URL.Query().Get("finished") == "1", 0
 	var rows []repoRow
 	for _, repo := range repos {
 		rr := repoRow{RepoView: repo}
@@ -352,6 +354,10 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		}
 		counts := u.overlapCounts(r, actor, repo.Name)
 		for _, e := range effs {
+			if (e.State == store.EffortMerged || e.State == store.EffortAbandoned) && !showFinished {
+				finished++
+				continue
+			}
 			rr.Efforts = append(rr.Efforts, u.effortRow(r, repo.Repo, e, counts))
 		}
 		rows = append(rows, rr)
@@ -366,7 +372,7 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].UpdatedAt.After(all[j].UpdatedAt) })
-	u.render(w, r, "home", map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts"})
+	u.render(w, r, "home", map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts", "Finished": finished, "ShowFinished": showFinished})
 }
 
 // overlapCounts is the forecast badge data of a repository's efforts; on
