@@ -25,6 +25,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
+	"github.com/TerracodeBA/vx/internal/web/highlight"
 )
 
 //go:embed templates/*.html static/*
@@ -642,10 +643,9 @@ func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, _ service.Actor)
 
 // ---------- change ----------
 
-type seg struct {
-	Text string
-	Hi   bool // the changed part of a line that was edited
-}
+// seg is a piece of a diff line: its syntax class, and whether it is the
+// changed part of a line that was edited (Hi).
+type seg = highlight.Span
 
 type diffLine struct {
 	Kind string // ctx, add, del, hunk
@@ -731,6 +731,7 @@ func (u *UI) fileDiff(r *http.Request, f store.FileChange) (fileDiff, error) {
 	edits := merge.Diff(la, lb)
 	fd.Lines = renderHunks(edits, la, lb, 3)
 	markWords(fd.Lines)
+	colorLines(fd.Lines, f.Path, a, b)
 	fd.Rows = splitRows(fd.Lines)
 	fd.Key = f.Path + "@" + f.New.Hash.Short()
 	return fd, nil
@@ -760,6 +761,43 @@ func markWords(lines []diffLine) {
 				continue
 			}
 			del.Segs, add.Segs = wordSegs(del.Text, add.Text)
+		}
+	}
+}
+
+// colorLines adds syntax colours to the lines of a diff, keeping the
+// word-level change marks. Old and new files are each tokenised whole, up
+// to the last line the diff shows, so multi-line strings and comments
+// colour right; lines without tokens stay plain.
+func colorLines(lines []diffLine, path string, a, b []byte) {
+	lastOld, lastNew := 0, 0
+	for _, l := range lines {
+		if l.Kind == "del" {
+			lastOld = max(lastOld, l.Old)
+		}
+		lastNew = max(lastNew, l.New)
+	}
+	var ta, tb [][]highlight.Token
+	if lastOld > 0 {
+		ta = highlight.File(path, a, lastOld)
+	}
+	if lastNew > 0 {
+		tb = highlight.File(path, b, lastNew)
+	}
+	for i := range lines {
+		l := &lines[i]
+		toks, n := tb, l.New
+		switch l.Kind {
+		case "del":
+			toks, n = ta, l.Old
+		case "hunk":
+			continue
+		}
+		if n < 1 || n > len(toks) {
+			continue
+		}
+		if spans := highlight.Overlay(toks[n-1], l.Text, l.Segs); spans != nil {
+			l.Segs = spans
 		}
 	}
 }
