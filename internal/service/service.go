@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -99,6 +101,9 @@ func New(st *store.Store, blobs blob.Store, upstream UpstreamSyncer) *Service {
 type Actor struct {
 	store.Principal
 	Parent *store.Principal // set for agents
+	// TokenID is the token the request was made with; uuid.Nil when the
+	// caller did not authenticate with a token (tests, internal calls).
+	TokenID uuid.UUID
 }
 
 // ResolveActor loads the parent of an agent principal.

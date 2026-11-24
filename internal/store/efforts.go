@@ -290,8 +290,18 @@ func (q Q) LogOp(ctx context.Context, repoID, actorID *uuid.UUID, op, target str
 
 // ListOps returns a repo's newest operations first.
 func (q Q) ListOps(ctx context.Context, repoID uuid.UUID, limit int) ([]Op, error) {
+	return q.listOps(ctx, `repo_id = $1`, repoID, limit)
+}
+
+// ListActorOps returns the newest operations a principal performed, in any
+// repo or none (agent creation, token revocation).
+func (q Q) ListActorOps(ctx context.Context, actorID uuid.UUID, limit int) ([]Op, error) {
+	return q.listOps(ctx, `actor_id = $1`, actorID, limit)
+}
+
+func (q Q) listOps(ctx context.Context, where string, id uuid.UUID, limit int) ([]Op, error) {
 	rows, err := q.db.Query(ctx, `select id, repo_id, actor_id, op, target, before, after, at
-		from op_log where repo_id = $1 order by id desc limit $2`, repoID, limit)
+		from op_log where `+where+` order by id desc limit $2`, id, limit)
 	if err != nil {
 		return nil, err
 	}
