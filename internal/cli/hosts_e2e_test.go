@@ -101,8 +101,8 @@ func TestShipToFakeGitLab(t *testing.T) {
 	}
 
 	// Without a token the project cannot even be read.
-	if out, code := alice.run("repo", "create", "acme/nope", "--gitlab", "acme/platform/shop", "--gitlab-url", gl.URL); code == 0 {
-		t.Fatalf("created without a token:\n%s", out)
+	if out, code := alice.run("repo", "create", "acme/nope", "--gitlab", "acme/platform/shop", "--gitlab-url", gl.URL); code == 0 || !strings.Contains(out, "--token-file FILE") {
+		t.Fatalf("created without a token, or no hint:\n%s", out)
 	}
 	anonymous := len(gl.GitRequests())
 	out := alice.must("repo", "create", "acme/shop", "--gitlab", "acme/platform/shop", "--gitlab-url", gl.URL, "--token-file", tokenFile)
@@ -117,6 +117,9 @@ func TestShipToFakeGitLab(t *testing.T) {
 	secret := regexp.MustCompile(`Secret token: ([0-9a-f]+)`).FindStringSubmatch(out)
 	if secret == nil {
 		t.Fatalf("no webhook secret in:\n%s", out)
+	}
+	if out := alice.must("repo", "host", "acme/shop"); !strings.Contains(out, "the repository's webhook secret, shown when it was made") || strings.Contains(out, secret[1]) {
+		t.Fatalf("repo host without flags:\n%s", out)
 	}
 	if out := alice.must("repo", "list"); !strings.Contains(out, "gitlab") || !strings.Contains(out, strings.TrimPrefix(gl.URL, "http://")+"/acme/platform/shop") {
 		t.Fatalf("repo list:\n%s", out)

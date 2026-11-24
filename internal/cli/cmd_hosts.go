@@ -89,6 +89,8 @@ func (a *App) printHostHook(provider, repo string, h *vxv1.HostHook) {
 	switch {
 	case h.Secret != "":
 		a.printf("  %s: %s\n  (shown once; a new one: vx repo host %s --rotate-webhook-secret)\n", secretField, h.Secret, repo)
+	case h.SecretSource == "repository":
+		a.printf("  %s: the repository's webhook secret, shown when it was made (a new one: vx repo host %s --rotate-webhook-secret)\n", secretField, repo)
 	case h.SecretSource == "server":
 		a.printf("  %s: the server's webhook secret for %s (VX_%s_WEBHOOK_SECRET)\n", secretField, provider, strings.ToUpper(provider))
 	default:
