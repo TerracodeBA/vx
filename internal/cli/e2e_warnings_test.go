@@ -3,6 +3,7 @@ package cli_test
 import (
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,30 @@ func TestLandPrintsDuplicateDeclarationWarning(t *testing.T) {
 	out := b.must("land")
 	if !strings.Contains(out, "Warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)") {
 		t.Fatalf("land should warn about the duplicate: %s", out)
+	}
+	m := regexp.MustCompile(`Landed [0-9a-f]+ \(([a-z0-9-]+)\)`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("no change id in land output: %s", out)
+	}
+	changeID := m[1]
+
+	// The warning is stored with the change: another agent sees it later in
+	// vx log, vx show and vx status.
+	const warnLine = "warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)"
+	if a.must("sync"); !strings.Contains(a.must("log"), "    "+warnLine) {
+		t.Fatalf("vx log should show the stored warning under the change")
+	}
+	if out := a.must("show", changeID); !strings.Contains(out, warnLine) {
+		t.Fatalf("vx show should show the stored warning: %s", out)
+	}
+	if out := a.must("status"); !strings.Contains(out, "Warnings in recent lands: duplicate func clientIP in internal/httpapi (audit.go, limit.go) (change "+changeID+")") {
+		t.Fatalf("vx status should mention the warning: %s", out)
+	}
+	var sj struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(a.must("status", "--json")), &sj); err != nil || len(sj.Warnings) != 1 {
+		t.Fatalf("status --json warnings = %+v, %v", sj, err)
 	}
 
 	b.must("new", "Another duplicate")
