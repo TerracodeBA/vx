@@ -155,3 +155,23 @@
   tick();
   setInterval(tick, 2500);
 })();
+
+// Table filter: an input with data-filter="TABLE_ID" hides rows whose
+// data-filter-text does not contain what was typed (case-insensitive).
+(function () {
+  document.querySelectorAll("[data-filter]").forEach(function (input) {
+    var table = document.getElementById(input.getAttribute("data-filter"));
+    if (!table) return;
+    var empty = table.closest(".panel") && table.closest(".panel").querySelector(".filter-empty");
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+      table.querySelectorAll("tbody tr").forEach(function (tr) {
+        var hit = !q || (tr.getAttribute("data-filter-text") || tr.textContent).toLowerCase().indexOf(q) >= 0;
+        tr.hidden = !hit;
+        if (hit) shown++;
+      });
+      if (empty) empty.hidden = shown > 0;
+    });
+  });
+})();

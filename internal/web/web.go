@@ -144,7 +144,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "code", "home", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people"} {
+	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -163,6 +163,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/login/code", u.codePost)
 	mux.HandleFunc("POST /ui/logout", u.logout)
 	mux.HandleFunc("GET /ui", u.auth(u.home))
+	mux.HandleFunc("GET /ui/repos", u.auth(u.repos))
 	mux.HandleFunc("GET /ui/repo", u.auth(u.repo))
 	mux.HandleFunc("GET /ui/effort", u.auth(u.effort))
 	mux.HandleFunc("GET /ui/effort/head", u.auth(u.effortHead))
@@ -217,49 +218,8 @@ func actorOf(r *http.Request) (service.Actor, bool) {
 }
 
 // navRepo and navEffort feed the sidebar on every signed-in page.
-type navRepo struct {
-	Name     string
-	Provider string
-	Efforts  []navEffort
-}
-
-type navEffort struct {
-	Slug  string
-	Name  string
-	State string
-	Open  int
-}
-
-// nav lists the repositories the signed-in actor can read.
-func (u *UI) nav(r *http.Request) []navRepo {
-	ctx := r.Context()
-	actor, ok := actorOf(r)
-	if !ok {
-		return nil
-	}
-	repos, err := u.svc.ListRepos(ctx, actor)
-	if err != nil {
-		return nil
-	}
-	out := make([]navRepo, 0, len(repos))
-	for _, repo := range repos {
-		nr := navRepo{Name: repo.Name, Provider: string(repo.Provider)}
-		_, effs, _ := u.svc.ListEfforts(ctx, actor, repo.Name, "")
-		for _, e := range effs {
-			ne := navEffort{Slug: e.Slug, Name: e.Name, State: string(e.State)}
-			if ws, err := u.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen); err == nil {
-				ne.Open = len(ws)
-			}
-			nr.Efforts = append(nr.Efforts, ne)
-		}
-		out = append(out, nr)
-	}
-	return out
-}
-
 func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
 	if _, signedIn := data["Actor"]; signedIn {
-		data["Nav"] = u.nav(r)
 		if a, ok := data["Actor"].(service.Actor); ok {
 			data["NavAdmin"] = u.svc.IsSiteAdmin(r.Context(), a)
 			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
