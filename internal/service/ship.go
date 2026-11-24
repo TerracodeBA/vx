@@ -181,6 +181,7 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	})
 	switch {
 	case errors.Is(err, provider.ErrNoPullRequests):
+		res.PR = pr // may carry a link where a person opens the PR
 	case err != nil:
 		return res, errf(CodeUnavailable, "branch %s was pushed, but opening the pull request failed: %v", plan.Branch, err)
 	default:

@@ -90,6 +90,8 @@ stays a decision on the git host.`,
 			printPlan(resp.Msg.Plan)
 			a.printf("\nPushed %s (%d commit(s)) on top of %s.\n", s.Branch, len(s.ChangeIds), s.Target)
 			switch {
+			case s.State == "pushed" && s.Url != "":
+				a.printf("The server has no GitHub API token, so open the pull request here:\n  %s\n", s.Url)
 			case s.Url != "" && resp.Msg.PrUpdated:
 				a.printf("Updated pull request #%s: %s\n", s.PrNumber, s.Url)
 			case s.Url != "":

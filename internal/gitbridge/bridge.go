@@ -59,7 +59,7 @@ type Bridge struct {
 func New(st *store.Store, blobs blob.Store, dir string, githubToken func() string) *Bridge {
 	return &Bridge{
 		Store: st, Blobs: blobs, Dir: dir, GitHubToken: githubToken,
-		GitHubAPI: "https://api.github.com", GitHubGitBase: "https://github.com",
+		GitHubAPI: "https://api.github.com", GitHubGitBase: defaultGitHubBase,
 		FirstDepth: 1, SyncDepth: 200, Log: slog.Default(),
 		locks: map[uuid.UUID]*sync.Mutex{},
 	}
@@ -78,19 +78,36 @@ func (b *Bridge) lock(id uuid.UUID) func() {
 	return l.Unlock
 }
 
+// defaultGitHubBase is github.com over HTTPS.
+const defaultGitHubBase = "https://github.com"
+
+func (b *Bridge) githubToken() string {
+	if b.GitHubToken == nil {
+		return ""
+	}
+	return b.GitHubToken()
+}
+
 func (b *Bridge) remoteURL(repo store.Repo) (string, error) {
 	switch repo.Provider {
 	case store.ProviderGitHub:
-		return strings.TrimRight(b.GitHubGitBase, "/") + "/" + repo.Remote + ".git", nil
+		base := strings.TrimRight(b.GitHubGitBase, "/")
+		if base == defaultGitHubBase && b.githubToken() == "" {
+			// No token: use SSH with the server user's keys, like git does.
+			return "git@github.com:" + repo.Remote + ".git", nil
+		}
+		return base + "/" + repo.Remote + ".git", nil
 	case store.ProviderGit:
 		return repo.Remote, nil
 	}
 	return "", fmt.Errorf("repo %s has no git upstream", repo.Name)
 }
 
+// auth returns HTTPS credentials for GitHub when a token is set. Without
+// one, SSH remotes use the SSH agent and known_hosts, as git does.
 func (b *Bridge) auth(repo store.Repo) transport.AuthMethod {
-	if repo.Provider == store.ProviderGitHub && b.GitHubToken != nil {
-		if tok := b.GitHubToken(); tok != "" {
+	if repo.Provider == store.ProviderGitHub {
+		if tok := b.githubToken(); tok != "" {
 			return &githttp.BasicAuth{Username: "x-access-token", Password: tok}
 		}
 	}

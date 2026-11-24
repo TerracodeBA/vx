@@ -23,6 +23,12 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 	if repo.Provider != store.ProviderGitHub {
 		return provider.OpenedPR{}, provider.ErrNoPullRequests
 	}
+	if b.githubToken() == "" {
+		// Without an API token vx can push but not open the PR. Hand back
+		// the page where a person opens it with one click.
+		return provider.OpenedPR{URL: fmt.Sprintf("https://github.com/%s/compare/%s...%s?expand=1", repo.Remote, url.PathEscape(pr.Base), url.PathEscape(pr.Head))},
+			provider.ErrNoPullRequests
+	}
 	if !strings.HasPrefix(pr.Head, BranchPrefix) {
 		return provider.OpenedPR{}, fmt.Errorf("refusing to open a PR from %q", pr.Head)
 	}
