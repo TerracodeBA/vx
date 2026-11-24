@@ -50,6 +50,42 @@ vx login --server https://vx.example.com --token <token>
 vx agent add backend --env-file ~/.vx-agents/backend.env
 ```
 
+## Production on one server
+
+`deploy/production` turns a fresh Ubuntu 24.04 server into a running vx with one command: Docker, a firewall (SSH, HTTP, HTTPS only), automatic security updates, vx built from a git ref, Caddy with automatic HTTPS, and nightly backups. vx-server never runs customer code (checks run on the agents' machines), so one 2 to 4 core server with 8 GB of RAM carries a lot of agents.
+
+1. Create the server and point the domain's DNS at its address (for Cloudflare, a DNS-only A record, so Caddy can get the certificate itself).
+2. On the server, as root:
+   ```sh
+   curl -fsSLo install.sh https://raw.githubusercontent.com/TerracodeBA/vx/main/deploy/production/install.sh
+   less install.sh
+   bash install.sh app.example.com
+   ```
+3. Create the first person: `cd /opt/vx/src/deploy/production && docker compose exec vx vx-server user-add HANDLE --name "Full Name" --email you@example.com`
+4. Update later with `bash /opt/vx/src/deploy/production/update.sh [GIT_REF]` (it backs up first).
+
+Backups land in `/var/backups/vx` every night at 03:15 and are kept for 14 days. To also copy them off the server, configure an rclone remote named `offsite` (for example a Cloudflare R2 bucket: `rclone config`); `vx-backup` then copies new backups there.
+
+### Google Cloud
+
+An always-on Compute Engine VM, on the **Standard** network tier (it includes 200 GB of outbound traffic a month; the default Premium tier charges for almost all of it, and agents download a lot):
+
+```sh
+P=vxbench R=europe-west1 Z=europe-west1-b
+gcloud services enable compute.googleapis.com --project $P
+gcloud compute addresses create vx-ip --project $P --region $R --network-tier STANDARD
+gcloud compute firewall-rules create vx-web --project $P --allow tcp:80,tcp:443,udp:443 --target-tags vx-web
+gcloud compute instances create vx-1 --project $P --zone $Z --machine-type e2-standard-2 \
+  --image-family ubuntu-2404-lts-amd64 --image-project ubuntu-os-cloud \
+  --boot-disk-size 50GB --boot-disk-type pd-balanced \
+  --network-tier STANDARD --address vx-ip --tags vx-web --deletion-protection
+gcloud compute ssh vx-1 --project $P --zone $Z -- sudo bash   # then step 2 above
+```
+
+### Hetzner
+
+A CAX21 (4 ARM cores, 8 GB) with Ubuntu 24.04 and your SSH key; then step 2 above over `ssh root@SERVER`. Traffic is included.
+
 ## Backups
 
 Back up Postgres and the data volume together:

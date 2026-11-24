@@ -1,0 +1,62 @@
+# Production vx on one server: vx-server, Postgres and Caddy (automatic HTTPS).
+# Installed and updated by install.sh / update.sh in this folder; settings in .env:
+#   VX_DOMAIN=app.example.com
+#   POSTGRES_PASSWORD=<generated>
+#   VX_GITHUB_TOKEN=<optional>
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: vx
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vx"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  vx:
+    build:
+      context: ../..
+      args:
+        VERSION: ${VX_VERSION:-dev}
+        COMMIT: ${VX_COMMIT:-}
+    image: vx:production
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VX_DATABASE_URL: postgres://vx:${POSTGRES_PASSWORD}@postgres:5432/vx?sslmode=disable
+      VX_GITHUB_TOKEN: ${VX_GITHUB_TOKEN:-}
+    volumes:
+      - data:/data
+    # Not published: only Caddy reaches it.
+    expose:
+      - "7070"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - vx
+    environment:
+      VX_DOMAIN: ${VX_DOMAIN:?set VX_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pg:
+  data:
+  caddy_data:
+  caddy_config:
