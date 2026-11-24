@@ -3,10 +3,11 @@
 # /var/backups/vx. With an rclone remote named "offsite" configured
 # (for example Cloudflare R2: rclone config), it also copies them there.
 set -euo pipefail
+umask 077
 cd /opt/vx/src/deploy/production
 OUT=/var/backups/vx
 STAMP=$(date +%F-%H%M)
-mkdir -p $OUT
+mkdir -p $OUT && chmod 700 $OUT
 docker compose exec -T postgres pg_dump -U vx --format=custom vx > $OUT/vx-db-$STAMP.dump
 docker compose exec -T vx tar -czf - -C /data . > $OUT/vx-data-$STAMP.tgz
 find $OUT -name 'vx-*' -mtime +14 -delete
