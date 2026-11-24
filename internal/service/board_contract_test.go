@@ -16,6 +16,12 @@ func TestTargetsMatch(t *testing.T) {
 		{"internal/httpapi/x.go", "internal/http", false},
 		{"auth.LoginFlow", "auth.Login", false},
 		{"a", "b", false},
+		{"auth", "auth.go", false},
+		{"auth.go", "auth", false},
+		{"auth.Login", "auth.go", false},
+		{"README", "README.md", false},
+		{"auth.Login", "auth.Login.Validate", true},
+		{"web", "web.go", false},
 	} {
 		if got := TargetsMatch(tc.target, tc.want); got != tc.ok {
 			t.Errorf("TargetsMatch(%q, %q) = %v", tc.target, tc.want, got)
