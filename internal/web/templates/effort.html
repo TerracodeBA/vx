@@ -1,50 +1,49 @@
+{{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a><span class="sep">/</span><span>{{.Effort.Name}}</span>{{end}}
+{{define "actions"}}
+<span class="live" data-poll="/ui/effort/head?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}" data-key="{{.Repo.Name}}/{{.Effort.Slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span><span class="live-label">Live</span></span>
+<a class="btn primary" href="/ui/ship?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
+{{end}}
 {{define "content"}}
 {{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}{{$wc := .WorkColor}}
-<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{$repo}}">{{$repo}}</a> / <span>{{.Effort.Name}}</span></nav>
-
-<div class="head head-row">
-  <div>
-    <h1>{{.Effort.Name}}</h1>
+<div class="page-head">
+  <div class="page-title">
+    <div class="title-row"><h1>{{.Effort.Name}}</h1><span class="badge badge-{{.Effort.State}}">{{.Effort.State}}</span></div>
     {{if .Effort.Goal}}<p class="goal">{{.Effort.Goal}}</p>{{end}}
-    <div class="meta-line">
-      <span class="state state-{{.Effort.State}}">{{.Effort.State}}</span>
-      <span>based on <span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}}</span>
-      <span>head <span class="mono">{{short .Effort.Head}}</span></span>
-      <span>owner {{principal .Owner}}</span>
-    </div>
-  </div>
-  <div class="head-actions">
-    <span class="live" data-poll="/ui/effort/head?repo={{$repo}}&amp;slug={{$slug}}" data-key="{{$repo}}/{{$slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span>Live</span>
-    <a class="btn primary" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
   </div>
 </div>
 
-<p class="summary">
-  <strong>{{len .Lands}}</strong> changes landed by <strong>{{len .Agents}}</strong> agent{{if ne (len .Agents) 1}}s{{end}},
-  <span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span> lines.
-  {{if .Merged}}The server merged <strong>{{.Merged}}</strong> onto newer work.{{end}}
-  {{if .Verified}}<strong>{{.Verified}}</strong> checked by vx itself.{{end}}
-</p>
+<div class="kpis kpis-6">
+  <div class="kpi"><span class="kpi-label">Changes landed</span><span class="kpi-value">{{len .Lands}}</span></div>
+  <div class="kpi"><span class="kpi-label">Agents</span><span class="kpi-value">{{len .Agents}}</span></div>
+  <div class="kpi"><span class="kpi-label">Lines</span><span class="kpi-value"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></span></div>
+  <div class="kpi"><span class="kpi-label">Merged by server</span><span class="kpi-value">{{.Merged}}</span><span class="kpi-note">landed onto newer work</span></div>
+  <div class="kpi"><span class="kpi-label">Checked by vx</span><span class="kpi-value">{{.Verified}}</span><span class="kpi-note">ran with vx land --run</span></div>
+  <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{len .Working}}</span></div>
+</div>
 
-<div class="cols">
+<div class="tabs-row">
+  <nav class="tabs" aria-label="Effort views">
+    <a class="tab{{if not .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="count">{{len .Lands}}</span></a>
+    <a class="tab{{if .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=changes">All changes{{if .ChangesView}} <span class="count">{{len .AllFiles}}</span>{{end}}</a>
+    <a class="tab" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">Ship</a>
+  </nav>
+  {{template "modeswitch"}}
+</div>
+
+<div class="grid-2">
   <section class="col-main">
-    <div class="tabs-row">
-    <nav class="tabs" aria-label="Effort views">
-      <a class="tab{{if not .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="muted">{{len .Lands}}</span></a>
-      <a class="tab{{if .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=changes">All changes{{if .ChangesView}} <span class="muted">{{len .AllFiles}} files</span>{{end}}</a>
-    </nav>
-    {{if not .ChangesView}}{{template "modeswitch"}}{{end}}
+  {{if .ChangesView}}
+    {{if not .AllFiles}}<div class="panel empty"><p class="muted">No changes yet.</p></div>{{else}}
+    <div class="panel">
+      <div class="panel-head">
+        <h2>{{len .AllFiles}} files changed <span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></h2>
+        <button class="btn ghost small-btn" type="button" data-expand-all>Expand all</button>
+      </div>
+      <p class="panel-note muted small">From <span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}} to the effort head. This is what the pull request will contain.</p>
+      <ul class="jump">
+        {{range .AllFiles}}<li><a href="#f-{{.Path}}"><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span></a><span class="touch">{{range .Agents}}<span class="swatch a{{.Color}}" title="{{principal .Principal}}"></span>{{end}}</span>{{template "stat" .}}</li>{{end}}
+      </ul>
     </div>
-    {{if .ChangesView}}
-    <p class="muted small">Everything this effort changes, from <span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}} to the effort head. This is what the pull request will contain.</p>
-    {{if not .AllFiles}}<p class="muted">No changes yet.</p>{{else}}
-    <div class="files-bar">
-      <span class="small muted">{{len .AllFiles}} files</span>
-      <div class="files-bar-actions">{{template "modeswitch"}}<button class="btn ghost small-btn" type="button" data-expand-all>Expand all</button></div>
-    </div>
-    <ul class="jump">
-      {{range .AllFiles}}<li><a href="#f-{{.Path}}"><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span></a>{{template "stat" .}}</li>{{end}}
-    </ul>
     {{end}}
     <div class="all-files">
       {{range .AllFiles}}
@@ -60,9 +59,9 @@
       </details>
       {{end}}
     </div>
-    {{else}}
+  {{else}}
     {{if not .Lands}}
-    <div class="empty"><p>Nothing landed yet. Agents start with:</p>
+    <div class="panel empty"><p>Nothing landed yet. Agents start with:</p>
       <pre class="code">vx clone {{$repo}} {{$slug}}
 vx new "what you are about to do"
 vx land --run "go test ./..."</pre></div>
@@ -71,18 +70,22 @@ vx land --run "go test ./..."</pre></div>
     {{range .Lands}}
       <li class="land a{{.Color}}" data-hash="{{.Hash}}">
         <span class="dot" aria-hidden="true"></span>
-        <div class="land-body">
-          <div class="land-top">
-            <a class="land-title" href="/ui/change?repo={{.Repo}}&amp;ref={{.Hash}}">{{.Title}}</a>
-            <span class="mono muted">{{.ChangeID}}</span>
-          </div>
-          <div class="land-meta">
-            <span class="agent-name">{{principal .Author.Principal}}</span>
-            {{if .Author.OnBehalfOf}}<span class="muted">for {{principal .Author.OnBehalfOf}}</span>{{end}}
-            {{if .Author.Model}}<span class="muted">· {{.Author.Model}}</span>{{end}}
-            <span class="muted">· {{ago .CreatedAt}}</span>
-            <span class="lines"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></span>
-          </div>
+        <article class="land-card">
+          <header class="land-head">
+            <div class="land-head-main">
+              <a class="land-title" href="/ui/change?repo={{.Repo}}&amp;ref={{.Hash}}">{{.Title}}</a>
+              <div class="land-meta">
+                <span class="agent-name">{{principal .Author.Principal}}</span>
+                {{if .Author.OnBehalfOf}}<span class="muted">for {{principal .Author.OnBehalfOf}}</span>{{end}}
+                {{if .Author.Model}}<span class="sep-dot"></span><span class="muted">{{.Author.Model}}</span>{{end}}
+                <span class="sep-dot"></span><span class="muted">{{ago .CreatedAt}}</span>
+              </div>
+            </div>
+            <div class="land-head-side">
+              <span class="mono muted small">{{.ChangeID}}</span>
+              {{template "stat" .}}
+            </div>
+          </header>
           <div class="files">
             {{$hash := .Hash}}{{$r := .Repo}}
             {{range .Files}}
@@ -92,35 +95,35 @@ vx land --run "go test ./..."</pre></div>
             </details>
             {{end}}
           </div>
-          <div class="land-actions"><button class="link-btn small" type="button" data-expand>Show code</button></div>
-          <div class="pills">
-            {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
-            {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
-              <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}">
-                {{.Name}}: {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}
-              </span>
-            {{end}}{{else}}<span class="pill neutral">no evidence</span>{{end}}
-          </div>
-        </div>
+          <footer class="land-foot">
+            <div class="pills">
+              {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
+              {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
+                <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}"><span class="pill-dot"></span>{{.Name}} · {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}</span>
+              {{end}}{{else}}<span class="pill neutral">no evidence</span>{{end}}
+            </div>
+            <button class="btn ghost small-btn" type="button" data-expand>Show code</button>
+          </footer>
+        </article>
       </li>
     {{end}}
     </ol>
-    {{end}}
+  {{end}}
   </section>
 
-  <aside class="col-side">
-    <section class="side-card">
-      <h2 class="sec">Working now</h2>
-      {{if not .Working}}<p class="muted small">No open workspaces. Everything started has landed.</p>{{end}}
+  <aside class="rail">
+    <div class="panel">
+      <div class="panel-head"><h2>Working now</h2>{{if .Working}}<span class="live-text small"><span class="pulse"></span>{{len .Working}}</span>{{end}}</div>
+      {{if not .Working}}<p class="panel-note muted small">No open workspaces. Everything started has landed.</p>{{end}}
       <ul class="working">
       {{range .Working}}
         <li class="a{{color $wc .Owner}}"><span class="pulse"></span><div><div class="agent-name">{{principal .Owner}}</div><div class="small">{{.Intent}}</div><div class="muted small mono">{{.ChangeID}} · since {{ago .CreatedAt}}</div></div></li>
       {{end}}
       </ul>
-    </section>
+    </div>
 
-    <section class="side-card">
-      <h2 class="sec">Agents</h2>
+    <div class="panel">
+      <div class="panel-head"><h2>Agents</h2></div>
       {{$max := maxLines .Agents}}
       <ul class="agents">
       {{range .Agents}}
@@ -131,17 +134,29 @@ vx land --run "go test ./..."</pre></div>
         </li>
       {{end}}
       </ul>
-    </section>
+    </div>
 
-    <section class="side-card">
-      <h2 class="sec">Shipped</h2>
-      {{if not .Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
-      <ul class="plain-list">
+    <div class="panel">
+      <div class="panel-head"><h2>Shipped</h2></div>
+      {{if not .Shipments}}<p class="panel-note muted small">Not shipped yet.</p>{{end}}
+      <ul class="rows">
       {{range .Shipments}}
         <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits to {{.Target}} · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" rel="noopener" target="_blank">{{if .ProviderRef}}Pull request #{{.ProviderRef}}{{else}}Open the pull request{{end}}</a>{{end}}</li>
       {{end}}
       </ul>
-    </section>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Details</h2></div>
+      <dl class="kv">
+        <dt>Repository</dt><dd><a class="mono" href="/ui/repo?name={{$repo}}">{{$repo}}</a></dd>
+        <dt>Base</dt><dd><span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}}</dd>
+        <dt>Head</dt><dd class="mono">{{short .Effort.Head}}</dd>
+        <dt>Owner</dt><dd>{{principal .Owner}}</dd>
+        <dt>Started</dt><dd>{{ago .Effort.CreatedAt}}</dd>
+        <dt>Slug</dt><dd class="mono">{{$slug}}</dd>
+      </dl>
+    </div>
   </aside>
 </div>
 {{end}}

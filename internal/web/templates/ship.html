@@ -1,15 +1,15 @@
+{{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a><span class="sep">/</span><a href="/ui/effort?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{.Effort.Name}}</a><span class="sep">/</span><span>Ship</span>{{end}}
 {{define "content"}}
 {{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}
-<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{$repo}}">{{$repo}}</a> / <a href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">{{.Effort.Name}}</a> / <span>Ship</span></nav>
-<div class="head">
+<div class="page-head"><div class="page-title">
   <h1>Ship {{.Effort.Name}}</h1>
   <p class="muted">Every landed change becomes one commit, replayed onto the latest head of the target branch and pushed to a <span class="mono">vx/</span> branch. vx never merges; that stays your decision on {{if eq .Repo.Provider "github"}}GitHub{{else}}the git host{{end}}.</p>
-</div>
+</div></div>
 {{if .Shipped}}<p class="note ok">Pushed. {{with index .Shipments 0}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Open pull request #{{.ProviderRef}}{{else}}Open the pull request on GitHub{{end}}</a>{{end}}{{end}}</p>{{end}}
 {{if .PlanError}}<p class="note bad">{{.PlanError}}</p>{{end}}
 
 {{with .Plan}}
-<div class="cols">
+<div class="grid-2">
   <section class="col-main">
     <h2 class="sec">{{$.Commits}} commit{{if ne $.Commits 1}}s{{end}} onto <span class="mono">{{.Target}}</span> at <span class="mono">{{short .TargetHead.GitSHA}}</span></h2>
     {{if .Conflicts}}
@@ -34,8 +34,8 @@
       <pre class="pr-body">{{.Body}}</pre>
     </div>
   </section>
-  <aside class="col-side">
-    <section class="side-card">
+  <aside class="rail">
+    <section class="panel panel-pad">
       <h2 class="sec">Push</h2>
       <form method="post" action="/ui/ship" class="stack">
         <input type="hidden" name="repo" value="{{$repo}}">
@@ -47,7 +47,7 @@
         <p class="muted small">Pushing replaces {{.Branch}} with these commits and updates its pull request.</p>
       </form>
     </section>
-    <section class="side-card">
+    <section class="panel panel-pad">
       <h2 class="sec">Shipped before</h2>
       {{if not $.Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
       <ul class="plain-list">

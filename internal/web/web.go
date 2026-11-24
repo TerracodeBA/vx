@@ -118,7 +118,54 @@ func (u *UI) auth(next handler) http.HandlerFunc {
 	}
 }
 
-func (u *UI) render(w http.ResponseWriter, page string, data map[string]any) {
+// navRepo and navEffort feed the sidebar on every signed-in page.
+type navRepo struct {
+	Name     string
+	Provider string
+	Efforts  []navEffort
+}
+
+type navEffort struct {
+	Slug  string
+	Name  string
+	State string
+	Open  int
+}
+
+func (u *UI) nav(r *http.Request) []navRepo {
+	ctx := r.Context()
+	repos, err := u.svc.Store.ListRepos(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]navRepo, 0, len(repos))
+	for _, repo := range repos {
+		nr := navRepo{Name: repo.Name, Provider: string(repo.Provider)}
+		effs, _ := u.svc.Store.ListEfforts(ctx, repo.ID, "")
+		for _, e := range effs {
+			ne := navEffort{Slug: e.Slug, Name: e.Name, State: string(e.State)}
+			if ws, err := u.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen); err == nil {
+				ne.Open = len(ws)
+			}
+			nr.Efforts = append(nr.Efforts, ne)
+		}
+		out = append(out, nr)
+	}
+	return out
+}
+
+func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
+	if _, signedIn := data["Actor"]; signedIn {
+		data["Nav"] = u.nav(r)
+		if _, ok := data["ActiveRepo"]; !ok {
+			data["ActiveRepo"] = param(r, "repo")
+			if data["ActiveRepo"] == "" {
+				data["ActiveRepo"] = param(r, "name")
+			}
+		}
+		data["ActiveSlug"] = param(r, "slug")
+		data["Path"] = r.URL.Path
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:")
 	w.Header().Set("X-Frame-Options", "DENY")
@@ -151,7 +198,7 @@ func (u *UI) fail(w http.ResponseWriter, err error) {
 // ---------- login ----------
 
 func (u *UI) loginPage(w http.ResponseWriter, r *http.Request) {
-	u.render(w, "login", map[string]any{"Title": "Sign in", "Next": r.URL.Query().Get("next"), "Expired": r.URL.Query().Get("expired") != ""})
+	u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": r.URL.Query().Get("next"), "Expired": r.URL.Query().Get("expired") != ""})
 }
 
 func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +212,7 @@ func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {
 		next = "/ui"
 	}
 	if _, err := u.svc.Store.Authenticate(r.Context(), token); err != nil {
-		u.render(w, "login", map[string]any{"Title": "Sign in", "Next": next, "Error": "That token is not valid. Use a token from vx-server user-add or vx agent add."})
+		u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": next, "Error": "That token is not valid. Use a token from vx-server user-add or vx agent add."})
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -184,6 +231,7 @@ func (u *UI) logout(w http.ResponseWriter, r *http.Request) {
 
 type effortRow struct {
 	store.Effort
+	Repo    string
 	Owner   string
 	Open    int
 	Changes int
@@ -214,12 +262,22 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		}
 		rows = append(rows, rr)
 	}
-	u.render(w, "home", map[string]any{"Actor": actor, "Repos": rows, "Title": "Efforts"})
+	var all []effortRow
+	working, changes := 0, 0
+	for _, rr := range rows {
+		for _, e := range rr.Efforts {
+			all = append(all, e)
+			working += e.Open
+			changes += e.Changes
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].UpdatedAt.After(all[j].UpdatedAt) })
+	u.render(w, r, "home", map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts"})
 }
 
 func (u *UI) effortRow(r *http.Request, repo store.Repo, e store.Effort) effortRow {
 	ctx := r.Context()
-	row := effortRow{Effort: e, Owner: u.ref(r, e.OwnerID)}
+	row := effortRow{Effort: e, Repo: repo.Name, Owner: u.ref(r, e.OwnerID)}
 	if ws, err := u.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen); err == nil {
 		row.Open = len(ws)
 	}
@@ -263,7 +321,7 @@ func (u *UI) repo(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	for _, e := range effs {
 		rows = append(rows, u.effortRow(r, repo, e))
 	}
-	u.render(w, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name})
+	u.render(w, r, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name})
 }
 
 // ---------- effort ----------
@@ -389,7 +447,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 			return
 		}
 	}
-	u.render(w, "effort", map[string]any{
+	u.render(w, r, "effort", map[string]any{
 		"ChangesView": changesView, "AllFiles": allFiles,
 		"Actor": actor, "Repo": v.Repo, "Effort": v.Effort, "Owner": u.ref(r, v.Effort.OwnerID),
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
@@ -639,7 +697,7 @@ func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		deleted += f.Deleted
 		diffs = append(diffs, fd)
 	}
-	u.render(w, "change", map[string]any{
+	u.render(w, r, "change", map[string]any{
 		"Actor": actor, "Repo": repo, "C": e, "Effort": effort, "Diffs": diffs,
 		"Added": added, "Deleted": deleted, "Title": e.Title(),
 	})
@@ -837,7 +895,7 @@ func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	}
 	data["Shipments"], _ = u.svc.Store.ListShipments(ctx, v.Effort.ID)
 	data["Shipped"] = r.URL.Query().Get("shipped") != ""
-	u.render(w, "ship", data)
+	u.render(w, r, "ship", data)
 }
 
 func (u *UI) shipPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {

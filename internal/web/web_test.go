@@ -69,7 +69,7 @@ func TestPages(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 	// Signed out: redirected to the login page.
-	if code, body := get("/ui"); code != 200 || !strings.Contains(body, "Sign in to vx") {
+	if code, body := get("/ui"); code != 200 || !strings.Contains(body, "Paste a vx token") {
 		t.Fatalf("login redirect = %d", code)
 	}
 	resp, err := c.PostForm(srv.URL+"/ui/login", url.Values{"token": {"vxt_wrong"}})
@@ -85,7 +85,7 @@ func TestPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, wants := range map[string][]string{
-		"/ui":                       {"Rate limiting", "1 change", "1 working now"},
+		"/ui":                       {"Rate limiting", "Working now", "1 agent", "acme/shop"},
 		"/ui/repo?name=acme%2Fshop": {"Branches vx follows", "main"},
 		"/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug:              {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5"},
 		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", "func Allow() bool", "run by vx"},

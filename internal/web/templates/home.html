@@ -1,47 +1,61 @@
+{{define "crumbs"}}<span>All efforts</span>{{end}}
 {{define "content"}}
-<div class="head">
-  <h1>Efforts</h1>
-  <p class="muted">Every repository vx follows, and the efforts where agents are building.</p>
+<div class="page-head">
+  <div>
+    <h1>All efforts</h1>
+    <p class="muted">Every effort across your repositories, newest activity first.</p>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Repositories</span><span class="kpi-value">{{len .Repos}}</span></div>
+  <div class="kpi"><span class="kpi-label">Efforts</span><span class="kpi-value">{{len .All}}</span></div>
+  <div class="kpi"><span class="kpi-label">Changes landed</span><span class="kpi-value">{{.Changes}}</span></div>
+  <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{.Working}}</span></div>
 </div>
 {{if not .Repos}}
-<div class="empty">
+<div class="panel empty">
   <h2>No repositories yet</h2>
-  <p>Connect one from the command line:</p>
+  <p class="muted">Connect one from the command line:</p>
   <pre class="code">vx repo create acme/shop-api --github acme/shop-api
 vx effort new "Rate limiting" --repo acme/shop-api</pre>
 </div>
-{{end}}
-{{range .Repos}}
-<section class="repo-block">
-  <div class="repo-title">
-    <h2><a href="/ui/repo?name={{.Name}}">{{.Name}}</a></h2>
-    <span class="chip">{{.Provider}}{{if .Remote}} · {{.Remote}}{{end}}</span>
-  </div>
-  {{if .Efforts}}
-  <ul class="efforts">
-    {{$repo := .Name}}
-    {{range .Efforts}}
-    <li>
-      <a class="effort-card" href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}">
-        <div class="effort-top">
-          <span class="effort-name">{{.Name}}</span>
-          <span class="state state-{{.State}}">{{.State}}</span>
-        </div>
-        {{if .Goal}}<p class="effort-goal">{{.Goal}}</p>{{end}}
-        <div class="effort-meta">
-          <span>{{.Changes}} change{{if ne .Changes 1}}s{{end}}</span>
-          <span>{{.Agents}} agent{{if ne .Agents 1}}s{{end}}</span>
-          {{if .Open}}<span class="live-dot">{{.Open}} working now</span>{{end}}
-          <span>on {{.BaseBranch}}</span>
-          <span>updated {{ago .UpdatedAt}}</span>
-        </div>
-      </a>
-    </li>
+{{else}}
+<div class="panel">
+  <div class="panel-head"><h2>Efforts</h2></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Effort</th><th>Repository</th><th>State</th><th class="num">Changes</th><th class="num">Agents</th><th>Working now</th><th>Base</th><th>Updated</th></tr></thead>
+    <tbody>
+    {{range .All}}
+      <tr>
+        <td class="cell-main"><a class="row-link" href="/ui/effort?repo={{.Repo}}&amp;slug={{.Slug}}">{{.Name}}</a>{{if .Goal}}<div class="cell-sub">{{.Goal}}</div>{{end}}</td>
+        <td><a class="mono small" href="/ui/repo?name={{.Repo}}">{{.Repo}}</a></td>
+        <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
+        <td class="num">{{.Changes}}</td>
+        <td class="num">{{.Agents}}</td>
+        <td>{{if .Open}}<span class="live-text"><span class="pulse"></span>{{.Open}} agent{{if ne .Open 1}}s{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+        <td><span class="mono small">{{.BaseBranch}}</span></td>
+        <td class="muted small nowrap">{{ago .UpdatedAt}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="8" class="muted">No efforts yet. Start one with <code>vx effort new "NAME" --repo REPO</code>.</td></tr>
     {{end}}
-  </ul>
-  {{else}}
-  <p class="muted">No efforts yet. <code>vx effort new "NAME" --repo {{.Name}}</code></p>
-  {{end}}
-</section>
+    </tbody>
+  </table>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-head"><h2>Repositories</h2></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Repository</th><th>Upstream</th><th class="num">Efforts</th></tr></thead>
+    <tbody>
+    {{range .Repos}}
+      <tr><td class="cell-main"><a class="row-link" href="/ui/repo?name={{.Name}}">{{.Name}}</a></td><td class="muted small">{{.Provider}}{{if .Remote}} · <span class="mono">{{.Remote}}</span>{{end}}</td><td class="num">{{len .Efforts}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</div>
 {{end}}
 {{end}}

@@ -7,6 +7,18 @@
     el.style.width = Math.max(2, Number(el.getAttribute("data-w")) || 0) + "%";
   });
 
+  // Sidebar drawer on narrow screens.
+  var menu = document.querySelector("[data-menu]");
+  if (menu) {
+    menu.addEventListener("click", function (e) {
+      e.stopPropagation();
+      document.body.classList.toggle("menu-open");
+    });
+    document.addEventListener("click", function (e) {
+      if (document.body.classList.contains("menu-open") && !e.target.closest(".sidebar")) document.body.classList.remove("menu-open");
+    });
+  }
+
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function unstore(k) { try { localStorage.removeItem(k); } catch (e) {} }
 
