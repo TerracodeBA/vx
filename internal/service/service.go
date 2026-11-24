@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,11 +36,28 @@ type Error struct {
 	Err  error
 }
 
+// PermissionDenied starts the message of every permission error, so
+// people, agents and scripts can recognise one whatever it goes on to say.
+const PermissionDenied = "permission denied: "
+
 func (e *Error) Error() string {
+	msg := e.Msg
 	if e.Err != nil && e.Msg == "" {
-		return e.Err.Error()
+		msg = e.Err.Error()
 	}
-	return e.Msg
+	if e.Code == CodePermission {
+		return WithPermissionDenied(msg)
+	}
+	return msg
+}
+
+// WithPermissionDenied puts PermissionDenied in front of msg unless it is
+// already there.
+func WithPermissionDenied(msg string) string {
+	if strings.HasPrefix(msg, PermissionDenied) {
+		return msg
+	}
+	return PermissionDenied + msg
 }
 
 func (e *Error) Unwrap() error { return e.Err }
