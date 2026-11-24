@@ -241,7 +241,7 @@ func (a *App) statusCmd() *cobra.Command {
 			}
 			out["conflict_markers"] = marked
 			if c, err := a.client(); err == nil {
-				if board := a.boardStatus(ctx, c, wc.Config.Repo, wc.Config.Effort, changes); board != nil {
+				if board := a.boardStatus(ctx, c, wc, changes); board != nil {
 					out["board"] = board
 				}
 			}

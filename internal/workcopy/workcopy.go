@@ -35,6 +35,10 @@ type Config struct {
 	// PendingLand holds the evidence flags of a land that did not finish
 	// (conflicts, failed checks), so a bare `vx land` can run it again.
 	PendingLand *PendingLand `json:"pending_land,omitempty"`
+	// BoardSeenAt is when this working copy was last shown the effort's
+	// board (RFC 3339, the server time of the newest note it was shown), so
+	// vx sync, land and status show only notes that arrived after it.
+	BoardSeenAt string `json:"board_seen_at,omitempty"`
 }
 
 // PendingLand is the evidence a `vx land` asked for, kept until a land in

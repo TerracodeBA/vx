@@ -134,7 +134,9 @@ them in the same workspace reuses them and says so; --fresh ignores them.`,
 					}
 					if len(res.conflicts) > 0 {
 						a.printConflicts(wc, res.conflicts)
-						a.emit(res.json())
+						out := res.json()
+						out["board"] = a.syncFeed(ctx, c, wc)
+						a.emit(out)
 						return errConflict
 					}
 					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
@@ -336,7 +338,8 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		a.printf("Warning: the server did not record the check notes (it may run an older vx); the landed evidence lacks them.\n")
 	}
 	a.printWarnings(r.Warnings)
-	a.emit(r)
+	board := a.landFeed(ctx, c, wc, r) // the board comes last
+	a.emit(protoWithBoard(r, board))
 	return nil
 }
 
@@ -594,16 +597,21 @@ edit them away, then land. vx land refuses files that still have markers.`,
 			if err != nil {
 				return err
 			}
-			res, err := a.syncWorkingCopy(ctxOf(cmd), c, wc)
+			ctx := ctxOf(cmd)
+			res, err := a.syncWorkingCopy(ctx, c, wc)
 			if err != nil {
 				return err
 			}
 			if res.upToDate {
 				a.printf("Up to date at %s.\n", short(res.head))
 			}
-			a.emit(res.json())
 			if len(res.conflicts) > 0 {
 				a.printConflicts(wc, res.conflicts)
+			}
+			out := res.json()
+			out["board"] = a.syncFeed(ctx, c, wc) // the board comes last
+			a.emit(out)
+			if len(res.conflicts) > 0 {
 				return errConflict
 			}
 			return nil
@@ -618,14 +626,15 @@ func (a *App) waitCmd() *cobra.Command {
 	var noNotes bool
 	cmd := &cobra.Command{
 		Use:   "wait",
-		Short: "Wait until someone lands, asks you a question or answers yours",
+		Short: "Wait until someone lands, asks or answers you, or posts a decision on your files",
 		Long: `Block until the effort head moves past this working copy's base, then
 print the new changes. Use it instead of polling vx log in a loop:
   vx wait --timeout 10m && vx sync
 
-vx wait also returns when a question addressed to you arrives or a question
-you asked is answered, and says which happened ("reason" in --json: land,
-question or answer). --no-notes waits for lands only.`,
+vx wait also returns when a question addressed to you arrives, a question
+you asked is answered, or someone posts a decision or interface note on a
+file you changed here, and says which happened ("reason" in --json: land,
+question, answer or note). --no-notes waits for lands only.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -634,11 +643,13 @@ question or answer). --no-notes waits for lands only.`,
 			ctx := ctxOf(cmd)
 			deadline := time.Now().Add(timeout)
 			var seen *inboxSeen
+			var watch *noteWatch
 			if !noNotes {
 				if in, err := a.inboxSnapshot(ctx, c); err == nil {
 					s := seenOf(in)
 					seen = &s
 				}
+				watch = a.startNoteWatch(ctx, c, wc)
 			}
 			for {
 				eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
@@ -665,10 +676,13 @@ question or answer). --no-notes waits for lands only.`,
 					a.emit(map[string]any{"reason": "land", "head": head, "changesets": fresh})
 					return nil
 				}
-				if a.waitNotes(ctx, c, seen) {
+				if a.waitNotes(ctx, c, seen) || a.waitBoardNote(ctx, c, wc, watch) {
 					return nil
 				}
 				if time.Now().After(deadline) {
+					if watch != nil {
+						return fmt.Errorf("nothing landed in %s, no question or answer arrived for you and no decision or interface was posted on your changed files within %s", wc.Config.Effort, timeout)
+					}
 					if seen != nil {
 						return fmt.Errorf("nothing landed in %s and no question or answer arrived for you within %s", wc.Config.Effort, timeout)
 					}
@@ -684,6 +698,6 @@ question or answer). --no-notes waits for lands only.`,
 	}
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "give up after this long")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "how often to check")
-	cmd.Flags().BoolVar(&noNotes, "no-notes", false, "wait for lands only, not for questions and answers")
+	cmd.Flags().BoolVar(&noNotes, "no-notes", false, "wait for lands only, not for questions, answers and notes")
 	return cmd
 }
