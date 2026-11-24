@@ -1,0 +1,12 @@
+# Caddy gets and renews the TLS certificate for VX_DOMAIN by itself.
+{$VX_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy vx:7070 {
+		# MCP and long waits stream responses; pass them through at once.
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
