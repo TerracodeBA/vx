@@ -17,8 +17,8 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U vx" --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Format and vet
