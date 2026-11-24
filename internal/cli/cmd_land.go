@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -368,6 +369,9 @@ type syncResult struct {
 	updated   int
 	local     int
 	conflicts []engine.Conflict
+	// merged are files both you and the effort changed that merged without
+	// conflicts: their contents on disk are now a mix of both.
+	merged []string
 }
 
 func (r syncResult) json() map[string]any {
@@ -375,7 +379,11 @@ func (r syncResult) json() map[string]any {
 	for _, cf := range r.conflicts {
 		cj = append(cj, map[string]string{"path": cf.Path, "kind": string(cf.Kind), "detail": cf.Detail})
 	}
-	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj}
+	merged := r.merged
+	if merged == nil {
+		merged = []string{}
+	}
+	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged}
 }
 
 // syncWorkingCopy brings the working copy to the effort head, merging local
@@ -431,12 +439,45 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	if err := wc.Save(); err != nil {
 		return syncResult{}, err
 	}
+	merged := mergedFiles(local, incoming, conflicts)
 	a.printf("Synced to %s: %d file(s) updated", short(head), len(incoming))
 	if len(local) > 0 {
 		a.printf(", your %d local change(s) kept", len(local))
 	}
 	a.printf(".\n")
-	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts}, nil
+	switch len(merged) {
+	case 0:
+	case 1:
+		a.printf("Merged with your edits: %s\n", merged[0])
+	default:
+		a.printf("Merged with your edits:\n")
+		for _, p := range merged {
+			a.printf("  %s\n", p)
+		}
+	}
+	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged}, nil
+}
+
+// mergedFiles returns, sorted, the files you had changed that the sync
+// rewrote without a conflict: both sides changed them and the result is a
+// line-by-line merge, worth a look before landing.
+func mergedFiles(local, incoming []object.Change, conflicts []engine.Conflict) []string {
+	mine := map[string]bool{}
+	for _, ch := range local {
+		mine[ch.Path] = true
+	}
+	conflicted := map[string]bool{}
+	for _, cf := range conflicts {
+		conflicted[cf.Path] = true
+	}
+	var out []string
+	for _, ch := range incoming {
+		if mine[ch.Path] && !conflicted[ch.Path] {
+			out = append(out, ch.Path)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (a *App) printConflicts(conflicts []engine.Conflict) {

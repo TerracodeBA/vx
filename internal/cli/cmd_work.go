@@ -184,7 +184,11 @@ func (a *App) statusCmd() *cobra.Command {
 					head := eff.Msg.Effort.Head
 					out["effort_head"] = head
 					if head != wc.Config.Base {
-						a.printf("The effort moved on to %s. Run `vx sync` to pick up others' changes.\n", short(head))
+						if wc.Config.Workspace != "" {
+							a.printf("The effort moved on to %s. Run `vx sync`, or `vx land --run` syncs for you.\n", short(head))
+						} else {
+							a.printf("The effort moved on to %s. Run `vx sync` to pick up others' changes.\n", short(head))
+						}
 					}
 					var others []map[string]string
 					for _, w := range eff.Msg.OpenWorkspaces {
