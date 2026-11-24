@@ -312,7 +312,8 @@ func (u *UI) publicURL(r *http.Request) string {
 func (u *UI) welcome(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	data := map[string]any{"Actor": actor, "Title": "Welcome", "Server": u.publicURL(r),
-		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Shown": u.svc.ShowWelcome(ctx, actor), "IsHuman": actor.Kind == store.KindHuman}
+		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Shown": u.svc.ShowWelcome(ctx, actor), "IsHuman": actor.Kind == store.KindHuman,
+		"SiteAdmin": u.svc.IsSiteAdmin(ctx, actor)}
 	if l, ok, err := u.svc.GitHubLinkOf(ctx, actor); err == nil && ok {
 		data["GitHubLogin"] = l.Login
 	}
