@@ -27,6 +27,8 @@ type Repo struct {
 	Provider      Provider
 	Remote        string
 	DefaultBranch string
+	OrgID         uuid.UUID // the owning organization
+	Org           string    // its handle
 	CreatedAt     time.Time
 }
 
@@ -40,7 +42,14 @@ func ValidateRepoName(name string) error {
 	return nil
 }
 
-// CreateRepo inserts a repo and its upstream.
+// DefaultOrg is the organization repositories without an owner part were
+// put in when organizations arrived, and where CreateRepo puts a repo
+// whose OrgID is not set.
+const DefaultOrg = "default"
+
+// CreateRepo inserts a repo and its upstream. The repo belongs to r.OrgID;
+// without one it goes to the "default" organization, created on demand
+// (the service always sets OrgID; this keeps low-level callers working).
 func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 	if err := ValidateRepoName(r.Name); err != nil {
 		return Repo{}, err
@@ -51,7 +60,15 @@ func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 	if r.Provider == "" {
 		r.Provider = ProviderNone
 	}
-	err := q.db.QueryRow(ctx, `insert into repos (name) values ($1) returning id, created_at`, r.Name).Scan(&r.ID, &r.CreatedAt)
+	if r.OrgID == uuid.Nil {
+		if err := q.db.QueryRow(ctx, `with ins as (
+				insert into orgs (handle, display_name) values ($1, $1) on conflict (handle) do nothing returning id
+			) select id from ins union all select id from orgs where handle = $1 limit 1`, DefaultOrg).Scan(&r.OrgID); err != nil {
+			return Repo{}, err
+		}
+	}
+	err := q.db.QueryRow(ctx, `insert into repos (name, org_id) values ($1, $2)
+		returning id, created_at, (select handle from orgs where id = $2)`, r.Name, r.OrgID).Scan(&r.ID, &r.CreatedAt, &r.Org)
 	if isUniqueViolation(err) {
 		return Repo{}, fmt.Errorf("repo %q: %w", r.Name, ErrExists)
 	}
@@ -63,12 +80,15 @@ func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 	return r, err
 }
 
-const repoSelect = `select r.id, r.name, u.provider, u.remote, u.default_branch, r.created_at
-	from repos r join upstreams u on u.repo_id = r.id`
+const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, r.org_id, o.handle, r.created_at`
 
-func scanRepo(row interface{ Scan(...any) error }) (Repo, error) {
+const repoFrom = ` from repos r join upstreams u on u.repo_id = r.id join orgs o on o.id = r.org_id`
+
+const repoSelect = `select ` + repoCols + repoFrom
+
+func scanRepo(row interface{ Scan(...any) error }, extra ...any) (Repo, error) {
 	var r Repo
-	err := row.Scan(&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.CreatedAt)
+	err := row.Scan(append([]any{&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.OrgID, &r.Org, &r.CreatedAt}, extra...)...)
 	return r, err
 }
 

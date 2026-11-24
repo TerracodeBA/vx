@@ -28,6 +28,9 @@ func TestBoardTab(t *testing.T) {
 	}
 	bob, _ := e.st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "bob"})
 	bobActor, _ := e.svc.ResolveActor(ctx, bob)
+	if _, err := e.svc.GrantRepo(ctx, e.alice, "acme/shop", "bob", service.RoleWrite); err != nil { // acme/shop is in alice's personal org
+		t.Fatal(err)
+	}
 	auditP, _, err := e.svc.CreateAgent(ctx, bobActor, "audit", "")
 	if err != nil {
 		t.Fatal(err)

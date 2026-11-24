@@ -29,6 +29,7 @@ type Client struct {
 	Ships      vxv1connect.ShipServiceClient
 	Board      vxv1connect.BoardServiceClient
 	Coord      vxv1connect.CoordinationServiceClient
+	Orgs       vxv1connect.OrgServiceClient
 }
 
 const maxMessage = 64 << 20
@@ -59,6 +60,7 @@ func New(baseURL, token string) *Client {
 		Ships:      vxv1connect.NewShipServiceClient(httpClient, baseURL, opts...),
 		Board:      vxv1connect.NewBoardServiceClient(httpClient, baseURL, opts...),
 		Coord:      vxv1connect.NewCoordinationServiceClient(httpClient, baseURL, opts...),
+		Orgs:       vxv1connect.NewOrgServiceClient(httpClient, baseURL, opts...),
 	}
 }
 

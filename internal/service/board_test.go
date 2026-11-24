@@ -43,6 +43,9 @@ func newBoardEnv(t *testing.T) *boardEnv {
 	b.tests = actor(e.svc.Store.CreatePrincipal(e.ctx, store.Principal{Kind: store.KindAgent, Handle: "alice/tests", ParentID: &e.alice.ID}))
 	b.bob = actor(e.svc.Store.CreatePrincipal(e.ctx, store.Principal{Kind: store.KindHuman, Handle: "bob"}))
 	b.bobBE = actor(e.svc.Store.CreatePrincipal(e.ctx, store.Principal{Kind: store.KindAgent, Handle: "bob/backend", ParentID: &b.bob.ID}))
+	if _, err := e.svc.GrantRepo(e.ctx, e.alice, "shop-api", "bob", service.RoleWrite); err != nil { // shop-api is in alice's personal org
+		t.Fatal(err)
+	}
 	return b
 }
 

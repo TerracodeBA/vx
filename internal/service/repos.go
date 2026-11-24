@@ -14,6 +14,10 @@ type CreateRepoInput struct {
 	Provider      store.Provider
 	Remote        string
 	DefaultBranch string
+	// Org owns the repo. Empty: the organization named like the repo's
+	// owner part when the caller may create repos there, else the
+	// caller's personal organization.
+	Org string
 }
 
 // CreateRepo registers a repo. A repo with an upstream imports its default
@@ -38,7 +42,11 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	if err := store.ValidateRepoName(in.Name); err != nil {
 		return store.Repo{}, errf(CodeInvalid, "%v", err)
 	}
-	repo := store.Repo{Name: in.Name, Provider: in.Provider, Remote: in.Remote, DefaultBranch: in.DefaultBranch}
+	org, err := s.repoOrg(ctx, actor, in.Org, in.Name)
+	if err != nil {
+		return store.Repo{}, err
+	}
+	repo := store.Repo{Name: in.Name, Provider: in.Provider, Remote: in.Remote, DefaultBranch: in.DefaultBranch, OrgID: org.ID, Org: org.Handle}
 	if repo.DefaultBranch == "" && in.Provider != store.ProviderNone {
 		b, err := s.Upstream.DefaultBranch(ctx, repo)
 		if err != nil {
@@ -51,7 +59,7 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	}
 
 	var created store.Repo
-	err := s.Store.InTx(ctx, func(tx *store.Tx) error {
+	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		var err error
 		created, err = tx.CreateRepo(ctx, repo)
 		if err != nil {

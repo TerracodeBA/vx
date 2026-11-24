@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // PrincipalKind is the type of an identity.
@@ -32,6 +33,7 @@ type Principal struct {
 	ParentID    *uuid.UUID
 	DisplayName string
 	Email       string
+	SiteAdmin   bool // may manage people and every organization (humans only)
 	CreatedAt   time.Time
 }
 
@@ -72,15 +74,17 @@ func ValidateHandle(kind PrincipalKind, handle string) error {
 	return nil
 }
 
-const principalCols = `id, kind, handle, parent_id, display_name, email, created_at`
+const principalCols = `id, kind, handle, parent_id, display_name, email, site_admin, created_at`
 
 func scanPrincipal(row interface{ Scan(...any) error }) (Principal, error) {
 	var p Principal
-	err := row.Scan(&p.ID, &p.Kind, &p.Handle, &p.ParentID, &p.DisplayName, &p.Email, &p.CreatedAt)
+	err := row.Scan(&p.ID, &p.Kind, &p.Handle, &p.ParentID, &p.DisplayName, &p.Email, &p.SiteAdmin, &p.CreatedAt)
 	return p, err
 }
 
-// CreatePrincipal inserts a principal.
+// CreatePrincipal inserts a principal. A person (KindHuman) also gets their
+// personal organization, named like them and owned by them, in the same
+// statement; SiteAdmin is only kept for people.
 func (q Q) CreatePrincipal(ctx context.Context, p Principal) (Principal, error) {
 	if err := ValidateHandle(p.Kind, p.Handle); err != nil {
 		return Principal{}, err
@@ -88,11 +92,24 @@ func (q Q) CreatePrincipal(ctx context.Context, p Principal) (Principal, error) 
 	if p.DisplayName == "" {
 		p.DisplayName = p.Handle
 	}
-	row := q.db.QueryRow(ctx, `insert into principals (kind, handle, parent_id, display_name, email)
-		values ($1, $2, $3, $4, $5) returning `+principalCols,
-		p.Kind, p.Handle, p.ParentID, p.DisplayName, p.Email)
+	row := q.db.QueryRow(ctx, `with p as (
+			insert into principals (kind, handle, parent_id, display_name, email, site_admin)
+			values ($1, $2, $3, $4, $5, $6 and $1 = 'human') returning `+principalCols+`
+		), o as (
+			insert into orgs (handle, display_name, default_repo_role, personal)
+			select handle, display_name, 'none', true from p where kind = 'human'
+			returning id
+		), m as (
+			insert into org_members (org_id, person_id, role) select o.id, p.id, 'owner' from o, p
+		)
+		select `+principalCols+` from p`,
+		p.Kind, p.Handle, p.ParentID, p.DisplayName, p.Email, p.SiteAdmin)
 	out, err := scanPrincipal(row)
-	if isUniqueViolation(err) {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23505" {
+		if pg.ConstraintName == "orgs_handle_key" {
+			return Principal{}, fmt.Errorf("handle %q is taken by an organization: %w", p.Handle, ErrExists)
+		}
 		return Principal{}, fmt.Errorf("principal %q: %w", p.Handle, ErrExists)
 	}
 	return out, err
