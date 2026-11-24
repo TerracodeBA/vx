@@ -216,6 +216,10 @@ h2 { font-size: 14px; font-weight: 600; }
 .working li:last-child { border-bottom: 0; }
 .working li > div { color: var(--fg); min-width: 0; }
 .working .pulse { margin-top: 6px; }
+.panel-sub { font-size: 12px; font-weight: 600; margin: 0; padding: 10px 16px 0; border-top: 1px solid var(--line-soft); }
+.claims .swatch { margin-top: 5px; }
+.claims .mono, .claim-reason { overflow-wrap: anywhere; }
+.claim-reason { color: var(--muted); font-style: italic; }
 .agents li { padding: 10px 16px; border-bottom: 1px solid var(--line-soft); }
 .agents li:last-child { border-bottom: 0; }
 .agent-row { display: flex; align-items: center; gap: 8px; }

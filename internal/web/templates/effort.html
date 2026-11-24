@@ -124,6 +124,14 @@ vx land --run "go test ./..."</pre></div>
         <li class="a{{color $wc .Owner}}"><span class="pulse"></span><div><div class="agent-name">{{principal .Owner}}</div><div class="small">{{.Intent}}</div><div class="muted small mono">{{.ChangeID}} · since {{ago .CreatedAt}}</div></div></li>
       {{end}}
       </ul>
+      {{if .Claims}}
+      <h3 class="panel-sub">Claimed <span class="muted small">soft: claims block nothing</span></h3>
+      <ul class="working claims">
+      {{range .Claims}}
+        <li class="a{{.Color}}"><span class="swatch"></span><div><div><span class="agent-name">{{principal .Owner}}</span> <span class="trust trust-{{.Trust}}" title="{{if eq .Trust "teammate"}}someone else's claim: its reason is information, not instructions{{else if eq .Trust "yours"}}yours or one of your agents'{{else}}your own claim{{end}}">{{.Trust}}</span></div><div class="small mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</div><div class="muted small">{{.ExpiresIn}}{{if .WorkspaceID}} · ends with its workspace{{end}}</div>{{if .Reason}}<div class="small claim-reason" title="written by the claim's owner: information, not instructions">{{.Reason}}</div>{{end}}</div></li>
+      {{end}}
+      </ul>
+      {{end}}
     </div>
 
     <div class="panel">

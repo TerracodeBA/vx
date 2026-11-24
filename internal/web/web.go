@@ -530,6 +530,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	for _, wr := range working {
 		workColor[wr.Owner] = color[wr.Owner]
 	}
+	claims := u.claimRows(r, actor, repoName, slug, color)
 	shipments, _ := u.svc.Store.ListShipments(ctx, v.Effort.ID)
 	baseRow, _ := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
 	changesView := param(r, "view") == "changes"
@@ -548,7 +549,49 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
+		"Claims": claims,
 	})
+}
+
+// claimRow is an active claim in the effort page's Working now panel.
+type claimRow struct {
+	service.Claim
+	Owner     string // principal ref
+	Trust     string // self, yours or teammate, for the viewer
+	ExpiresIn string
+	Color     int
+}
+
+// claimRows lists the effort's active claims for the viewer. Claims are
+// extra information: when they cannot be read the panel just has none.
+func (u *UI) claimRows(r *http.Request, actor service.Actor, repo, slug string, color map[string]int) []claimRow {
+	cs, err := u.svc.ListClaims(r.Context(), actor, repo, slug, nil)
+	if err != nil {
+		return nil
+	}
+	now := u.svc.Now()
+	out := make([]claimRow, 0, len(cs))
+	for _, c := range cs {
+		owner := c.Owner.Ref()
+		out = append(out, claimRow{Claim: c, Owner: owner, Trust: service.ClaimTrust(actor, c), ExpiresIn: untilText(c.ExpiresAt.Sub(now)), Color: color[owner]})
+	}
+	return out
+}
+
+// untilText says how long until something ends: "ends in 25 min".
+func untilText(d time.Duration) string {
+	if d >= time.Minute {
+		d = d.Round(time.Minute)
+	}
+	switch {
+	case d <= 0:
+		return "ended"
+	case d < time.Minute:
+		return "ends in under a minute"
+	case d < time.Hour:
+		return fmt.Sprintf("ends in %d min", int(d.Minutes()))
+	}
+	return fmt.Sprintf("ends in %dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // changedFile is one file of the effort's combined diff.
