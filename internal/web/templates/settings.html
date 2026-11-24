@@ -22,6 +22,47 @@
   </dl>
 </section>
 
+{{if .IsHuman}}
+<section class="panel" id="notifications">
+  <div class="panel-head"><h2>Notifications</h2></div>
+  {{with .PushFlash}}<p class="note ok panel-note" role="status">{{.}}</p>{{end}}
+  {{if .PushAvailable}}
+  <div class="panel-pad stack" data-push>
+    <p class="muted">Get a notification on this device when a question escalates to you or your agents, or a change waits for your approval. It is per browser: turn it on in each one you want it in.</p>
+    <p class="small" data-push-state aria-live="polite">Notifications need JavaScript and a browser that supports them.</p>
+    <div class="push-actions">
+      <button class="btn primary" type="button" data-push-on hidden>Turn on in this browser</button>
+      <button class="btn ghost" type="button" data-push-off hidden>Turn off in this browser</button>
+      <button class="btn ghost" type="button" data-push-test hidden>Send a test</button>
+    </div>
+  </div>
+  {{if .PushDevices}}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Browser</th><th>Turned on</th><th>Last notification</th><th></th></tr></thead>
+    <tbody>
+    {{range .PushDevices}}
+      <tr>
+        <td class="cell-main">{{.Name}}{{with .LastError}}<div class="cell-sub bad-text">{{.}}</div>{{end}}</td>
+        <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+        <td class="muted small nowrap">{{with .LastSentAt}}{{ago .}}{{else}}none yet{{end}}</td>
+        <td class="num"><form method="post" action="/ui/push/unsubscribe">
+          <input type="hidden" name="endpoint" value="{{.Endpoint}}">
+          <button class="btn ghost small-btn" type="submit">Turn off</button>
+        </form></td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  {{else}}
+  <p class="panel-note muted">This server cannot send notifications: it needs <span class="mono">VX_SECRET_KEY</span> to keep the key they are signed with (see docs/deploy.md).</p>
+  {{end}}
+  {{with .PushErr}}<p class="note bad panel-note">{{.}}</p>{{end}}
+</section>
+{{end}}
+
 {{if and .IsHuman (or .GitHubEnabled .GitHubLogin)}}
 <section class="panel" id="github">
   <div class="panel-head"><h2>GitHub</h2></div>

@@ -115,6 +115,9 @@ type Service struct {
 	// DefaultForecastTimeout.
 	ForecastTimeout time.Duration
 
+	// Push configures Web Push notifications (push.go).
+	Push PushSettings
+
 	gh        githubState // the GitHub App loaded from the database
 	forecasts forecaster  // background overlap forecasts
 	logins    loginCodes  // one-time web sign-in codes (vx ui)
