@@ -150,6 +150,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	go func() { errc <- srv.ListenAndServe() }()
 	if s.Service != nil {
 		go s.backfillObjects(ctx)
+		go s.Service.RunPushNotifier(ctx, s.log)
 	}
 	s.log.Info("vx server listening", "addr", addr)
 	select {

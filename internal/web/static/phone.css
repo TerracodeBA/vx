@@ -1,0 +1,122 @@
+/* vx web UI on phones (v0.5, #37), loaded after vx.css. The For you page,
+   the notification settings and the offline page at every width; below
+   860px every page fits the screen: nothing scrolls sideways except diffs,
+   tables and tab strips inside their own box, tap targets are at least
+   40px tall and text at least 12px. TestPhoneScreenshots checks this in a
+   headless browser at 360, 390 and 430px. */
+
+/* ---------- For you ---------- */
+.ico-bell { border: 1.5px solid var(--muted); border-radius: 7px 7px 3px 3px; width: 13px; height: 14px; margin: 0 1.5px; }
+.ico-bell::after { content: ""; position: absolute; left: 3px; bottom: -4px; width: 4px; height: 2px; border-radius: 0 0 2px 2px; background: var(--muted); }
+.side-link.on .ico-bell { border-color: var(--accent); }
+.side-link.on .ico-bell::after { background: var(--accent); }
+.fy-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.fy-counts li { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
+.fy-count { font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.fy-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
+.fy-item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 14px 16px; display: grid; gap: 8px; min-width: 0;
+  scroll-margin-top: calc(var(--top-h) + 12px); }
+.fy-item.fy-question, .fy-item.fy-ci, .fy-item.fy-rebase { border-left: 3px solid var(--bad); }
+.fy-item.fy-review, .fy-item.fy-overlap { border-left: 3px solid var(--warn); }
+.fy-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.fy-where { font-size: 13px; overflow-wrap: anywhere; min-width: 0; }
+.fy-title { font-weight: 600; font-size: 15px; color: var(--fg); overflow-wrap: anywhere; }
+.fy-meta { margin: 0; overflow-wrap: anywhere; }
+.fy-meta .mono { font-size: 12px; }
+.fy-body { font-size: 14px; }
+.fy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fy-actions form { margin: 0; }
+.fy-reject > summary { cursor: pointer; color: var(--muted); font-size: 13px; width: max-content; }
+.fy-reject[open] > summary { margin-bottom: 8px; }
+.fy-reject textarea, .fy-answer textarea { font: 14px/1.5 var(--sans); padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--canvas); color: var(--fg); width: 100%; resize: vertical; }
+.fy-answer { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.fy-more { justify-self: start; }
+
+/* ---------- notifications (Settings) and offline ---------- */
+.push-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bad-text { color: var(--bad); }
+.offline-card { text-align: left; }
+
+/* ---------- phones and small tablets ---------- */
+@media (max-width: 860px) {
+  /* Grid and flex children may shrink below their content; what is wider
+     (diffs, tables, tab strips) scrolls inside its own box. */
+  .content { grid-template-columns: minmax(0, 1fr); }
+  .content > *, .col-main > *, .rail > *, .panel, .land, .land-card, .filecard, .all-files, .timeline { min-width: 0; max-width: 100%; }
+  .page-head { flex-direction: column; gap: 12px; }
+  .page-head > * { min-width: 0; max-width: 100%; }
+  h1, .goal, .page-title p { overflow-wrap: anywhere; }
+  h1 { font-size: 20px; }
+  .tabs-row { flex-wrap: nowrap; align-items: stretch; }
+  .tabs { overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; min-height: 44px; flex: none; }
+  .tabs-row .modeswitch { display: none; }
+  .diff-scroll, .table-wrap, .code, .pr-body { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  /* Visually hidden labels in a scrolling table are positioned: keep them
+     inside the box, or they widen the page. */
+  .table-wrap, .diff-scroll { position: relative; }
+  .inline-fd .fd-body, .filecard { overflow: hidden; }
+  .files { grid-template-columns: minmax(0, 1fr); }
+  .files, .inline-fd, .fd-body { min-width: 0; max-width: 100%; }
+  .inline-fd > summary, .file-head { flex-wrap: wrap; row-gap: 2px; }
+  .fd-path { flex: 1 1 12ch; min-width: 0; overflow-wrap: anywhere; }
+
+  /* The menu: a drawer over a dimmed page; closed, it is out of reach of
+     the keyboard and casts no shadow onto the page. */
+  .sidebar { box-shadow: none; visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s; }
+  .app.menu-open .sidebar { box-shadow: 0 0 40px rgba(0, 0, 0, .3); visibility: visible; transition: transform .18s ease; }
+  .app.menu-open::after { content: ""; position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 30; }
+  .kv dd, .kv dt { overflow-wrap: anywhere; min-width: 0; }
+  .cell-main { overflow-wrap: break-word; }
+  .table th, .table td { padding-left: 12px; padding-right: 12px; }
+
+  /* Tap targets. */
+  .menu-btn { width: 44px; height: 44px; gap: 4px; padding: 0 11px; flex: none; }
+  .btn, .small-btn { min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+  .small-btn { font-size: 13px; }
+  input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select { min-height: 40px; font-size: 16px; }
+  textarea { font-size: 16px; }
+  .modeswitch button { min-height: 40px; padding: 8px 14px; font-size: 13px; }
+  summary { min-height: 40px; }
+  .inline-fd > summary, .file-head { min-height: 44px; }
+  .fy-reject > summary { display: flex; align-items: center; }
+  .side-link { min-height: 44px; font-size: 15px; }
+  .side-settings, .side-signout { min-height: 40px; display: inline-flex; align-items: center; font-size: 14px; padding: 4px 8px; }
+  .file-head { position: static; }
+
+  /* Readable type: nothing under 12px. */
+  .small, .kpi-note, .count, .trust, .brand-sub, .land-meta, .cell-sub, .stat, .pill { font-size: 12px; }
+  .op { font-size: 11px; width: 44px; }
+  .mono, code { font-size: 13px; }
+  .op { font-size: 12px; }
+  .add, .del { font-size: max(12px, .92em); }
+  .diff-table { font-size: 12px; }
+
+  /* Board and task cards. */
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .bn-thread, .bn, .bn-head, .bn-targets, .bn-body { min-width: 0; }
+  .bn-targets .mono, .bn-head .agent-name { overflow-wrap: anywhere; min-width: 0; }
+  .bn-id { margin-left: 0; }
+  .bn-replies { padding-left: 12px; }
+}
+
+@media (max-width: 520px) {
+  .content { gap: 16px; }
+  .kpi { padding: 12px 14px; }
+  .kpi-value { font-size: 20px; }
+  .panel-head { flex-wrap: wrap; gap: 8px; }
+  .panel-tools { justify-content: flex-start; }
+  .fy-item { padding: 12px 14px; }
+  .fy-actions .btn { flex: 1 1 auto; }
+  .topbar { gap: 10px; }
+  .topbar-actions .btn { padding-left: 12px; padding-right: 12px; }
+  .land { padding-left: 22px; }
+  .timeline::before { left: 5px; }
+  .land .dot { left: -1px; }
+  .land-head, .land-foot { padding-left: 12px; padding-right: 12px; }
+}
+
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .sidebar, .app.menu-open .sidebar { transition: none; }
+}

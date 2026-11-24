@@ -194,6 +194,9 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/scope", u.auth(u.scopePost))
 	u.mountAdmin(mux)
 	u.mountGitHub(mux)
+	if err := u.mountPhone(mux, funcs); err != nil {
+		return err
+	}
 	if err := u.mountGitHubApp(mux); err != nil {
 		return err
 	}
@@ -1417,6 +1420,7 @@ func (u *UI) settings(w http.ResponseWriter, r *http.Request, actor service.Acto
 		}
 	}
 	u.settingsGitHub(r, actor, data)
+	u.settingsPush(r, actor, data)
 	u.render(w, r, "settings", data)
 }
 

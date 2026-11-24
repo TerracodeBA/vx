@@ -124,6 +124,7 @@ vx-server also speaks the Model Context Protocol at `/mcp`, so Claude Code and o
 
 - [Getting started](docs/getting-started.md): one person, one machine
 - [Working with agents](docs/agents.md): the workflow agents follow, evidence, conflicts
+- [The web UI on a phone](docs/web.md): For you, home screen, notifications
 - [Deploying for a team](docs/deploy.md): one shared server with HTTPS, users, backups
 - [Organizations](docs/organizations.md): what larger organizations need, and the roadmap
 - [Architecture](docs/architecture.md): data model, landing, the git bridge, shipping

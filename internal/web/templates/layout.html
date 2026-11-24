@@ -2,16 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{.Title}} · vx</title>
+<meta name="theme-color" content="#2257D6">
+<link rel="manifest" href="/ui/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/ui/static/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/static/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="vx">
 <link rel="stylesheet" href="/ui/static/vx.css">
+<link rel="stylesheet" href="/ui/static/phone.css">
 <script src="/ui/static/vx.js" defer></script>
+<script src="/ui/static/phone.js" defer></script>
 </head>
 {{if .Actor}}
 <body class="app">
 <aside class="sidebar" id="sidebar">
   <a class="brand" href="/ui"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></a>
   <nav class="side-nav" aria-label="Main">
+    <a class="side-link side-for-you{{if eq .Path "/ui/for-you"}} on{{end}}" href="/ui/for-you"><span class="ico ico-bell" aria-hidden="true"></span>For you</a>
     <a class="side-link{{if eq .Path "/ui"}} on{{end}}" href="/ui"><span class="ico ico-grid" aria-hidden="true"></span>All efforts</a>
     <a class="side-link{{if or (eq .Path "/ui/repos") .ActiveRepo}} on{{end}}" href="/ui/repos"><span class="ico ico-repo" aria-hidden="true"></span>Repositories</a>
     {{if .NavWelcome}}<a class="side-link{{if eq .Path "/ui/welcome"}} on{{end}}" href="/ui/welcome"><span class="ico ico-start" aria-hidden="true"></span>Set up vx</a>{{end}}

@@ -1,0 +1,68 @@
+{{define "crumbs"}}<span>For you</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>For you</h1>
+    <p class="muted">What waits for you, newest first: questions escalated to you or your agents, reviews you may approve, failed CI on your shipments, and overlaps and rebases on your efforts.</p>
+  </div>
+</div>
+{{with .Flash}}<p class="note ok" role="status">{{.}}</p>{{end}}
+<ul class="fy-counts" aria-label="Summary">
+  <li><span class="fy-count">{{index .Counts "question"}}</span> question{{if ne (index .Counts "question") 1}}s{{end}}</li>
+  <li><span class="fy-count">{{index .Counts "review"}}</span> review{{if ne (index .Counts "review") 1}}s{{end}}</li>
+  <li><span class="fy-count">{{index .Counts "ci"}}</span> CI failed</li>
+  <li><span class="fy-count">{{.OnEfforts}}</span> on your efforts</li>
+</ul>
+{{if not .Rows}}
+<div class="panel empty">
+  <h2>Nothing waits for you</h2>
+  <p class="muted">Questions your agents could not get answered, changes waiting for your approval and failed CI show up here. Turn on notifications in <a href="/ui/settings#notifications">Settings</a> to hear about them on this device.</p>
+</div>
+{{else}}
+<ol class="fy-list">
+{{range $row := .Rows}}
+  <li class="fy-item fy-{{.Kind}}" id="{{.Anchor}}">
+    <div class="fy-head">
+      <span class="pill {{.Tone}}">{{.Label}}</span>
+      <a class="fy-where" href="/ui/effort?repo={{.RepoName}}&amp;slug={{.Effort}}">{{.RepoName}} / {{.Effort}}</a>
+      <span class="muted small nowrap">{{ago .At}}</span>
+    </div>
+    {{with .Review}}
+    <a class="fy-title" href="{{$row.Link}}">{{first .Intent}}</a>
+    <p class="fy-meta muted small">by {{principal .Author.Ref}}{{with .AuthorOwner}} for {{principal .Ref}}{{end}} · <span class="mono">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</span></p>
+    {{if .Conflicts}}<p class="note warn small">This change conflicts with the effort now; approving sends it back to its author.</p>{{end}}
+    <div class="fy-actions">
+      <form method="post" action="/ui/for-you/review">
+        <input type="hidden" name="review" value="{{.ID}}"><input type="hidden" name="decision" value="approve">
+        <button class="btn primary" type="submit">Approve</button>
+      </form>
+      <a class="btn ghost" href="/ui/change?repo={{.RepoName}}&amp;review={{.ID}}">See the change</a>
+    </div>
+    <details class="fy-reject">
+      <summary>Reject</summary>
+      <form method="post" action="/ui/for-you/review" class="stack">
+        <input type="hidden" name="review" value="{{.ID}}"><input type="hidden" name="decision" value="reject">
+        <label for="reason-{{.ID}}">Why (the author's agent reads this)</label>
+        <textarea id="reason-{{.ID}}" name="reason" rows="2" maxlength="2000"></textarea>
+        <div><button class="btn danger" type="submit">Reject</button></div>
+      </form>
+    </details>
+    {{end}}
+    {{with .Note}}
+    <p class="fy-meta muted small">{{if .System}}from vx{{else}}{{principal .Author.Ref}}{{with .AuthorOwner}} for {{principal .Ref}}{{end}}{{if .To}} to {{principal .To.Ref}}{{end}}{{end}}{{if .Targets}} · <span class="mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</span>{{end}}</p>
+    <div class="bn-body fy-body">{{.Body}}</div>
+    {{end}}
+    {{if .CanAnswer}}
+    <form class="fy-answer stack" method="post" action="/ui/for-you/answer">
+      <input type="hidden" name="note" value="{{.Note.ID}}">
+      <label for="answer-{{.Note.ID}}">Answer as yourself</label>
+      <textarea id="answer-{{.Note.ID}}" name="body" rows="3" maxlength="2000" required></textarea>
+      <div><button class="btn primary" type="submit">Answer</button></div>
+    </form>
+    {{end}}
+    {{if .Note}}<a class="fy-more small" href="{{.Link}}">Open on the board</a>{{end}}
+  </li>
+{{end}}
+</ol>
+{{end}}
+{{end}}
