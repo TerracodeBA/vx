@@ -32,7 +32,7 @@ const verifiedAttempts = 3
 func (a *App) landCmd() *cobra.Command {
 	var intent, model, session string
 	var checks, runs, dependsOn, newTests []string
-	var allowMarkers, upToDate, allowFailing, allowUnverified bool
+	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh bool
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land your changes into the effort",
@@ -51,7 +51,11 @@ always describes exactly what lands:
 Without --run, if others landed in the meantime the server merges your
 changes onto theirs. The change is then marked as merged, and its evidence
 as gathered before the merge. Only real conflicts stop a land: run vx
-sync, fix the conflicting files and land again.`,
+sync, fix the conflicting files and land again.
+
+If a land stops (conflicts, failing checks), vx keeps its evidence flags
+(--run, --check, --new-test, --depends-on). A later vx land without any of
+them in the same workspace reuses them and says so; --fresh ignores them.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -65,6 +69,28 @@ sync, fix the conflicting files and land again.`,
 				if _, err := a.openWorkspace(ctx, c, wc, intent); err != nil {
 					return err
 				}
+			}
+			given := len(runs)+len(checks)+len(newTests)+len(dependsOn) > 0
+			if p := wc.Config.PendingLand; p != nil && p.Workspace != wc.Config.Workspace {
+				wc.Config.PendingLand = nil
+			}
+			if p := wc.Config.PendingLand; p != nil && !given && !fresh {
+				runs, checks, newTests, dependsOn = p.Runs, p.Checks, p.NewTests, p.DependsOn
+				allowFailing = allowFailing || p.AllowFailing
+				allowUnverified = allowUnverified || p.AllowUnverified
+				a.printf("Reusing the evidence of your interrupted land: %s\n", p.Command())
+			}
+			if given || (wc.Config.PendingLand != nil && !fresh) {
+				// Kept until a land in this workspace succeeds.
+				wc.Config.PendingLand = &workcopy.PendingLand{
+					Workspace: wc.Config.Workspace, Runs: runs, Checks: checks, NewTests: newTests,
+					DependsOn: dependsOn, AllowFailing: allowFailing, AllowUnverified: allowUnverified,
+				}
+			} else {
+				wc.Config.PendingLand = nil
+			}
+			if err := wc.Save(); err != nil {
+				return err
 			}
 			tests := splitNewTests(newTests)
 			reported, err := parseChecks(checks, tests)
@@ -107,7 +133,7 @@ sync, fix the conflicting files and land again.`,
 						return err
 					}
 					if len(res.conflicts) > 0 {
-						a.printConflicts(res.conflicts)
+						a.printConflicts(wc, res.conflicts)
 						a.emit(res.json())
 						return errConflict
 					}
@@ -138,6 +164,7 @@ sync, fix the conflicting files and land again.`,
 	cmd.Flags().BoolVar(&allowMarkers, "allow-markers", false, "land even if files contain conflict markers")
 	cmd.Flags().BoolVar(&upToDate, "require-up-to-date", false, "refuse to land if others landed since your last sync")
 	cmd.Flags().BoolVar(&allowFailing, "allow-failing", false, "with --run: land even if a command fails")
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "ignore the evidence flags saved from an interrupted land")
 	return cmd
 }
 
@@ -237,7 +264,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		if len(o.ran) > 0 {
 			return errEffortMoved
 		}
-		a.printf("Not landed: the effort moved on to %s since your last sync.\nRun `vx sync`, check your work again, then `vx land`.\n", short(r.EffortHead))
+		a.printf("Not landed: the effort moved on to %s since your last sync.\nRun `vx sync`, check your work again, then %s.\n", short(r.EffortHead), landAgain(wc))
 		a.emit(r)
 		return errConflict
 	}
@@ -246,7 +273,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		for _, cf := range r.Conflicts {
 			a.printf("  %-14s %s %s\n", cf.Kind, cf.Path, cf.Detail)
 		}
-		a.printf("\nRun `vx sync` to bring in those changes and mark the conflicts, fix them, then `vx land` again.\n")
+		a.printf("\nRun `vx sync` to bring in those changes and mark the conflicts, fix them, then %s again.\n", landAgain(wc))
 		a.emit(r)
 		return errConflict
 	}
@@ -267,6 +294,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	}
 	wc.Config.Base, wc.Config.BaseTree = cs.Hash, cs.Tree
 	wc.Config.Workspace, wc.Config.Intent, wc.Config.ChangeID = "", "", ""
+	wc.Config.PendingLand = nil
 	if err := wc.Save(); err != nil {
 		return err
 	}
@@ -480,7 +508,16 @@ func mergedFiles(local, incoming []object.Change, conflicts []engine.Conflict) [
 	return out
 }
 
-func (a *App) printConflicts(conflicts []engine.Conflict) {
+// landAgain is how to resume a land: plain `vx land`, which reuses saved
+// evidence flags, and what it will run.
+func landAgain(wc *workcopy.WorkingCopy) string {
+	if p := wc.Config.PendingLand; p != nil && p.Workspace == wc.Config.Workspace && p.Command() != "vx land" {
+		return "`vx land` (it reuses your evidence: " + p.Command() + ")"
+	}
+	return "`vx land`"
+}
+
+func (a *App) printConflicts(wc *workcopy.WorkingCopy, conflicts []engine.Conflict) {
 	a.printf("\nConflicts to resolve:\n")
 	for _, cf := range conflicts {
 		hint := "edit the file and remove the markers"
@@ -494,7 +531,7 @@ func (a *App) printConflicts(conflicts []engine.Conflict) {
 		}
 		a.printf("  %-14s %s (%s)\n", cf.Kind, cf.Path, hint)
 	}
-	a.printf("\nThen run `vx land`.\n")
+	a.printf("\nThen run %s.\n", landAgain(wc))
 }
 
 func (a *App) syncCmd() *cobra.Command {
@@ -519,7 +556,7 @@ edit them away, then land. vx land refuses files that still have markers.`,
 			}
 			a.emit(res.json())
 			if len(res.conflicts) > 0 {
-				a.printConflicts(res.conflicts)
+				a.printConflicts(wc, res.conflicts)
 				return errConflict
 			}
 			return nil

@@ -57,6 +57,7 @@ When an agent lands without `--run` and others landed first, the server merges t
 - `vx sync` writes diff3-style markers into files both sides changed on the same lines; other conflicts keep one side and say so.
 - `vx sync` also lists the files both sides changed that merged cleanly ("Merged with your edits", `merged` in `--json`): they now mix your lines and theirs, so look at them before landing.
 - `vx land` refuses files that still contain markers.
+- A land that stops (conflicts or failing checks) keeps its `--run`, `--check`, `--new-test` and `--depends-on` flags. After fixing, a plain `vx land` in the same workspace runs them again and says so; `--fresh` lands without them.
 - Semantic conflicts (both sides add the same function in different files) merge as text but break the build. `--run` catches them.
 
 ## Waiting for each other
