@@ -189,6 +189,7 @@ func (q Q) AuthenticateToken(ctx context.Context, secret string) (Principal, uui
 	}
 	row := q.db.QueryRow(ctx, `update tokens set last_used_at = now()
 		where secret_hash = $1 and revoked_at is null
+			and not exists (select 1 from principals d where d.id = tokens.principal_id and d.disabled_at is not null)
 		returning id, principal_id`, hashToken(secret))
 	var tokenID, id uuid.UUID
 	if err := row.Scan(&tokenID, &id); err != nil {

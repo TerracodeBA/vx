@@ -178,5 +178,47 @@
   {{end}}
 </section>
 {{end}}
+
+{{if or .SSO .SSOOwner}}
+<section class="panel" id="sso">
+  <div class="panel-head"><h2>Single sign-on</h2>{{with .SSO}}<span class="muted small">{{if .Require}}required for members{{else}}optional{{end}}</span>{{end}}</div>
+  {{with .SSO}}
+  <dl class="kv">
+    <dt>Identity provider</dt><dd class="mono">{{.Issuer}}</dd>
+    <dt>Client id</dt><dd class="mono">{{.ClientID}}</dd>
+    <dt>Email domains</dt><dd>{{if .Domains}}{{range $i, $d := .Domains}}{{if $i}}, {{end}}<span class="mono">{{$d}}</span>{{end}}{{else}}<span class="muted">any verified email</span>{{end}}</dd>
+    <dt>Members must use it</dt><dd>{{if .Require}}yes: members and admins reach the organization's repositories only after signing in through it (owners keep access, so a broken provider cannot lock everyone out){{else}}no{{end}}</dd>
+    {{with .UpdatedBy}}<dt>Last changed by</dt><dd class="mono">{{.}}</dd>{{end}}
+  </dl>
+  <form method="post" action="/ui/login/sso" class="admin-form">
+    <input type="hidden" name="org" value="{{$o.Handle}}">
+    <input type="hidden" name="next" value="/ui/orgs/{{$o.Handle}}#sso">
+    <button class="btn ghost" type="submit">Sign in with single sign-on</button>
+    <p class="field-hint">Signs your current session in through the provider and, the first time, connects your identity there to your vx account.</p>
+  </form>
+  {{end}}
+  {{if .SSOOwner}}
+  {{if not .SSOKey}}<p class="note warn panel-note">This server has no VX_SECRET_KEY, so it cannot keep a client secret. The server admin sets it first (see the deployment guide).</p>{{end}}
+  <form method="post" action="/ui/orgs/{{$o.Handle}}/sso" class="admin-form">
+    <div class="field"><label for="sso-issuer">Issuer URL</label>
+      <input id="sso-issuer" name="issuer" type="url" required maxlength="300" autocomplete="off" placeholder="https://acme.okta.com" value="{{with .SSO}}{{.Issuer}}{{end}}"></div>
+    <div class="field"><label for="sso-client">Client id</label>
+      <input id="sso-client" name="client_id" type="text" required maxlength="300" autocomplete="off" value="{{with .SSO}}{{.ClientID}}{{end}}"></div>
+    <div class="field"><label for="sso-secret">Client secret</label>
+      <input id="sso-secret" name="client_secret" type="password" maxlength="500" autocomplete="off" placeholder="{{if .SSO}}unchanged{{end}}"></div>
+    <div class="field"><label for="sso-domains">Email domains</label>
+      <input id="sso-domains" name="domains" type="text" maxlength="500" autocomplete="off" placeholder="acme.com, acme.de" value="{{.SSODomains}}"></div>
+    <label class="field-check"><input type="checkbox" name="require" value="yes"{{with .SSO}}{{if .Require}} checked{{end}}{{end}}> Require single sign-on for members</label>
+    <button class="btn primary" type="submit">Save single sign-on</button>
+    <p class="field-hint">Register vx as a web app (OpenID Connect, authorization code) at your provider with the redirect URI <span class="mono">{{.SSOCallback}}</span> and the scopes openid, email and profile. vx keeps the secret encrypted. People from these domains who sign in through it get an account (unless sign-up is closed) and join this organization as members. Before you can require it, sign in through it once yourself.</p>
+  </form>
+  {{if .SSO}}
+  <form method="post" action="/ui/orgs/{{$o.Handle}}/sso/remove" class="admin-form">
+    <button class="btn ghost" type="submit">Turn single sign-on off</button>
+  </form>
+  {{end}}
+  {{end}}
+</section>
+{{end}}
 </div>
 {{end}}

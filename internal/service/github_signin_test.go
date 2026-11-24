@@ -202,6 +202,7 @@ func TestGitHubSignupModes(t *testing.T) {
 		// login in either.
 		gh.RenameAccount("bob", "robert")
 		gh.AddUser("bob")
+		gh.SetProfile("bob", "", "") // GitHub accounts never share a verified email
 		if _, _, _, err := signIn(t, svc, gh, "bob"); !errors.As(err, &refused) {
 			t.Fatalf("a used invite worked twice: %v", err)
 		}

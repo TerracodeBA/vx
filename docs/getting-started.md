@@ -165,7 +165,9 @@ Who may create an account is the server's sign-up mode, `VX_SIGNUP`:
 - `open`: anyone with a GitHub account.
 - `closed`: nobody new; people who have an account still sign in.
 
-Someone who is not invited gets a page that says so and names the GitHub login to invite. People created earlier with `vx-server user-add` keep their account: signed in with their token, they choose **Settings > Connect GitHub** once, and sign in with GitHub from then on. vx links people by GitHub's numeric user id, so renaming a GitHub login keeps the account.
+Someone who is not invited gets a page that says so and names the GitHub login to invite. People created earlier with `vx-server user-add` keep their account: signed in with their token, they choose **Settings > Connect GitHub** once, and sign in with GitHub from then on. vx links people by GitHub's numeric user id, so renaming a GitHub login keeps the account. Signing in with GitHub in a browser without a vx session never creates a second account for an email that already has one: vx shows **This looks like you** and asks you to sign in to that account and connect GitHub there.
+
+Organizations can also sign their people in through their own identity provider (Google Workspace, Okta, Microsoft Entra ID, any OpenID Connect issuer), and require it: see [single sign-on](organizations.md#single-sign-on). The sign-in page then offers **Sign in with single sign-on**; `vx login` works the same way, by choosing it on the approval page.
 
 **The vxbench.com waitlist** is separate from the server: it collects requests and creates no accounts. To let someone in from it, take the GitHub login from their waitlist entry (ask them for it if they left only an email), invite it as above with the note `waitlist`, and tell them to open https://app.vxbench.com and choose Sign in with GitHub.
 

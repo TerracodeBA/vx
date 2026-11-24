@@ -87,6 +87,9 @@ func (s *Service) Authorize(ctx context.Context, actor Actor, repo string, need 
 	if role == RoleNone {
 		return store.Repo{}, RoleNone, repoNotFound(repo)
 	}
+	if err := s.requireSSO(ctx, actor, r, facts); err != nil {
+		return store.Repo{}, RoleNone, err
+	}
 	if !role.Includes(need) {
 		return r, role, s.needRole(ctx, actor, r, role, need)
 	}
@@ -107,6 +110,9 @@ func (s *Service) AuthorizeID(ctx context.Context, actor Actor, repoID uuid.UUID
 	}
 	if role == RoleNone {
 		return RoleNone, classify(fmt.Errorf("repo: %w", store.ErrNotFound))
+	}
+	if err := s.requireSSO(ctx, actor, r, facts); err != nil {
+		return RoleNone, err
 	}
 	if !role.Includes(need) {
 		return role, s.needRole(ctx, actor, r, role, need)

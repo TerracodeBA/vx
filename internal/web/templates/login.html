@@ -8,6 +8,17 @@
   <a class="btn primary block btn-github" href="/ui/login/github{{with .Next}}?next={{.}}{{end}}">Sign in with GitHub</a>
   {{if eq .Signup "open"}}<p class="muted small">New here? Signing in with GitHub creates your account. No token needed.</p>
   {{else if eq .Signup "invite"}}<p class="muted small">New here? A superadmin invites your GitHub login first; then sign in with GitHub. No token needed.</p>{{end}}
+  {{end}}
+  {{if .SSO}}
+  {{if .GitHub}}<div class="login-or">or with your organization</div>{{end}}
+  <form method="get" action="/ui/login/sso" class="stack">
+    <label for="sso-who">Work email or organization</label>
+    <input id="sso-who" name="who" type="text" autocomplete="email" placeholder="you@acme.com" required>
+    <input type="hidden" name="next" value="{{.Next}}">
+    <button class="btn {{if .GitHub}}ghost{{else}}primary{{end}} block" type="submit">Sign in with single sign-on</button>
+  </form>
+  {{end}}
+  {{if or .GitHub .SSO}}
   <div class="login-or">or with a token</div>
   {{end}}
   <p class="muted">Easiest: run <code>vx ui</code> in a terminal where vx is logged in. It opens this page already signed in.</p>

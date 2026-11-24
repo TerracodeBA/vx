@@ -37,6 +37,11 @@ func (s *Service) CreateLoginCode(ctx context.Context, actor Actor) (string, tim
 	if err := s.Store.CreateLoginCode(ctx, hashCode(code), actor.ID, expires, now); err != nil {
 		return "", time.Time{}, err
 	}
+	// The browser session inherits the single sign-on of the token that
+	// asked for the code.
+	if err := s.Store.SetLoginCodeToken(ctx, hashCode(code), actor.TokenID); err != nil {
+		return "", time.Time{}, err
+	}
 	return code, expires, nil
 }
 
@@ -59,6 +64,10 @@ func (s *Service) PeekLoginCode(ctx context.Context, code string) (store.Princip
 // RedeemLoginCode uses up a code and issues a new token for its principal,
 // to be kept in the browser's session cookie.
 func (s *Service) RedeemLoginCode(ctx context.Context, code string) (store.Principal, string, error) {
+	from, err := s.Store.LoginCodeToken(ctx, hashCode(code))
+	if err != nil {
+		return store.Principal{}, "", err
+	}
 	id, err := s.Store.UseLoginCode(ctx, hashCode(code), s.Now())
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Principal{}, "", errLoginCode()
@@ -72,8 +81,12 @@ func (s *Service) RedeemLoginCode(ctx context.Context, code string) (store.Princ
 	}
 	var token string
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
-		var err error
-		if token, err = tx.CreateToken(ctx, p.ID, "web session (vx ui)"); err != nil {
+		tok, secret, err := tx.IssueToken(ctx, p.ID, "web session (vx ui)")
+		if err != nil {
+			return err
+		}
+		token = secret
+		if err := tx.CopyTokenSSO(ctx, from, tok.ID); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, nil, &p.ID, "web.login", p.Ref(), nil, map[string]string{"via": "vx ui"})
