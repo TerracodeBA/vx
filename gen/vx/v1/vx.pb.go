@@ -11113,10 +11113,14 @@ func (x *ListOverlapsResponse) GetOverlaps() []*Overlap {
 }
 
 type UniqueRule struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // e.g. "migration"
-	Glob          string                 `protobuf:"bytes,2,opt,name=glob,proto3" json:"glob,omitempty"` // e.g. "internal/store/migrations/*.sql"
-	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`   // regular expression; its first group is the key, e.g. "^(\\d+)_"
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // e.g. "migration"
+	Glob  string                 `protobuf:"bytes,2,opt,name=glob,proto3" json:"glob,omitempty"` // e.g. "internal/store/migrations/*.sql"
+	Key   string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`   // regular expression; its first group is the key, e.g. "^(\\d+)_"
+	// Instead of key: a regular expression matched against each line of the
+	// files; its first group may not be used twice (within a scope).
+	Content       string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	Scope         string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"` // with content: a regular expression whose first group names a scope, e.g. a proto message
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11168,6 +11172,20 @@ func (x *UniqueRule) GetGlob() string {
 func (x *UniqueRule) GetKey() string {
 	if x != nil {
 		return x.Key
+	}
+	return ""
+}
+
+func (x *UniqueRule) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *UniqueRule) GetScope() string {
+	if x != nil {
+		return x.Scope
 	}
 	return ""
 }
@@ -13424,12 +13442,14 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06effort\x18\x02 \x01(\tR\x06effort\"B\n" +
 	"\x14ListOverlapsResponse\x12*\n" +
-	"\boverlaps\x18\x01 \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\"F\n" +
+	"\boverlaps\x18\x01 \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\"v\n" +
 	"\n" +
 	"UniqueRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04glob\x18\x02 \x01(\tR\x04glob\x12\x10\n" +
-	"\x03key\x18\x03 \x01(\tR\x03key\"=\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\"=\n" +
 	"\rGeneratedRule\x12\x12\n" +
 	"\x04glob\x18\x01 \x01(\tR\x04glob\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"\xdd\x01\n" +

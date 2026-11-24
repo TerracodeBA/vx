@@ -110,6 +110,9 @@ func (s *Service) Reserve(ctx context.Context, actor Actor, repoName, effort, ru
 		}
 		return "", "", errf(CodeFailedPrecondition, "%s has no [[unique]] rule %q; its rules: %s", RulesFile, rule, strings.Join(names, ", "))
 	}
+	if u.IsContent() {
+		return "", "", errf(CodeFailedPrecondition, "rule %s looks inside files (content), and vx reserve only reserves file-name keys (key); pick a value no open effort uses: vx overlaps reports clashes", u.Name)
+	}
 	g, err := rules.CompileGlob(u.Glob)
 	if err != nil {
 		return "", "", errf(CodeFailedPrecondition, "rule %s: %v", u.Name, err)

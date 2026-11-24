@@ -1361,6 +1361,10 @@ message UniqueRule {
   string name = 1; // e.g. "migration"
   string glob = 2; // e.g. "internal/store/migrations/*.sql"
   string key = 3; // regular expression; its first group is the key, e.g. "^(\\d+)_"
+  // Instead of key: a regular expression matched against each line of the
+  // files; its first group may not be used twice (within a scope).
+  string content = 4;
+  string scope = 5; // with content: a regular expression whose first group names a scope, e.g. a proto message
 }
 
 message GeneratedRule {

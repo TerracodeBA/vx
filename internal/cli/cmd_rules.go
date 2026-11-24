@@ -66,9 +66,16 @@ from the default branch (or --effort).`,
 			} else {
 				a.printf("Rules from %s\n", r.Source)
 				if len(r.Unique) > 0 {
-					a.printf("\nUnique (two files may not share the key):\n")
+					a.printf("\nUnique (two files may not share the key; content: two lines may not share the value):\n")
 					for _, u := range r.Unique {
-						a.printf("  %-12s %s  key %s\n", u.Name, u.Glob, u.Key)
+						switch {
+						case u.Content != "" && u.Scope != "":
+							a.printf("  %-12s %s  content %s  per scope %s\n", u.Name, u.Glob, u.Content, u.Scope)
+						case u.Content != "":
+							a.printf("  %-12s %s  content %s\n", u.Name, u.Glob, u.Content)
+						default:
+							a.printf("  %-12s %s  key %s\n", u.Name, u.Glob, u.Key)
+						}
 					}
 				}
 				if len(r.Generated) > 0 {
