@@ -205,3 +205,71 @@ func TestMergeKeepConflicts(t *testing.T) {
 		t.Fatalf("kept tree = %v", got)
 	}
 }
+
+func TestMergeKeptBoth(t *testing.T) {
+	f := newFixture(t)
+	base := map[string]string{
+		"cli.go":     "func cmds() {\n\troot.AddCommand(\n\t\tnewA(),\n\t)\n}\n",
+		"guide.md":   "# Guide\n\n## Old\n",
+		"plain.go":   "a\nb\nc\n",
+		"binary.bin": "\x00base",
+	}
+	ours := map[string]string{
+		"cli.go":     "func cmds() {\n\troot.AddCommand(\n\t\tnewA(),\n\t\tnewOurs(),\n\t)\n}\n",
+		"guide.md":   "# Guide\n\n## Ours\n\n## Old\n",
+		"plain.go":   "a\nB\nc\n",
+		"binary.bin": "\x00base",
+	}
+	theirs := map[string]string{
+		"cli.go":     "func cmds() {\n\troot.AddCommand(\n\t\tnewA(),\n\t\tnewTheirs(),\n\t)\n}\n",
+		"guide.md":   "# Guide\n\n## Theirs\n\n## Old\n",
+		"plain.go":   "a\nb\nc\nd\n",
+		"binary.bin": "\x00base",
+	}
+	r := f.merge(base, ours, theirs)
+	if !r.Clean() {
+		t.Fatalf("conflicts: %+v", r.Conflicts)
+	}
+	if strings.Join(r.AutoMerged, ",") != "cli.go,guide.md,plain.go" || strings.Join(r.KeptBoth, ",") != "cli.go,guide.md" {
+		t.Fatalf("auto-merged %v, kept both %v", r.AutoMerged, r.KeptBoth)
+	}
+	got := f.read(r.Tree)
+	if got["cli.go"] != "func cmds() {\n\troot.AddCommand(\n\t\tnewA(),\n\t\tnewTheirs(),\n\t\tnewOurs(),\n\t)\n}\n" {
+		t.Fatalf("cli.go = %q", got["cli.go"])
+	}
+	if got["guide.md"] != "# Guide\n\n## Theirs\n\n## Ours\n\n## Old\n" {
+		t.Fatalf("guide.md = %q", got["guide.md"])
+	}
+}
+
+func TestMergeKeptBothNotForBinaryOrAddAdd(t *testing.T) {
+	f := newFixture(t)
+	base := map[string]string{"blob.bin": "\x00a\n"}
+	ours := map[string]string{"blob.bin": "\x00a\nours\n", "new.go": "package ours\n"}
+	theirs := map[string]string{"blob.bin": "\x00a\ntheirs\n", "new.go": "package theirs\n"}
+	r := f.merge(base, ours, theirs)
+	kinds := map[string]ConflictKind{}
+	for _, c := range r.Conflicts {
+		kinds[c.Path] = c.Kind
+	}
+	if kinds["blob.bin"] != ConflictBinary || kinds["new.go"] != ConflictAddAdd || len(r.KeptBoth) != 0 {
+		t.Fatalf("conflicts %v, kept both %v", kinds, r.KeptBoth)
+	}
+}
+
+func TestMergeKeepConflictsReportsKeptBoth(t *testing.T) {
+	f := newFixture(t)
+	base := map[string]string{"x.go": "1\n2\n", "y.md": "# Y\n"}
+	ours := map[string]string{"x.go": "1\nours\n", "y.md": "# Y\nlocal\n"}
+	theirs := map[string]string{"x.go": "1\ntheirs\n", "y.md": "# Y\neffort\n"}
+	r, err := MergeTreesKeepConflicts(f.ctx, f.s, f.tree(base), f.tree(ours), f.tree(theirs), merge.Labels{Ours: "local", Theirs: "effort"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Conflicts) != 1 || r.Conflicts[0].Path != "x.go" || strings.Join(r.KeptBoth, ",") != "y.md" {
+		t.Fatalf("conflicts %+v, kept both %v", r.Conflicts, r.KeptBoth)
+	}
+	if got := f.read(r.Tree)["y.md"]; got != "# Y\neffort\nlocal\n" {
+		t.Fatalf("y.md = %q", got)
+	}
+}

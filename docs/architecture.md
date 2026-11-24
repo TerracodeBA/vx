@@ -69,6 +69,13 @@ sequenceDiagram
 
 The merge runs file by file (`internal/engine`), then line by line for files both sides changed (`internal/merge`, Myers diff plus diff3). Moving the head is a single-row compare-and-swap, so concurrent lands never lose work.
 
+Line merge rules, per region between lines both sides kept from base:
+
+- Changed on one side only: take that side.
+- Changed the same way on both sides: take it once.
+- Both sides only inserted lines (the base region is empty) and the insertions differ: keep both, the side that landed first (the effort head, or the ship target) before the incoming one. The diff of base to each side decides where an insertion sits, so a line both sides kept from base (a closing brace after a list) stays once and both insertions go before it, while lines each insertion brings itself (its own closing brace or trailing blank line) are kept once per side. If the earlier side's insertion ends the file without a newline, one is added so the lines do not run together. Engine results list these paths in `KeptBoth` (a subset of `AutoMerged`); `Service.Land` returns them as `LandResult.KeptBoth` and `vx sync` reports them as well.
+- Anything else, where either side changed or deleted base lines in the region, is a conflict written with diff3 markers. Keep-both never applies when the base file is empty or missing (both sides created the file), to binary files, or when either side already contains conflict markers. There is no per-repo switch yet.
+
 After a land, the server parses the Go packages the change touched (`internal/engine/gocheck.go`) and returns warnings for top-level names declared twice in one package and for changed Go files that do not parse: the case where two changes each add the same function in different files, the text merges cleanly and the package stops compiling. Warnings never block a land and are not stored yet; ship plans report them too.
 
 `vx land --run` adds a client-side loop: sync if the effort moved, run the checks on the merged files, land with `require_up_to_date`, and repeat if someone landed in between. The evidence then describes exactly the tree that landed. When the server merges instead, the changeset records the author's `snapshot_tree`, and every view marks its evidence as gathered before the merge.

@@ -6,6 +6,9 @@ import "strings"
 type Result struct {
 	Lines     []string // merged text; contains conflict markers if Conflicts > 0
 	Conflicts int      // number of conflicting regions
+	// KeptBoth counts regions where both sides inserted different lines at
+	// the same place and the merge kept both insertions.
+	KeptBoth int
 }
 
 // Bytes returns the merged text.
@@ -18,11 +21,21 @@ type Labels struct {
 
 // Merge3 merges ours and theirs, which both started from base. Regions
 // changed on one side only take that side. Regions changed identically on
-// both sides take the change once. Regions changed differently on both sides
-// are conflicts and are written with diff3-style markers.
+// both sides take the change once.
+//
+// Regions where both sides only inserted lines at the same place (the base
+// region is empty) keep both insertions: theirs first, then ours. Callers
+// pass the side that landed earlier (the effort) as theirs. Nothing either
+// side had is lost; only the order may need a look. This does not apply when
+// base is empty (both sides created the file) or when ours or theirs already
+// contains conflict markers.
+//
+// Other regions changed differently on both sides are conflicts and are
+// written with diff3-style markers.
 func Merge3(base, ours, theirs []string, labels Labels) Result {
 	mo := matches(base, ours)
 	mt := matches(base, theirs)
+	keepBoth := len(base) > 0 && !HasConflictMarkers(ours) && !HasConflictMarkers(theirs)
 
 	var res Result
 	i, j, k := 0, 0, 0
@@ -63,6 +76,10 @@ func Merge3(base, ours, theirs []string, labels Labels) Result {
 			res.Lines = append(res.Lines, o...)
 		case equalLines(o, t):
 			res.Lines = append(res.Lines, o...)
+		case len(b) == 0 && keepBoth:
+			res.KeptBoth++
+			res.Lines = appendWithNewline(res.Lines, t)
+			res.Lines = append(res.Lines, o...)
 		default:
 			res.Conflicts++
 			res.Lines = appendConflict(res.Lines, b, o, t, labels)
@@ -102,6 +119,24 @@ func matches(base, other []string) []int {
 		}
 	}
 	return m
+}
+
+// HasConflictMarkers reports whether lines contain unresolved conflict
+// markers: a "<<<<<<< ", a "=======" and a ">>>>>>> " line, in that order
+// (the rule vx land uses to refuse files with markers).
+func HasConflictMarkers(lines []string) bool {
+	state := 0
+	for _, l := range lines {
+		switch {
+		case state == 0 && strings.HasPrefix(l, "<<<<<<< "):
+			state = 1
+		case state == 1 && l == "=======\n":
+			state = 2
+		case state == 2 && strings.HasPrefix(l, ">>>>>>> "):
+			return true
+		}
+	}
+	return false
 }
 
 func equalLines(a, b []string) bool {

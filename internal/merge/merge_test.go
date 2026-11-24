@@ -163,10 +163,10 @@ func TestMerge3InsertsAtEnds(t *testing.T) {
 	if res.Conflicts != 0 || string(res.Bytes()) != "top\nm\nbottom\n" {
 		t.Fatalf("got %d:\n%s", res.Conflicts, res.Bytes())
 	}
-	// Both append different lines at the end: conflict.
+	// Both append different lines at the end: keep both, theirs first.
 	res = Merge3(base, lines("m\nx\n"), lines("m\ny\n"), Labels{})
-	if res.Conflicts != 1 {
-		t.Fatalf("expected conflict, got:\n%s", res.Bytes())
+	if res.Conflicts != 0 || res.KeptBoth != 1 || string(res.Bytes()) != "m\ny\nx\n" {
+		t.Fatalf("expected both kept, got %d conflicts:\n%s", res.Conflicts, res.Bytes())
 	}
 	// Empty base: both create the file differently.
 	res = Merge3(nil, lines("x\n"), lines("y\n"), Labels{})
@@ -215,7 +215,10 @@ func TestMerge3Properties(t *testing.T) {
 		if a.Conflicts != b.Conflicts {
 			t.Fatalf("merge not symmetric in conflicts: %d vs %d", a.Conflicts, b.Conflicts)
 		}
-		if a.Conflicts == 0 && !equalLines(a.Lines, b.Lines) {
+		if a.KeptBoth != b.KeptBoth {
+			t.Fatalf("kept both not symmetric: %d vs %d", a.KeptBoth, b.KeptBoth)
+		}
+		if a.Conflicts == 0 && a.KeptBoth == 0 && !equalLines(a.Lines, b.Lines) {
 			t.Fatalf("clean merge not symmetric\nbase=%q\nours=%q\ntheirs=%q\na=%q\nb=%q", base, ours, theirs, a.Lines, b.Lines)
 		}
 	}

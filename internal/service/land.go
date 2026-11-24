@@ -140,6 +140,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		newTree = mr.Tree
 		res.Rebased = true
 		res.AutoMerged = mr.AutoMerged
+		res.KeptBoth = mr.KeptBoth
 	}
 
 	changes, err := object.DiffTrees(ctx, s.Blobs, head.Tree, newTree)
