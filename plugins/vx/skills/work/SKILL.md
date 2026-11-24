@@ -28,9 +28,9 @@ The working copy is a normal directory with a `.vx` folder. **Do not use git com
 
 3. **Edit, then land with evidence vx runs itself.**
    ```sh
-   vx land --run "go test ./..." --run "go vet ./..."
+   vx land --run "go test -count=1 ./..." --run "go vet ./..." --new-test TestRateLimit
    ```
-   Use the project's real test and lint commands. With `--run`, vx syncs first if the effort moved, runs the commands on exactly what will land, and lands only if they pass. Prefer it over `--check`, which records a result you report yourself and is marked "reported".
+   Use the project's real test and lint commands. For Go, keep `-count=1` so tests really run instead of coming from the test cache (vx notes cached packages on the check). Name the tests you added with `--new-test` (comma-separated is fine); vx refuses the land if a name is not a func in a `_test.go` file you changed. With `--run`, vx syncs first if the effort moved, runs the commands on exactly what will land, and lands only if they pass. Prefer it over `--check`, which records a result you report yourself and is marked "reported".
 
 4. **Repeat** from step 2 for the next task. `vx land` closes the workspace.
 

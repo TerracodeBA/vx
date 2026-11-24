@@ -19,8 +19,10 @@ vx sync                                   # pick up others' work
 vx status                                 # your changes, effort drift, who else is working, recent lands
 vx new "Add rate limit middleware"        # one task, one intent
 # edit
-vx land --run "go test ./..." --run "go vet ./..."
+vx land --run "go test -count=1 ./..." --run "go vet ./..."
 ```
+
+For Go, pass `-count=1` so every test runs: otherwise `go test` reuses cached results, and vx notes on the check how many packages came from the cache (for example `12 of 14 packages from the Go test cache`).
 
 - One intent per workspace. The intent becomes the change description and, when shipped, the commit message.
 - `vx land` closes the workspace; run `vx new` for the next task.
@@ -32,7 +34,7 @@ vx land --run "go test ./..." --run "go vet ./..."
 |---|---|---|
 | `--run "CMD"` | run by vx | vx ran the command in the working copy and recorded the result and duration. If the effort moved, vx synced first and ran it on the merged result, so it describes exactly what lands. |
 | `--check "NAME=pass:N"` | reported | The agent says it ran something. Shown, but marked as reported. |
-| `--new-test NAME` | new test | A test the change adds. |
+| `--new-test NAME` | new test | A test the change adds or changes (repeatable, or comma-separated). vx refuses the land unless each name is a `func NAME(` in a `_test.go` file the land adds or changes, and lists the test functions it did find; `--allow-unverified-tests` skips the check. |
 | `--depends-on SYMBOL` | depends on | A symbol the change relies on. |
 
 When an agent lands without `--run` and others landed first, the server merges the change onto their work. vx then marks the change "merged by server" and labels its evidence as gathered before the merge, in the CLI, the web UI, the commit trailers and the pull request.

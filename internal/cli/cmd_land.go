@@ -31,7 +31,7 @@ const verifiedAttempts = 3
 func (a *App) landCmd() *cobra.Command {
 	var intent, model, session string
 	var checks, runs, dependsOn, newTests []string
-	var allowMarkers, upToDate, allowFailing bool
+	var allowMarkers, upToDate, allowFailing, allowUnverified bool
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land your changes into the effort",
@@ -65,9 +65,19 @@ sync, fix the conflicting files and land again.`,
 					return err
 				}
 			}
-			reported, err := parseChecks(checks, newTests)
+			tests := splitNewTests(newTests)
+			reported, err := parseChecks(checks, tests)
 			if err != nil {
 				return err
+			}
+			if len(tests) > 0 && !allowUnverified {
+				_, changes, err := wc.Snapshot(ctx)
+				if err != nil {
+					return err
+				}
+				if err := verifyNewTests(ctx, wc, changes, tests); err != nil {
+					return err
+				}
 			}
 			opts := landOptions{
 				intent: intent, model: model, session: session, dependsOn: dependsOn,
@@ -119,7 +129,8 @@ sync, fix the conflicting files and land again.`,
 	cmd.Flags().StringVarP(&intent, "intent", "m", "", "what this change does (default: the workspace intent)")
 	cmd.Flags().StringArrayVar(&runs, "run", nil, `command for vx to run as evidence, e.g. "go test ./..." (repeatable)`)
 	cmd.Flags().StringArrayVar(&checks, "check", nil, `self-reported evidence, as "NAME=pass|fail[:PASSED[:FAILED]]" (repeatable)`)
-	cmd.Flags().StringArrayVar(&newTests, "new-test", nil, "name of a test this change adds (repeatable)")
+	cmd.Flags().StringArrayVar(&newTests, "new-test", nil, "name of a test this change adds or changes, e.g. TestLogin (repeatable or comma-separated; must be a func in a changed _test.go file)")
+	cmd.Flags().BoolVar(&allowUnverified, "allow-unverified-tests", false, "land even if a --new-test name is not a func in a changed _test.go file")
 	cmd.Flags().StringArrayVar(&dependsOn, "depends-on", nil, "symbol this change relies on, e.g. auth.Login (repeatable)")
 	cmd.Flags().StringVar(&model, "model", "", "model that wrote the change (default: VX_MODEL)")
 	cmd.Flags().StringVar(&session, "session", "", "agent session id (default: VX_SESSION)")
@@ -159,13 +170,16 @@ func (a *App) runChecks(dir string, cmds []string) ([]*vxv1.Check, bool) {
 		var buf bytes.Buffer
 		c.Stdout, c.Stderr = &buf, &buf
 		err := c.Run()
-		ch := &vxv1.Check{Name: command, Result: "pass", RanByVx: true, DurationMs: time.Since(start).Milliseconds()}
+		ch := &vxv1.Check{Name: command, Result: "pass", RanByVx: true, DurationMs: time.Since(start).Milliseconds(), Notes: cacheNote(buf.String())}
 		if err != nil {
 			ch.Result = "fail"
 			failed = true
 			a.printf("FAIL %s (%.1fs)\n%s\n", command, float64(ch.DurationMs)/1000, tail(buf.String(), 40))
 		} else {
 			a.printf("pass %s (%.1fs)\n", command, float64(ch.DurationMs)/1000)
+		}
+		if ch.Notes != "" {
+			a.printf("  %s\n  Hint: add -count=1 to run every test instead of using cached results.\n", ch.Notes)
 		}
 		out = append(out, ch)
 	}
@@ -277,6 +291,9 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	}
 	if len(incoming) > 0 {
 		a.printf("  Updated %d file(s) here with others' changes.\n", len(incoming))
+	}
+	if evidence != nil && len(evidence.NewTests) > 0 {
+		a.printf("New tests: %s\n", strings.Join(evidence.NewTests, ", "))
 	}
 	a.printWarnings(r.Warnings)
 	a.emit(r)

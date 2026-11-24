@@ -43,7 +43,7 @@ func TestPages(t *testing.T) {
 	h, _ := blobs.Put(ctx, hash.KindBlob, []byte("package limit\n\nfunc Allow() bool { return true }\n"))
 	tree, _ := object.ApplyChanges(ctx, blobs, row.Tree, []object.Change{{Path: "limit/limit.go", Op: object.OpAdd, New: object.File{Hash: h, Mode: object.ModeFile}}})
 	res, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: ws.Workspace.ID, Tree: tree, Model: "claude-opus-5-5",
-		Evidence: &object.Evidence{Checks: []object.Check{{Name: "go test ./...", Result: "pass", RanByVX: true, DurationMs: 1200}}}})
+		Evidence: &object.Evidence{Checks: []object.Check{{Name: "go test ./...", Result: "pass", RanByVX: true, DurationMs: 1200, Notes: "1 of 3 packages from the Go test cache"}}}})
 	if err != nil || !res.Landed {
 		t.Fatal(err)
 	}
@@ -96,8 +96,8 @@ func TestPages(t *testing.T) {
 	for path, wants := range map[string][]string{
 		"/ui":                       {"Rate limiting", "Working now", "1 agent", "acme/shop"},
 		"/ui/repo?name=acme%2Fshop": {"Branches vx follows", "main"},
-		"/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug:              {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5"},
-		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", `<span class="tk-k">func</span> <span class="tk-f">Allow</span>`, "run by vx"},
+		"/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug:              {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5", "1 of 3 packages from the Go test cache"},
+		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", `<span class="tk-k">func</span> <span class="tk-f">Allow</span>`, "run by vx", "1 of 3 packages from the Go test cache"},
 		"/ui/ship?repo=acme%2Fshop&slug=" + eff.Slug:                {"has no git upstream"},
 	} {
 		code, body := get(path)

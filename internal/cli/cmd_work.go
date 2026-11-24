@@ -467,6 +467,9 @@ func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
 			if ch.Passed > 0 || ch.Failed > 0 {
 				a.printf(", %d passed, %d failed", ch.Passed, ch.Failed)
 			}
+			if ch.Notes != "" {
+				a.printf(", %s", ch.Notes)
+			}
 			a.printf(")\n")
 		}
 		if len(ev.NewTests) > 0 {

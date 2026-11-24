@@ -270,6 +270,9 @@ func checkText(ch object.Check) string {
 	} else {
 		notes = append(notes, "reported")
 	}
+	if ch.Notes != "" {
+		notes = append(notes, ch.Notes)
+	}
 	return s + " (" + strings.Join(notes, ", ") + ")"
 }
 
