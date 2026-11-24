@@ -32,7 +32,7 @@ echo "== vx source at $REF"
 mkdir -p /opt/vx /var/backups/vx
 if [ ! -d $SRC/.git ]; then git clone -q https://github.com/TerracodeBA/vx.git $SRC; fi
 git -C $SRC fetch -q --tags origin
-git -C $SRC checkout -q --detach "$(git -C $SRC rev-parse "origin/$REF" 2>/dev/null || git -C $SRC rev-parse "$REF")"
+git -C $SRC checkout -q --detach "$(git -C $SRC rev-parse --verify --quiet "origin/$REF^{commit}" || git -C $SRC rev-parse --verify "$REF^{commit}")"
 
 cd $SRC/deploy/production
 ENV=/opt/vx/.env
