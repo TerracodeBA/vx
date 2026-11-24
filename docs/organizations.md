@@ -39,11 +39,36 @@ A repository role is `read`, `write` or `admin`; each includes the one before it
 4. admin, if you are an owner or admin of the organization,
 5. admin, if you are a site admin.
 
+On a GitHub-backed repository none of these but the last counts: your role is your GitHub permission (see below).
+
 **Agents** have exactly their person's role. **Service principals** (`service:ci`) have only their direct grants. Grants go to people (`alice` or `user:alice`), service principals (`service:ci`) and teams of the repository's own organization (`team:acme/backend`), never to agents.
 
 A repository you cannot read is reported exactly like one that does not exist. One you can read but need more on gives a permission error that names the role needed and who can grant it.
 
 Only people manage organizations, teams and grants. Agents are refused, like token creation.
+
+## GitHub-backed repositories
+
+A repository linked to a GitHub repository through an installation of the vx GitHub App is **GitHub-backed**: GitHub decides who may do what in it, with the rules the organization already set on GitHub (base permissions, teams, outside collaborators). vx never shows more than GitHub allows. `vx repo list` and the web UI say "roles from GitHub" for these repositories, and the API returns `github_backed: true`.
+
+| On GitHub | In vx |
+|---|---|
+| admin, maintain | admin (ship, see access) |
+| write | write (start efforts, land, post) |
+| triage, read | read (see efforts, log, board) |
+| none | no access: the repository is "not found" |
+| Organization admin | admin of the linked vx organization (an owner stays owner) |
+| Organization member | member of the linked vx organization |
+| Not a member | not in the linked vx organization |
+
+- **Who has a role.** People linked to GitHub (they signed in with GitHub). A person without a GitHub link has no role on GitHub-backed repositories. Site admins keep admin everywhere. Agents have exactly their person's role. Service principals (`service:ci`) have only their direct vx grants, since GitHub does not know them; repository admins may grant them.
+- **Your account or organization.** You get a role on a repository of an installation on your own GitHub account, or of an organization GitHub says you are a member of. For anyone else only explicit grants on GitHub count: GitHub gives every user read on public repositories, and vx ignores that read, so a public repository does not show up for people outside its organization. Outside collaborators with write, maintain or admin keep it; outside collaborators with only read get nothing in vx.
+- **What does not count.** vx grants, teams, the organization's default role and organization roles give nothing on GitHub-backed repositories. `vx repo grant` for people and teams is refused with a link to the repository's access settings on GitHub; `vx repo revoke` still removes grants made before the repository was linked. A vx organization linked to a GitHub organization refuses `vx org member`, `vx org remove` and team changes, with a link to the organization's people page on GitHub.
+- **Caching.** vx caches what GitHub said for 5 minutes (`GitHubRoleTTL`) per person and repository, and per person and organization. GitHub webhooks drop the cache at once when access changes: collaborators added, removed or edited; organization membership; teams (the whole organization's cache); repository visibility, rename and transfer; installation removed, suspended or its repositories changed (everything for it); a person removed. Without a webhook, a change shows within 5 minutes. Organization membership is refreshed on sign-in, on organization webhooks and whenever vx asks GitHub again.
+- **When GitHub cannot be reached.** vx uses a cached answer up to one hour old. Without one, access fails closed: the command fails with "could not check your role on REPO with GitHub ... try again in a minute", and lists leave the repository out. vx never falls back to its own grants.
+- **Installations.** A suspended installation, or one that was removed, gives nobody a role on its repositories (site admins aside) until it is unsuspended or installed again.
+
+**Limits.** A list (repositories, efforts, the inbox) asks GitHub at most once per organization and once per repository of your organizations every 5 minutes, up to 8 calls at a time; for tens of repositories that is well under a second with a cold cache and a few database queries otherwise. Every installation counts against GitHub's API rate limit for the App (5,000 requests per hour per installation and up). Hundreds of repositories per person, or hundreds of installations on one server, would want a batch API (GraphQL) and webhook-driven membership instead of per-repository checks. The access page lists people whose role vx checked in the last 5 minutes, not everyone GitHub allows. The settings links point to github.com.
 
 ## Commands
 
@@ -179,6 +204,8 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
-| Grant and revoke access, see who has access | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
+| Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
 
-Lists (repositories, efforts, the inbox) only contain what you can read. `internal/service/authz_test.go` checks every row of this table for no access, read, write and admin, for a person and their agent.
+On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).
+
+Lists (repositories, efforts, the inbox) only contain what you can read. `internal/service/authz_test.go` checks every row of this table for no access, read, write and admin, for a person and their agent, with vx grants (`TestAuthzMatrix`) and with roles from GitHub (`TestAuthzMatrixGitHub`).

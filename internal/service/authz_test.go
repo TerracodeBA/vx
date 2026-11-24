@@ -8,7 +8,8 @@ package service_test
 // error; with enough it passes the access check.
 //
 // When you add a service function that takes a repository, add it to ops
-// below and to the table in docs/organizations.md.
+// below and to the table in docs/organizations.md. TestAuthzMatrixGitHub
+// runs the same operations on a GitHub-backed repository.
 
 import (
 	"errors"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/TerracodeBA/vx/internal/github/githubtest"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -255,6 +257,63 @@ func TestAuthzMatrix(t *testing.T) {
 		for _, op := range authzOps {
 			if err := op.run(e, actor); err != nil {
 				t.Errorf("%s by %s in acme: %v", op.name, actor.Ref(), err)
+			}
+		}
+	}
+}
+
+// TestAuthzMatrixGitHub is the matrix on a GitHub-backed repository: bob's
+// role comes from his GitHub permission (none, read, write, maintain) and
+// vx grants are refused. Alice is an admin of the GitHub organization.
+func TestAuthzMatrixGitHub(t *testing.T) {
+	e := newAuthzEnv(t)
+	gh := githubtest.New(t)
+	aliceGH, bobGH := gh.AddUser("alice"), gh.AddUser("bob")
+	acmeGH := gh.AddOrg("acme")
+	gh.SetOrgMember("acme", "alice", "admin")
+	gh.SetOrgMember("acme", "bob", "member")
+	shopGH := gh.AddRepo("acme/shop", true)
+	org, err := e.svc.Store.OrgByHandle(e.ctx, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst := installOn(e.env, gh, acmeGH, service.Org{ID: org.ID, Handle: org.Handle})
+	e.svc.GitHub.API = gh.Client(t)
+	e.repo = backWithGitHub(e.env, e.repo, shopGH, inst)
+	linkGitHub(e.env, e.alice, aliceGH)
+	linkGitHub(e.env, e.bob, bobGH)
+	if _, err := e.svc.GrantRepo(e.ctx, e.alice, "acme/shop", "user:bob", service.RoleRead); !isCode(err, service.CodeFailedPrecondition) {
+		t.Errorf("vx grant on a GitHub-backed repository: %v", err)
+	}
+	for perm, role := range map[string]service.RepoRole{"none": service.RoleNone, "read": service.RoleRead, "write": service.RoleWrite, "maintain": service.RoleAdmin} {
+		gh.SetPermission("acme/shop", "bob", perm)
+		if err := e.svc.DropGitHubRoles(e.ctx, service.GitHubRoleScope{GitHubRepoID: shopGH.ID}); err != nil {
+			t.Fatal(err)
+		}
+		for _, actor := range []service.Actor{e.bob, e.bobAgent} {
+			for _, op := range authzOps {
+				err := op.run(e, actor)
+				switch {
+				case role == service.RoleNone:
+					if !isCode(err, service.CodeNotFound) {
+						t.Errorf("%s by %s with GitHub %s: want not found, got %v", op.name, actor.Ref(), perm, err)
+					}
+				case !role.Includes(op.need):
+					if !isCode(err, service.CodePermission) {
+						t.Errorf("%s by %s with GitHub %s: want a permission error (needs %s), got %v", op.name, actor.Ref(), perm, op.need, err)
+					}
+				default:
+					if err != nil {
+						t.Errorf("%s by %s with GitHub %s: %v", op.name, actor.Ref(), perm, err)
+					}
+				}
+			}
+		}
+	}
+	for _, actor := range []service.Actor{e.alice, e.agent} {
+		for _, op := range authzOps {
+			if err := op.run(e, actor); err != nil {
+				t.Errorf("%s by %s, GitHub admin of acme: %v", op.name, actor.Ref(), err)
 			}
 		}
 	}

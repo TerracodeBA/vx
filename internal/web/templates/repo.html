@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>{{.Repo.Name}}</h1>
-    <p class="muted">{{.Repo.Provider}}{{if .Repo.Remote}} · <span class="mono">{{.Repo.Remote}}</span>{{end}} · default branch <span class="mono">{{.Repo.DefaultBranch}}</span></p>
+    <p class="muted">{{.Repo.Provider}}{{if .Repo.Remote}} · <span class="mono">{{.Repo.Remote}}</span>{{end}} · default branch <span class="mono">{{.Repo.DefaultBranch}}</span>{{if .Repo.GitHubBacked}} · <span class="badge" title="Who may read, write or administer this repository is decided on GitHub">roles from GitHub</span>{{end}}</p>
   </div>
 </div>
 <div class="grid-2">

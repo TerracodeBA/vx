@@ -412,7 +412,8 @@ func (u *UI) renderAccess(w http.ResponseWriter, r *http.Request, actor service.
 		"Actor": actor, "Title": "Access · " + repo.Name, "ActiveRepo": repo.Name, "Flash": f, "Form": form, "Kind": kind,
 		"Repo": repo, "Grants": rows, "Entries": entries, "GrantRoles": grantRoles,
 		"Admins": counts[service.RoleAdmin], "Writers": counts[service.RoleWrite], "Readers": counts[service.RoleRead],
-		"IsHuman": actor.Kind == store.KindHuman,
+		"IsHuman":        actor.Kind == store.KindHuman,
+		"GitHubSettings": u.svc.GitHubSettingsURL(repo), "GitHubTTL": service.GitHubRoleTTL.String(),
 	})
 }
 

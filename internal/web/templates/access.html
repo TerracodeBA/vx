@@ -4,7 +4,11 @@
 <div class="page-head">
   <div class="page-title">
     <h1>Access to <span class="mono">{{.Repo.Name}}</span></h1>
+    {{if .Repo.GitHubBacked}}
+    <p class="muted">Roles from GitHub: who may read, write or administer this repository is decided on GitHub (admin and maintain: admin, write: write, triage and read: read), not by vx grants, teams or the organization's default role. Change it in <a href="{{.GitHubSettings}}">the repository's settings on GitHub</a>; vx sees changes at once through webhooks, and otherwise within {{.GitHubTTL}}. Agents get their person's role. Below are the people whose role vx checked recently.</p>
+    {{else}}
     <p class="muted">Who may read, write or administer this repository, and why. Roles come from the organization's default role, from teams and from direct grants; the highest one counts. Agents get at most their person's role.</p>
+    {{end}}
   </div>
 </div>
 {{template "admin-flash" .Flash}}
@@ -41,7 +45,9 @@
     </tbody>
   </table>
   </div>
-  {{if .IsHuman}}
+  {{if .Repo.GitHubBacked}}
+  <p class="panel-note muted small">People and teams are not granted roles here: their roles come from GitHub. Only service principals keep direct grants (<span class="mono">vx repo grant {{$repo}} service:NAME --role read</span>).</p>
+  {{else if .IsHuman}}
   <form method="post" action="/ui/repos/{{$repo}}/access/grant" class="admin-form">
     <div class="field"><label for="grant-kind">Grant to</label>
       <select id="grant-kind" name="kind"><option value="user"{{if eq .Kind "user"}} selected{{end}}>a person</option><option value="team"{{if eq .Kind "team"}} selected{{end}}>a team</option></select></div>

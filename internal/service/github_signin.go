@@ -520,13 +520,4 @@ func (s *Service) DismissWelcome(ctx context.Context, actor Actor, dismissed boo
 	return classify(s.Store.SetWelcomeDismissed(ctx, actor.ID, dismissed))
 }
 
-// SyncGitHubOrgs refreshes a person's organization memberships from GitHub.
-// vx-ghperms replaces this no-op with the real one in github_roles.go.
-func (s *Service) SyncGitHubOrgs(ctx context.Context, person store.Principal) error { return nil }
-
-// MyGitHubInstallations lists the App's installations on the person's own
-// GitHub account and on GitHub organizations they belong to.
-// vx-ghperms replaces this stub with the real one.
-func (s *Service) MyGitHubInstallations(ctx context.Context, actor Actor) ([]GitHubInstallation, error) {
-	return nil, nil
-}
+// SyncGitHubOrgs and MyGitHubInstallations are in github_roles.go.

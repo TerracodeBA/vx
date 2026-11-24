@@ -116,7 +116,7 @@
     {{range .Repos}}
       <tr>
         <td class="cell-main"><a class="row-link mono" href="/ui/repo?name={{.Name}}">{{.Name}}</a>{{if .Remote}}<div class="cell-sub mono">{{.Remote}}</div>{{end}}</td>
-        <td>{{if $o.DefaultRepoRole}}<span class="badge">{{$o.DefaultRepoRole}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+        <td>{{if .GitHubBacked}}<span class="muted">roles from GitHub</span>{{else if $o.DefaultRepoRole}}<span class="badge">{{$o.DefaultRepoRole}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
         <td>{{if .MyRole}}<span class="badge{{if eq .MyRole "admin"}} badge-admin{{end}}">{{.MyRole}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
         <td class="num">{{if .Admin}}<a class="btn ghost small-btn" href="/ui/repos/{{.Name}}/access">Access</a>{{end}}</td>
       </tr>

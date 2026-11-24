@@ -258,6 +258,9 @@ func (s *Service) SetMember(ctx context.Context, actor Actor, org, person string
 		if err != nil {
 			return err
 		}
+		if a.org.GitHubLinked() {
+			return s.refuseOnGitHubOrg(a.org, "add members or change their roles")
+		}
 		if a.org.Personal {
 			return errf(CodeFailedPrecondition, "%s is a personal organization and has only its person; create a shared one with `vx org create HANDLE`, or grant access to single repositories with `vx repo grant`", a.org.Handle)
 		}
@@ -320,6 +323,9 @@ func (s *Service) RemoveMember(ctx context.Context, actor Actor, org, person str
 		if err != nil {
 			return err
 		}
+		if a.org.GitHubLinked() {
+			return s.refuseOnGitHubOrg(a.org, "remove members")
+		}
 		p, err := s.resolvePerson(ctx, tx, person)
 		if err != nil {
 			return err
@@ -364,6 +370,9 @@ func (s *Service) CreateTeam(ctx context.Context, actor Actor, org, name string)
 		if err != nil {
 			return err
 		}
+		if a.org.GitHubLinked() {
+			return s.refuseOnGitHubOrg(a.org, "manage teams")
+		}
 		if a.org.Personal {
 			return errf(CodeFailedPrecondition, "%s is a personal organization and has no teams; create a shared one with `vx org create HANDLE`", a.org.Handle)
 		}
@@ -386,6 +395,9 @@ func (s *Service) DeleteTeam(ctx context.Context, actor Actor, org, name string)
 		a, err := s.manageable(ctx, tx, actor, org, "deleting teams")
 		if err != nil {
 			return err
+		}
+		if a.org.GitHubLinked() {
+			return s.refuseOnGitHubOrg(a.org, "manage teams")
 		}
 		t, err := tx.TeamByName(ctx, a.org, strings.ToLower(strings.TrimSpace(name)))
 		if err != nil {
@@ -416,6 +428,9 @@ func (s *Service) changeTeam(ctx context.Context, actor Actor, org, team, person
 		a, err := s.manageable(ctx, tx, actor, org, "changing teams")
 		if err != nil {
 			return err
+		}
+		if a.org.GitHubLinked() {
+			return s.refuseOnGitHubOrg(a.org, "manage teams")
 		}
 		t, err := tx.TeamByName(ctx, a.org, strings.ToLower(strings.TrimSpace(team)))
 		if err != nil {
@@ -527,6 +542,8 @@ type grantChange struct {
 }
 
 // GrantRepo gives a person or team a role on a repository (repo admins).
+// On a GitHub-backed repository only service principals can be granted:
+// people's roles come from GitHub.
 func (s *Service) GrantRepo(ctx context.Context, actor Actor, repo, subject string, role RepoRole) (RepoGrant, error) {
 	if err := peopleOnly(actor, "grant repository roles"); err != nil {
 		return RepoGrant{}, err
@@ -546,6 +563,9 @@ func (s *Service) GrantRepo(ctx context.Context, actor Actor, repo, subject stri
 		if err != nil {
 			return err
 		}
+		if r.GitHubBacked() && (sub.team != nil || sub.principal.Kind != store.KindService) {
+			return s.refuseOnGitHubRepo(r, "grant roles to people or teams")
+		}
 		pid, tid := sub.ids()
 		prev, err := tx.SetRepoGrant(ctx, r.ID, pid, tid, string(role))
 		if err != nil {
@@ -561,7 +581,9 @@ func (s *Service) GrantRepo(ctx context.Context, actor Actor, repo, subject stri
 	return out, classify(err)
 }
 
-// RevokeRepo removes a direct grant (repo admins).
+// RevokeRepo removes a direct grant (repo admins). It also works on
+// GitHub-backed repositories, to clean up grants made before the
+// repository was linked (they have no effect there).
 func (s *Service) RevokeRepo(ctx context.Context, actor Actor, repo, subject string) error {
 	if err := peopleOnly(actor, "revoke repository roles"); err != nil {
 		return err
@@ -598,6 +620,9 @@ func (s *Service) RepoAccess(ctx context.Context, actor Actor, repo string) ([]R
 	rows, err := s.Store.ListRepoGrants(ctx, r.ID)
 	if err != nil {
 		return nil, nil, err
+	}
+	if r.GitHubBacked() {
+		return s.githubRepoAccess(ctx, r, rows)
 	}
 	var grants []RepoGrant
 	for _, g := range rows {
