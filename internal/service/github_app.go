@@ -425,3 +425,23 @@ func (s *Service) checkManifestState(person uuid.UUID, state string) error {
 	}
 	return nil
 }
+
+// GitHubRepoToken returns an installation token for a repository linked
+// to an installation of the App, for git over HTTPS (user x-access-token)
+// and API calls; "" for other repositories, which use VX_GITHUB_TOKEN or
+// SSH. The git bridge asks for it on every fetch, push and pull request;
+// the client caches tokens until shortly before they expire.
+func (s *Service) GitHubRepoToken(ctx context.Context, repo store.Repo) (string, error) {
+	if repo.Provider != store.ProviderGitHub || repo.GitHubInstallationID == nil {
+		return "", nil
+	}
+	api, err := s.GitHubClient(ctx)
+	if errors.Is(err, ErrGitHubNotConfigured) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	tok, _, err := api.InstallationToken(ctx, *repo.GitHubInstallationID)
+	return tok, err
+}

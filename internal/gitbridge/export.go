@@ -35,7 +35,7 @@ func (b *Bridge) ExportBranch(ctx context.Context, repo store.Repo, baseSHA, bra
 		return nil, errors.New("nothing to export")
 	}
 	defer b.lock(repo.ID)()
-	r, err := b.mirror(repo)
+	r, err := b.mirror(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (b *Bridge) ExportBranch(ctx context.Context, repo store.Repo, baseSHA, bra
 	}
 	spec := gitconfig.RefSpec(fmt.Sprintf("+%s:%s", ref, ref))
 	err = r.PushContext(ctx, &git.PushOptions{
-		RemoteName: "origin", RefSpecs: []gitconfig.RefSpec{spec}, Auth: b.auth(repo), Force: true,
+		RemoteName: "origin", RefSpecs: []gitconfig.RefSpec{spec}, Auth: b.auth(ctx, repo), Force: true,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil, fmt.Errorf("push %s: %w", branch, err)

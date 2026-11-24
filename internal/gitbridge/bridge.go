@@ -41,6 +41,10 @@ type Bridge struct {
 	Dir   string // root for bare mirrors
 	// GitHubToken returns a token for github.com, or "" for anonymous access.
 	GitHubToken func() string
+	// RepoToken returns a token for one GitHub repository (a GitHub App
+	// installation token), or "" to fall back to GitHubToken. nil: only
+	// GitHubToken is used.
+	RepoToken func(ctx context.Context, repo store.Repo) (string, error)
 	// GitHubAPI is the REST API base URL (tests point it at a fake).
 	GitHubAPI string
 	// GitHubGitBase is the base URL for git over HTTPS (tests override it).
@@ -88,11 +92,31 @@ func (b *Bridge) githubToken() string {
 	return b.GitHubToken()
 }
 
-func (b *Bridge) remoteURL(repo store.Repo) (string, error) {
+// UseRepoTokens sets RepoToken; the server passes the GitHub App's
+// installation tokens this way.
+func (b *Bridge) UseRepoTokens(f func(ctx context.Context, repo store.Repo) (string, error)) {
+	b.RepoToken = f
+}
+
+// tokenFor is the token for a GitHub repository: its installation token
+// when it has one, else GitHubToken.
+func (b *Bridge) tokenFor(ctx context.Context, repo store.Repo) string {
+	if b.RepoToken != nil && repo.Provider == store.ProviderGitHub {
+		tok, err := b.RepoToken(ctx, repo)
+		if err != nil {
+			b.Log.Warn("github installation token", "repo", repo.Name, "err", err)
+		} else if tok != "" {
+			return tok
+		}
+	}
+	return b.githubToken()
+}
+
+func (b *Bridge) remoteURL(ctx context.Context, repo store.Repo) (string, error) {
 	switch repo.Provider {
 	case store.ProviderGitHub:
 		base := strings.TrimRight(b.GitHubGitBase, "/")
-		if base == defaultGitHubBase && b.githubToken() == "" {
+		if base == defaultGitHubBase && b.tokenFor(ctx, repo) == "" {
 			// No token: use SSH with the server user's keys, like git does.
 			return "git@github.com:" + repo.Remote + ".git", nil
 		}
@@ -105,9 +129,9 @@ func (b *Bridge) remoteURL(repo store.Repo) (string, error) {
 
 // auth returns HTTPS credentials for GitHub when a token is set. Without
 // one, SSH remotes use the SSH agent and known_hosts, as git does.
-func (b *Bridge) auth(repo store.Repo) transport.AuthMethod {
+func (b *Bridge) auth(ctx context.Context, repo store.Repo) transport.AuthMethod {
 	if repo.Provider == store.ProviderGitHub {
-		if tok := b.githubToken(); tok != "" {
+		if tok := b.tokenFor(ctx, repo); tok != "" {
 			return &githttp.BasicAuth{Username: "x-access-token", Password: tok}
 		}
 	}
@@ -115,8 +139,8 @@ func (b *Bridge) auth(repo store.Repo) transport.AuthMethod {
 }
 
 // mirror opens the repo's bare mirror, creating it on first use.
-func (b *Bridge) mirror(repo store.Repo) (*git.Repository, error) {
-	url, err := b.remoteURL(repo)
+func (b *Bridge) mirror(ctx context.Context, repo store.Repo) (*git.Repository, error) {
+	url, err := b.remoteURL(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -147,12 +171,12 @@ func (b *Bridge) mirror(repo store.Repo) (*git.Repository, error) {
 
 // DefaultBranch asks the remote which branch HEAD points to.
 func (b *Bridge) DefaultBranch(ctx context.Context, repo store.Repo) (string, error) {
-	url, err := b.remoteURL(repo)
+	url, err := b.remoteURL(ctx, repo)
 	if err != nil {
 		return "", err
 	}
 	rem := git.NewRemote(nil, &gitconfig.RemoteConfig{Name: "origin", URLs: []string{url}})
-	refs, err := rem.ListContext(ctx, &git.ListOptions{Auth: b.auth(repo)})
+	refs, err := rem.ListContext(ctx, &git.ListOptions{Auth: b.auth(ctx, repo)})
 	if err != nil {
 		return "", err
 	}
@@ -191,7 +215,7 @@ func (b *Bridge) fetch(ctx context.Context, r *git.Repository, repo store.Repo, 
 		RemoteName: "origin",
 		RefSpecs:   []gitconfig.RefSpec{spec},
 		Depth:      depth,
-		Auth:       b.auth(repo),
+		Auth:       b.auth(ctx, repo),
 		Tags:       git.NoTags,
 		Force:      true,
 	})
@@ -216,7 +240,7 @@ func (b *Bridge) SyncBranch(ctx context.Context, repo store.Repo, branch string)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.Branch{}, 0, err
 	}
-	r, err := b.mirror(repo)
+	r, err := b.mirror(ctx, repo)
 	if err != nil {
 		return store.Branch{}, 0, err
 	}

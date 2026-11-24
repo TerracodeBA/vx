@@ -23,7 +23,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 	if repo.Provider != store.ProviderGitHub {
 		return provider.OpenedPR{}, provider.ErrNoPullRequests
 	}
-	if b.githubToken() == "" {
+	if b.tokenFor(ctx, repo) == "" {
 		// Without an API token vx can push but not open the PR. Hand back
 		// the page where a person opens it with one click.
 		return provider.OpenedPR{URL: fmt.Sprintf("https://github.com/%s/compare/%s...%s?expand=1", repo.Remote, compareRef(pr.Base), compareRef(pr.Head))},
@@ -37,7 +37,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`
 	}
-	status, body, err := b.github(ctx, http.MethodPost, "/repos/"+repo.Remote+"/pulls", map[string]any{
+	status, body, err := b.github(ctx, repo, http.MethodPost, "/repos/"+repo.Remote+"/pulls", map[string]any{
 		"title": pr.Title, "head": pr.Head, "base": pr.Base, "body": pr.Body, "draft": pr.Draft,
 	}, &created)
 	if err != nil {
@@ -55,7 +55,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 		HTMLURL string `json:"html_url"`
 	}
 	q := url.Values{"head": {owner + ":" + pr.Head}, "state": {"open"}}
-	status, body, err = b.github(ctx, http.MethodGet, "/repos/"+repo.Remote+"/pulls?"+q.Encode(), nil, &open)
+	status, body, err = b.github(ctx, repo, http.MethodGet, "/repos/"+repo.Remote+"/pulls?"+q.Encode(), nil, &open)
 	if err != nil {
 		return provider.OpenedPR{}, err
 	}
@@ -63,7 +63,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 		return provider.OpenedPR{}, fmt.Errorf("github: find open pull request: %d %s", status, trimBody(body))
 	}
 	n := open[0].Number
-	status, body, err = b.github(ctx, http.MethodPatch, "/repos/"+repo.Remote+"/pulls/"+strconv.Itoa(n), map[string]any{
+	status, body, err = b.github(ctx, repo, http.MethodPatch, "/repos/"+repo.Remote+"/pulls/"+strconv.Itoa(n), map[string]any{
 		"title": pr.Title, "body": pr.Body, "base": pr.Base,
 	}, nil)
 	if err != nil {
@@ -75,7 +75,7 @@ func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provid
 	return provider.OpenedPR{Number: n, URL: open[0].HTMLURL, Updated: true}, nil
 }
 
-func (b *Bridge) github(ctx context.Context, method, path string, in, out any) (int, string, error) {
+func (b *Bridge) github(ctx context.Context, repo store.Repo, method, path string, in, out any) (int, string, error) {
 	var rd io.Reader
 	if in != nil {
 		data, err := json.Marshal(in)
@@ -94,10 +94,8 @@ func (b *Bridge) github(ctx context.Context, method, path string, in, out any) (
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if b.GitHubToken != nil {
-		if tok := b.GitHubToken(); tok != "" {
-			req.Header.Set("Authorization", "Bearer "+tok)
-		}
+	if tok := b.tokenFor(ctx, repo); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {

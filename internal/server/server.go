@@ -85,6 +85,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
+	// Repositories of an installation fetch, push and open pull requests
+	// with its installation token.
+	if b, ok := up.(interface {
+		UseRepoTokens(func(context.Context, store.Repo) (string, error))
+	}); ok {
+		b.UseRepoTokens(svc.GitHubRepoToken)
+	}
 	// Repositories from before objects were scoped to repositories get their
 	// objects indexed: queue them now, so object requests for them wait for
 	// their backfill, and walk them in the background once serving.
