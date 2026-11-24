@@ -47,7 +47,7 @@ func principalPB(a service.Actor) *vxv1.Principal {
 func repoPB(r service.RepoView, branches []store.Branch) *vxv1.Repo {
 	out := &vxv1.Repo{
 		Name: r.Name, Provider: string(r.Provider), Remote: r.Remote, DefaultBranch: r.DefaultBranch,
-		MyRole: string(r.Role),
+		Org: r.Org, MyRole: string(r.Role),
 	}
 	for _, b := range branches {
 		out.Branches = append(out.Branches, branchPB(b))
