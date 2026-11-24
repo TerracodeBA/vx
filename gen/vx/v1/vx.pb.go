@@ -1192,7 +1192,7 @@ func (x *Conflict) GetTheirs() string {
 type Warning struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`     // the file or directory concerned, e.g. a Go package directory
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`     // duplicate, parse
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`     // duplicate, parse, check, generated, rule, signature, removed, merged-by-declaration
 	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"` // human-readable, e.g. "duplicate func clientIP in internal/httpapi (audit.go, limit.go)"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4309,6 +4309,7 @@ type LandResponse struct {
 	OverlappingClaims []*Claim               `protobuf:"bytes,9,rep,name=overlapping_claims,json=overlappingClaims,proto3" json:"overlapping_claims,omitempty"` // active claims of others on files this land changed; they never block a land
 	KeptBoth          []string               `protobuf:"bytes,10,rep,name=kept_both,json=keptBoth,proto3" json:"kept_both,omitempty"`                           // paths where both sides inserted different lines at the same place and vx kept both
 	Overlaps          []*Overlap             `protobuf:"bytes,11,rep,name=overlaps,proto3" json:"overlaps,omitempty"`                                           // this effort's forecast collisions after the land
+	MergedByDecl      []string               `protobuf:"bytes,12,rep,name=merged_by_decl,json=mergedByDecl,proto3" json:"merged_by_decl,omitempty"`             // .go paths whose lines conflicted but whose top-level declarations did not; merged declaration by declaration
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -4416,6 +4417,13 @@ func (x *LandResponse) GetKeptBoth() []string {
 func (x *LandResponse) GetOverlaps() []*Overlap {
 	if x != nil {
 		return x.Overlaps
+	}
+	return nil
+}
+
+func (x *LandResponse) GetMergedByDecl() []string {
+	if x != nil {
+		return x.MergedByDecl
 	}
 	return nil
 }
@@ -11357,7 +11365,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"depends_on\x18\x06 \x03(\tR\tdependsOn\x12\x14\n" +
 	"\x05model\x18\a \x01(\tR\x05model\x12\x18\n" +
 	"\asession\x18\b \x01(\tR\asession\x12+\n" +
-	"\x12require_up_to_date\x18\t \x01(\bR\x0frequireUpToDate\"\xb6\x03\n" +
+	"\x12require_up_to_date\x18\t \x01(\bR\x0frequireUpToDate\"\xdc\x03\n" +
 	"\fLandResponse\x12\x16\n" +
 	"\x06landed\x18\x01 \x01(\bR\x06landed\x12.\n" +
 	"\tchangeset\x18\x02 \x01(\v2\x10.vx.v1.ChangesetR\tchangeset\x12\x18\n" +
@@ -11372,7 +11380,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x12overlapping_claims\x18\t \x03(\v2\f.vx.v1.ClaimR\x11overlappingClaims\x12\x1b\n" +
 	"\tkept_both\x18\n" +
 	" \x03(\tR\bkeptBoth\x12*\n" +
-	"\boverlaps\x18\v \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\" \n" +
+	"\boverlaps\x18\v \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\x12$\n" +
+	"\x0emerged_by_decl\x18\f \x03(\tR\fmergedByDecl\" \n" +
 	"\x0eAbandonRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"A\n" +
 	"\x0fAbandonResponse\x12.\n" +

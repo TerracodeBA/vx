@@ -327,6 +327,8 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 	next := c.Tree
 	resolvedBy := ""
 	var generated []engine.GeneratedFile
+	var sides *engine.GoSides
+	var byDecl []string
 	switch {
 	case resolved != nil:
 		next, resolvedBy = *resolved, actor.Ref()
@@ -356,6 +358,9 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 			}
 			next = mr.Tree
 			generated = mr.Generated
+			byDecl = mr.MergedByDecl
+			sides = &engine.GoSides{Base: parent.Tree, Ours: c.Tree, Theirs: cur.Tree, Merged: next,
+				OursName: "change " + c.ChangeID, TheirsName: r.OntoBranch + " (rebased)"}
 		}
 	}
 	changes, err := object.DiffTrees(ctx, s.Blobs, cur.Tree, next)
@@ -376,6 +381,10 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 	var warnings []engine.Warning
 	if len(changes) > 0 {
 		warnings = s.treeWarnings(ctx, next, changes)
+		if sides != nil {
+			warnings = append(warnings, s.sideWarnings(ctx, *sides)...)
+		}
+		warnings = append(warnings, engine.MergedByDeclWarnings(byDecl)...)
 		warnings = append(warnings, engine.GeneratedWarnings(generated)...)
 		warnings = append(warnings, s.ruleWarnings(ctx, cur.Tree, next)...)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
@@ -52,6 +53,12 @@ type MergeResult struct {
 	// different lines at the same place and the merge kept both (the side
 	// passed as theirs first). Worth a look: the order may matter.
 	KeptBoth []string
+	// MergedByDecl lists the .go paths in AutoMerged whose lines conflicted
+	// but whose top-level declarations did not: each side changed different
+	// functions, methods, types, vars or consts, so the file was rebuilt
+	// from both sides' declarations, imports united, and gofmt'ed. Worth a
+	// look, like KeptBoth.
+	MergedByDecl []string
 	// Generated lists generated files both sides changed. They are never
 	// text-merged: the result has ours (the side being landed, synced,
 	// shipped or replayed), and the file has to be regenerated.
@@ -189,7 +196,7 @@ func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 			}
 			continue
 		}
-		merged, keptBoth, conflict, err := mergeFile(ctx, s, o, t, labels)
+		merged, how, conflict, err := mergeFile(ctx, s, o, t, labels)
 		if err != nil {
 			return res, err
 		}
@@ -209,8 +216,11 @@ func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 			continue
 		}
 		res.AutoMerged = append(res.AutoMerged, o.Path)
-		if keptBoth {
+		switch how {
+		case mergedKeptBoth:
 			res.KeptBoth = append(res.KeptBoth, o.Path)
+		case mergedByDecl:
+			res.MergedByDecl = append(res.MergedByDecl, o.Path)
 		}
 		apply = append(apply, object.Change{Path: o.Path, Op: object.OpModify, Old: t.New, New: merged})
 	}
@@ -253,9 +263,18 @@ func (c mergeConfig) isGenerated(ctx context.Context, s blob.Store, o, t object.
 	return "", false, nil
 }
 
+// mergeHow says how a file merged without conflicts.
+type mergeHow int
+
+const (
+	mergedLines    mergeHow = iota // line by line
+	mergedKeptBoth                 // line by line, keeping both sides' insertions somewhere
+	mergedByDecl                   // the lines conflicted, the Go declarations did not
+)
+
 // mergeFile merges one path changed on both sides (neither deleted it).
-// keptBoth reports a clean merge that kept both sides' insertions somewhere.
-func mergeFile(ctx context.Context, s blob.Store, o, t object.Change, labels merge.Labels) (_ object.File, keptBoth bool, _ *Conflict, _ error) {
+// how says how a clean merge was made.
+func mergeFile(ctx context.Context, s blob.Store, o, t object.Change, labels merge.Labels) (_ object.File, how mergeHow, _ *Conflict, _ error) {
 	base := o.Old // equal to t.Old; zero when both added the file
 	kind := ConflictContent
 	if o.Op == object.OpAdd {
@@ -267,45 +286,57 @@ func mergeFile(ctx context.Context, s blob.Store, o, t object.Change, labels mer
 	if !ok {
 		conflict.Kind = ConflictMode
 		conflict.Detail = fmt.Sprintf("ours set %s, theirs set %s", o.New.Mode, t.New.Mode)
-		return object.File{}, false, conflict, nil
+		return object.File{}, mergedLines, conflict, nil
 	}
 	if o.New.Hash == t.New.Hash {
-		return object.File{Hash: o.New.Hash, Mode: mode}, false, nil, nil
+		return object.File{Hash: o.New.Hash, Mode: mode}, mergedLines, nil, nil
 	}
 	if o.New.Mode == object.ModeSymlink || t.New.Mode == object.ModeSymlink {
 		conflict.Detail = "symbolic links point to different targets"
-		return object.File{}, false, conflict, nil
+		return object.File{}, mergedLines, conflict, nil
 	}
 	var baseData []byte
 	if !base.Hash.IsZero() {
 		var err error
 		if baseData, err = blob.GetKind(ctx, s, hash.KindBlob, base.Hash); err != nil {
-			return object.File{}, false, nil, err
+			return object.File{}, mergedLines, nil, err
 		}
 	}
 	ourData, err := blob.GetKind(ctx, s, hash.KindBlob, o.New.Hash)
 	if err != nil {
-		return object.File{}, false, nil, err
+		return object.File{}, mergedLines, nil, err
 	}
 	theirData, err := blob.GetKind(ctx, s, hash.KindBlob, t.New.Hash)
 	if err != nil {
-		return object.File{}, false, nil, err
+		return object.File{}, mergedLines, nil, err
 	}
 	r, ok := merge.Merge3Bytes(baseData, ourData, theirData, labels)
 	if !ok {
 		conflict.Kind = ConflictBinary
-		return object.File{}, false, conflict, nil
+		return object.File{}, mergedLines, conflict, nil
+	}
+	if r.Conflicts > 0 && !base.Hash.IsZero() && strings.HasSuffix(o.Path, ".go") {
+		if data, ok := mergeGoDecls(baseData, ourData, theirData); ok {
+			h, err := s.Put(ctx, hash.KindBlob, data)
+			if err != nil {
+				return object.File{}, mergedLines, nil, err
+			}
+			return object.File{Hash: h, Mode: mode}, mergedByDecl, nil, nil
+		}
 	}
 	if r.Conflicts > 0 {
 		conflict.Markers = r.Bytes()
 		conflict.Detail = fmt.Sprintf("%d conflicting region(s)", r.Conflicts)
-		return object.File{}, false, conflict, nil
+		return object.File{}, mergedLines, conflict, nil
 	}
 	h, err := s.Put(ctx, hash.KindBlob, r.Bytes())
 	if err != nil {
-		return object.File{}, false, nil, err
+		return object.File{}, mergedLines, nil, err
 	}
-	return object.File{Hash: h, Mode: mode}, r.KeptBoth > 0, nil, nil
+	if r.KeptBoth > 0 {
+		return object.File{Hash: h, Mode: mode}, mergedKeptBoth, nil, nil
+	}
+	return object.File{Hash: h, Mode: mode}, mergedLines, nil, nil
 }
 
 // mergeMode picks the merged file mode. A side that kept the base mode

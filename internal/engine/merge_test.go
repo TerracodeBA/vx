@@ -66,9 +66,9 @@ func (f *fixture) read(root hash.Hash) map[string]string {
 	return out
 }
 
-func (f *fixture) merge(base, ours, theirs map[string]string) MergeResult {
+func (f *fixture) merge(base, ours, theirs map[string]string, opts ...MergeOption) MergeResult {
 	f.t.Helper()
-	r, err := MergeTrees(f.ctx, f.s, f.tree(base), f.tree(ours), f.tree(theirs), merge.Labels{Base: "base", Ours: "ours", Theirs: "theirs"})
+	r, err := MergeTrees(f.ctx, f.s, f.tree(base), f.tree(ours), f.tree(theirs), merge.Labels{Base: "base", Ours: "ours", Theirs: "theirs"}, opts...)
 	if err != nil {
 		f.t.Fatal(err)
 	}

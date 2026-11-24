@@ -159,6 +159,7 @@ the result.`,
 						return errConflict
 					}
 					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
+					opts.mergedByDecl = unionSorted(opts.mergedByDecl, res.mergedByDecl)
 				}
 				ran, failed := a.runChecks(wc.Root, runs)
 				if failed && !allowFailing {
@@ -208,6 +209,9 @@ type landOptions struct {
 	// keptBoth are files a sync before this land merged by keeping both
 	// sides' insertions; shown with the server's list.
 	keptBoth []string
+	// mergedByDecl are .go files a sync before this land merged
+	// declaration by declaration.
+	mergedByDecl []string
 }
 
 var errEffortMoved = errors.New("effort moved")
@@ -357,6 +361,10 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if len(r.KeptBoth) > 0 {
 		a.printf("  Kept both insertions (check the order): %s\n", strings.Join(r.KeptBoth, ", "))
 	}
+	r.MergedByDecl = unionSorted(r.MergedByDecl, o.mergedByDecl)
+	if len(r.MergedByDecl) > 0 {
+		a.printf("  Merged by declaration (the lines conflicted, the Go declarations did not; check the result): %s\n", strings.Join(r.MergedByDecl, ", "))
+	}
 	if len(incoming) > 0 {
 		a.printf("  Updated %d file(s) here with others' changes.\n", len(incoming))
 	}
@@ -397,7 +405,7 @@ func (a *App) printWarnings(ws []*vxv1.Warning) {
 	for _, w := range ws {
 		a.printf("Warning: %s\n", w.Detail)
 		switch engine.WarningKind(w.Kind) {
-		case engine.WarningDuplicate, engine.WarningParse:
+		case engine.WarningDuplicate, engine.WarningParse, engine.WarningSignature, engine.WarningRemoved:
 			code = true
 		case engine.WarningGenerated:
 			generated = true
@@ -471,6 +479,10 @@ type syncResult struct {
 	// keptBoth are the merged files where both sides inserted different
 	// lines at the same place and the merge kept both, effort side first.
 	keptBoth []string
+	// mergedByDecl are the merged .go files whose lines conflicted but
+	// whose top-level declarations did not: rebuilt from both sides'
+	// declarations.
+	mergedByDecl []string
 	// warnings are problems the merge created in Go packages you changed,
 	// such as a function or method now declared in two files.
 	warnings []engine.Warning
@@ -489,11 +501,15 @@ func (r syncResult) json() map[string]any {
 	if keptBoth == nil {
 		keptBoth = []string{}
 	}
+	byDecl := r.mergedByDecl
+	if byDecl == nil {
+		byDecl = []string{}
+	}
 	wj := []map[string]any{}
 	for _, w := range r.warnings {
 		wj = append(wj, map[string]any{"path": w.Path, "kind": string(w.Kind), "name": w.Name, "decl": w.Decl, "files": w.Files, "detail": w.Detail})
 	}
-	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth, "warnings": wj}
+	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth, "merged_by_decl": byDecl, "warnings": wj}
 }
 
 // syncWorkingCopy brings the working copy to the effort head, merging local
@@ -524,7 +540,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	}
 	result := theirs
 	var conflicts []engine.Conflict
-	var keptBoth []string
+	var keptBoth, byDecl []string
 	var generated []engine.GeneratedFile
 	if len(local) > 0 {
 		mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, wc.Config.BaseTreeHash(), ours, theirs, merge.Labels{
@@ -533,7 +549,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 		if err != nil {
 			return syncResult{}, err
 		}
-		result, conflicts, keptBoth, generated = mr.Tree, mr.Conflicts, mr.KeptBoth, mr.Generated
+		result, conflicts, keptBoth, byDecl, generated = mr.Tree, mr.Conflicts, mr.KeptBoth, mr.MergedByDecl, mr.Generated
 	}
 	incoming, err := object.DiffTrees(ctx, wc.Objects, ours, result)
 	if err != nil {
@@ -553,6 +569,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	}
 	merged := mergedFiles(local, incoming, conflicts)
 	sort.Strings(keptBoth)
+	sort.Strings(byDecl)
 	a.printf("Synced to %s: %d file(s) updated", short(head), len(incoming))
 	if len(local) > 0 {
 		a.printf(", your %d local change(s) kept", len(local))
@@ -560,6 +577,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	a.printf(".\n")
 	a.printPaths("Merged with your edits", merged)
 	a.printKeptBoth(keptBoth)
+	a.printPaths("Merged by declaration (the lines conflicted, the Go declarations did not; check the result)", byDecl)
 	warnings := syncWarnings(ctx, wc, result, local, incoming, conflicts)
 	dups := len(warnings) > 0
 	for _, w := range warnings {
@@ -567,6 +585,19 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	}
 	if dups {
 		a.printf("  The text merged cleanly but the code will not build: your edits and the incoming changes both declare it. Remove one before landing.\n")
+	}
+	if len(local) > 0 {
+		sides, _ := engine.CheckGoSides(ctx, wc.Objects, engine.GoSides{
+			Base: wc.Config.BaseTreeHash(), Ours: ours, Theirs: theirs, Merged: result,
+			OursName: "your local changes", TheirsName: "the effort",
+		})
+		for _, w := range sides {
+			a.printf("Warning: %s\n", w.Detail)
+		}
+		if len(sides) > 0 {
+			a.printf("  A signature or name changed on one side is used the old way by the other; update the callers (or the signature) before landing.\n")
+		}
+		warnings = append(warnings, sides...)
 	}
 	more := engine.GeneratedWarnings(generated)
 	if len(local) > 0 {
@@ -579,7 +610,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 		a.printf("  Both you and the effort changed generated files; vx kept yours. Regenerate them before landing.\n")
 	}
 	warnings = append(warnings, more...)
-	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, warnings: warnings}, nil
+	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, mergedByDecl: byDecl, warnings: warnings}, nil
 }
 
 // syncWarnings runs the land-time Go check on the merged tree, for the Go
