@@ -299,7 +299,7 @@ details[open] > summary .chev { transform: rotate(90deg); }
 .diff-table tr.hunk td { background: var(--d-hunk); color: var(--d-hunk-fg); padding: 4px 10px; }
 .diff-table .half { width: 50%; }
 .diff-s { display: none; table-layout: fixed; }
-.diff-s .ln { width: 52px; }
+.diff-s .ln, .diff-s col.c-ln { width: 52px; }
 .diff-s .txt { white-space: pre-wrap; word-break: break-all; }
 html[data-diff="split"] .diff-u { display: none; }
 html[data-diff="split"] .diff-s { display: table; }
