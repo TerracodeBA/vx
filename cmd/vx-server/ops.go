@@ -159,9 +159,9 @@ limit; "default" goes back to the server's default.
 				return err
 			}
 			if changed {
-				fmt.Printf("Saved the quotas of %s.\n", org.Handle)
+				fmt.Fprintf(cmd.OutOrStdout(), "Saved the quotas of %s.\n", org.Handle)
 			}
-			fmt.Printf("Quotas of %s (used / limit):\n", org.Handle)
+			fmt.Fprintf(cmd.OutOrStdout(), "Quotas of %s (used / limit):\n", org.Handle)
 			for _, r := range u.Rows() {
 				src := ""
 				if !r.Default {
@@ -171,7 +171,7 @@ limit; "default" goes back to the server's default.
 				if used == "" {
 					used = "per request"
 				}
-				fmt.Printf("  %-14s %-18s %s%s\n", r.Label, used, r.Limit, src)
+				fmt.Fprintf(cmd.OutOrStdout(), "  %-14s %-18s %s%s\n", r.Label, used, r.Limit, src)
 			}
 			return nil
 		},
