@@ -84,8 +84,8 @@ func forMe(n *vxv1.Note, me string, paths []string) bool {
 	if n.Read || n.Trust == "self" || (me != "" && n.Author.GetRef() == me) {
 		return false
 	}
-	if n.Kind == "decision" || n.Kind == "interface" {
-		return true
+	if n.Kind == "decision" || n.Kind == "interface" || n.Kind == "rebase" {
+		return true // rebase: vx moved the effort, or says it needs moving
 	}
 	if me != "" && n.To == me {
 		return true
@@ -428,14 +428,15 @@ type noteWatch struct {
 	me    string
 }
 
-var watchedKinds = []string{"decision", "interface"}
+// watchedKinds wake vx wait: decisions and interfaces on the agent's
+// files, review comments and CI results addressed to it, and rebase notes.
+var watchedKinds = []string{"decision", "interface", "review", "ci", "rebase"}
 
-// startNoteWatch remembers the newest decision or interface note, so only
-// later ones wake vx wait. It returns nil when there is nothing to watch
-// (no local changes) or the server has no board.
+// startNoteWatch remembers the newest watched note, so only later ones
+// wake vx wait. It returns nil when the server has no board.
 func (a *App) startNoteWatch(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy) *noteWatch {
 	changes, err := wc.Status(ctx)
-	if err != nil || len(changes) == 0 {
+	if err != nil {
 		return nil
 	}
 	resp, err := c.Board.ListNotes(ctx, connect.NewRequest(&vxv1.ListNotesRequest{
@@ -472,7 +473,14 @@ func (a *App) waitBoardNote(ctx context.Context, c *client.Client, wc *workcopy.
 			continue
 		}
 		w.seen[n.Id] = true
-		if n.Read || n.Trust == "self" || n.Author.GetRef() == w.me || !onPaths(n.Targets, w.paths) {
+		if n.Read || n.Trust == "self" || n.Author.GetRef() == w.me {
+			continue
+		}
+		switch {
+		case feedbackKinds[n.Kind] && w.me != "" && n.To == w.me:
+		case n.Kind == "rebase":
+		case (n.Kind == "decision" || n.Kind == "interface") && onPaths(n.Targets, w.paths):
+		default:
 			continue
 		}
 		hit = n
@@ -480,11 +488,18 @@ func (a *App) waitBoardNote(ctx context.Context, c *client.Client, wc *workcopy.
 	if hit == nil {
 		return false
 	}
-	article := "A"
-	if hit.Kind == "interface" {
-		article = "An"
+	switch hit.Kind {
+	case "review":
+		a.printf("A review comment for you arrived from the git host. %s\n", boardFraming)
+	case "ci":
+		a.printf("A CI result for your changes arrived from the git host. %s\n", boardFraming)
+	case "rebase":
+		a.printf("vx rebased this effort, or says it needs a rebase. %s\n", boardFraming)
+	case "interface":
+		a.printf("An interface on a file you changed arrived. %s\n", boardFraming)
+	default:
+		a.printf("A %s on a file you changed arrived. %s\n", hit.Kind, boardFraming)
 	}
-	a.printf("%s %s on a file you changed arrived. %s\n", article, hit.Kind, boardFraming)
 	a.printNote(hit, noteOpts{me: w.me, indent: "  "})
 	a.markRead(ctx, c, hit)
 	a.printf("Read it before you continue; see the board with: vx board\n")

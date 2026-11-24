@@ -23,10 +23,12 @@ const (
 	maxNoteListLimit = 1000
 	maxInboxNotes    = 200
 	inboxAnswerAge   = 7 * 24 * time.Hour // answers older than this leave the inbox
-	contextNotes     = 50
-	contextChanges   = 20
-	contextChainScan = 500 // landed changes Context looks back through
-	noteScanPage     = 500 // notes read per query while filtering by target
+	// inboxSystemNoteAge: review and CI notes older than this leave the inbox.
+	inboxSystemNoteAge = 14 * 24 * time.Hour
+	contextNotes       = 50
+	contextChanges     = 20
+	contextChainScan   = 500 // landed changes Context looks back through
+	noteScanPage       = 500 // notes read per query while filtering by target
 )
 
 var postKinds = map[NoteKind]bool{
@@ -36,6 +38,8 @@ var postKinds = map[NoteKind]bool{
 var allKinds = map[NoteKind]bool{
 	NotePlan: true, NoteDecision: true, NoteInterface: true, NoteQuestion: true, NoteAnswer: true,
 	NoteBlocker: true, NoteHandoff: true,
+	// posted by vx itself
+	NoteOverlap: true, NoteReview: true, NoteCI: true, NoteRebase: true,
 }
 
 // cleanBody drops control characters other than newline and tab (and

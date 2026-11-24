@@ -31,9 +31,10 @@ func (s *Service) applyUpstreamPush(ctx context.Context, repo store.Repo, branch
 	}
 	if n > 0 {
 		_ = s.Store.LogOp(ctx, &repo.ID, nil, "branch.sync", branch, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n, "by": by})
-		s.markMergedEfforts(ctx, repo, branch)
 		s.scheduleBranchForecast(repo, branch)
 	}
+	// Also when nothing new came in: a merge vx missed may be on it.
+	s.BranchMoved(ctx, repo, branch, by)
 	return nil
 }
 
@@ -52,6 +53,8 @@ func (s *Service) applyMergedPullRequest(ctx context.Context, repo store.Repo, h
 	if base == "" {
 		base = repo.DefaultBranch
 	}
+	// The other efforts on base rebase once this one is closed.
+	defer s.autoRebase(context.WithoutCancel(ctx), repo, base, strings.ToLower(host)+" pull request merged")
 	if s.Upstream != nil {
 		if b, n, err := s.Upstream.SyncBranch(ctx, repo, base); err == nil && n > 0 {
 			_ = s.Store.LogOp(ctx, &repo.ID, nil, "branch.sync", base, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n, "by": strings.ToLower(host) + " pull request merged"})

@@ -694,6 +694,18 @@ message Shipment {
   string updated_at = 12;
   string split = 13; // independent, stacked; empty: one pull request
   int32 part = 14; // 1-based part of a split; 0: one pull request
+  string ci_state = 15; // CI of the head commit: "", pending, passed, failed (v0.4)
+  string ci_sha = 16; // the commit ci_state is about
+  repeated ShipmentCheck ci_checks = 17; // the checks reported for ci_sha
+}
+
+// ShipmentCheck is one CI check the git host reported for a shipped commit.
+message ShipmentCheck {
+  string name = 1;
+  string source = 2; // check_run, check_suite, status, pipeline
+  string status = 3; // queued, in_progress, completed
+  string conclusion = 4; // success, failure, ... once completed
+  string url = 5;
 }
 
 message PlanShipmentRequest {
@@ -851,6 +863,10 @@ message InboxResponse {
   repeated Note questions = 1; // open questions addressed to the caller (or, for people, to their agents)
   repeated Note answers = 2; // answers to questions the caller asked, newest first
   repeated Note escalated = 3; // people only: questions past their deadline in their efforts or to their agents
+  // System notes addressed to the caller (people: also to their agents)
+  // that no newer note replaced, newest first: review comments and CI
+  // results from the git host (v0.4).
+  repeated Note notes = 4;
 }
 
 message ContextRequest {

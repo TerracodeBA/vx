@@ -191,6 +191,10 @@ var authzOps = []authzOp{
 		_, err := e.svc.ListShipments(e.ctx, a, "acme/shop", e.eff.Slug)
 		return err
 	}},
+	{"ShipmentsCI", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ShipmentsCI(e.ctx, a, "acme/shop", e.eff.Slug)
+		return err
+	}},
 	{"ListNotes", service.RoleRead, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.ListNotes(e.ctx, a, service.ListNotesInput{Repo: "acme/shop", Effort: e.eff.Slug})
 		return err

@@ -120,6 +120,9 @@ func (s *Service) applyGitHubEvent(ctx context.Context, event string, body []byt
 	case "push":
 		return s.applyGitHubPush(ctx, p)
 
+	case "pull_request_review", "pull_request_review_comment", "issue_comment", "check_run", "check_suite", "status":
+		return s.applyGitHubFeedback(ctx, event, body) // feedback_github.go
+
 	case "member": // a repository collaborator added, removed or changed
 		if p.Repository == nil {
 			return nil

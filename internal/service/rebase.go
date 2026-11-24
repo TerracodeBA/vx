@@ -48,51 +48,59 @@ func (s *Service) RebaseEffort(ctx context.Context, actor Actor, repoName, slug,
 	if err != nil {
 		return RebaseView{}, err
 	}
-	if v.Effort.State != store.EffortOpen {
-		return RebaseView{}, errf(CodeFailedPrecondition, "effort %s is %s; only open efforts can be rebased", slug, v.Effort.State)
-	}
-	if active, err := s.Store.ActiveRebase(ctx, v.Effort.ID); err == nil {
-		return s.rebaseView(ctx, v.Repo, v.Effort, active), s.inProgress(ctx, v.Effort, active)
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return RebaseView{}, err
-	}
 	if onto == "" {
 		onto = v.Effort.BaseBranch
 	}
-	branch, _, err := s.SyncBranch(ctx, actor, repoName, onto)
+	if v.Effort.State != store.EffortOpen {
+		return RebaseView{}, errf(CodeFailedPrecondition, "effort %s is %s; only open efforts can be rebased", slug, v.Effort.State)
+	}
+	// The internal sync: vx repo sync also starts automatic rebases, which
+	// must not race this one.
+	branch, _, err := s.syncBranch(ctx, actor, v.Repo, onto)
 	if err != nil {
 		return RebaseView{}, err
 	}
-	target, err := s.Store.GetChangeset(ctx, v.Repo.ID, branch.Head)
+	return s.rebaseOnto(ctx, actor, v.Repo, v.Effort, branch)
+}
+
+// rebaseOnto is RebaseEffort onto an imported branch, for a caller that
+// checked write on the repository (or vx itself, rebasing automatically).
+func (s *Service) rebaseOnto(ctx context.Context, actor Actor, repo store.Repo, eff store.Effort, branch store.Branch) (RebaseView, error) {
+	onto := branch.Name
+	if active, err := s.Store.ActiveRebase(ctx, eff.ID); err == nil {
+		return s.rebaseView(ctx, repo, eff, active), s.inProgress(ctx, eff, active)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return RebaseView{}, err
+	}
+	target, err := s.Store.GetChangeset(ctx, repo.ID, branch.Head)
 	if err != nil {
 		return RebaseView{}, err
 	}
-	eff := v.Effort
 	if eff.Base == branch.Head && onto == eff.BaseBranch {
-		return RebaseView{Repo: v.Repo, Effort: eff, UpToDate: true}, nil
+		return RebaseView{Repo: repo, Effort: eff, UpToDate: true}, nil
 	}
-	pending, err := s.replayList(ctx, v.Repo, eff.Head, eff.Base)
+	pending, err := s.replayList(ctx, repo, eff.Head, eff.Base)
 	if err != nil {
 		return RebaseView{}, err
 	}
 	r, err := s.Store.StartRebase(ctx, store.Rebase{
-		RepoID: v.Repo.ID, EffortID: eff.ID, OntoBranch: onto, Onto: target.Hash, OntoGitSHA: target.GitSHA,
+		RepoID: repo.ID, EffortID: eff.ID, OntoBranch: onto, Onto: target.Hash, OntoGitSHA: target.GitSHA,
 		OldBase: eff.Base, OldHead: eff.Head, SeenHead: eff.Head, NewHead: target.Hash,
 		Pending: pending, StartedBy: actor.ID,
 	})
 	if errors.Is(err, store.ErrExists) {
 		// Someone started one between our check and the insert.
 		if active, err2 := s.Store.ActiveRebase(ctx, eff.ID); err2 == nil {
-			return s.rebaseView(ctx, v.Repo, eff, active), s.inProgress(ctx, eff, active)
+			return s.rebaseView(ctx, repo, eff, active), s.inProgress(ctx, eff, active)
 		}
 	}
 	if err != nil {
 		return RebaseView{}, classify(err)
 	}
-	_ = s.Store.LogOp(ctx, &v.Repo.ID, &actor.ID, "effort.rebase", eff.Slug,
+	_ = s.Store.LogOp(ctx, &repo.ID, &actor.ID, "effort.rebase", eff.Slug,
 		map[string]string{"base": eff.Base.String(), "head": eff.Head.String()},
 		map[string]any{"rebase": r.ID.String(), "onto": onto, "onto_changeset": target.Hash.String(), "onto_git_sha": target.GitSHA, "changes": len(pending)})
-	return s.advanceRebase(ctx, actor, v.Repo, r, nil)
+	return s.advanceRebase(ctx, actor, repo, r, nil)
 }
 
 // ContinueInput resolves the change a stopped rebase conflicts on.

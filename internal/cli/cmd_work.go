@@ -295,6 +295,9 @@ func (a *App) statusCmd() *cobra.Command {
 					}
 					out["pending_reviews"] = rs.Msg.Reviews
 				}
+				if ships := a.shipStatus(ctx, c, wc.Config.Repo, wc.Config.Effort); ships != nil {
+					out["shipments"] = ships
+				}
 			}
 			var files []map[string]string
 			if len(changes) == 0 {

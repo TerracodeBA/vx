@@ -1296,6 +1296,7 @@ func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		data["Commits"] = len(plan.Commits())
 	}
 	data["Shipments"], _ = u.svc.ListShipments(ctx, actor, repoName, slug)
+	data["CI"], _ = u.svc.ShipmentsCI(ctx, actor, repoName, slug)
 	data["Shipped"] = r.URL.Query().Get("shipped") != ""
 	u.render(w, r, "ship", data)
 }
