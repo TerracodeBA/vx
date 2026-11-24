@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"fmt"
 	"html"
 	"net/http"
 	"net/url"
@@ -101,5 +102,33 @@ func TestGitHubWebhookEndpoint(t *testing.T) {
 	}
 	if code := gh.DeliverRaw(t, hook, githubtest.Delivery{Event: "ping", Body: body, Signature: githubtest.Sign("wrong", body)}); code != http.StatusUnauthorized {
 		t.Fatalf("bad signature: %d", code)
+	}
+}
+
+// GitHub's setup URL brings a new installation in at once, without a
+// session, and asks GitHub only for installations vx does not know.
+func TestGitHubInstalledPage(t *testing.T) {
+	e := newAdminEnv(t)
+	gh := githubtest.New(t)
+	gh.Configure(t, e.svc)
+	gh.AddOrg("globex")
+	gh.AddRepo("globex/app", true)
+	id := gh.Install("globex")
+	page := fmt.Sprintf("%s/ui/github/installed?installation_id=%d&setup_action=install", e.srv.URL, id)
+	for range 2 {
+		resp, err := http.Get(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("installed page %d", resp.StatusCode)
+		}
+	}
+	if _, err := e.st.RepoByName(e.ctx, "globex/app"); err != nil {
+		t.Fatalf("installation not synced: %v", err)
+	}
+	if n := gh.Calls(fmt.Sprintf("GET /app/installations/%d", id)); n != 1 {
+		t.Fatalf("asked GitHub %d times", n)
 	}
 }
