@@ -44,6 +44,21 @@ flowchart LR
 
 Changesets list their tree, so two snapshots are compared by walking both trees and skipping every subtree whose hash is equal. The cost of a diff, a merge or an upload is proportional to the size of the change, not of the repository.
 
+## Objects are scoped per repository
+
+Blobs and trees are stored once, deduplicated across the whole server. Which repository an object belongs to is recorded separately in Postgres (`repo_objects`: repository, hash). Every object request names its repository, and:
+
+- `GetObjects` needs read access to the repository and serves only objects that are part of it. Any other hash is reported as not found, with the same message as a hash nobody ever stored, so the store cannot be probed across repositories.
+- `MissingObjects` answers for the repository: an object stored only for another repository counts as missing, so the client uploads it.
+- `PutObjects` needs write access. The server hashes the bytes it receives and records those hashes for the repository, so an object becomes part of a repository only when its content was sent. Uploading content the store already has is cheap: the bytes are not written again.
+- A land checks that every tree and blob its snapshot adds over its base is part of the repository, checking each level of trees before reading it. A snapshot that names another repository's objects without uploading them is refused, and learns nothing about them.
+
+Objects also become part of a repository when the git bridge imports them and when the server makes them itself from the repository's objects (three-way merges on land and ship). The empty tree is part of every repository. The web UI and the MCP tools read file contents through `Service.BlobReader`, which checks the same things.
+
+Requests without a repository come from clients older than v0.2 and are refused with "this vx is too old for the server: update vx".
+
+Repositories from before `repo_objects` are indexed once, from their changesets (`internal/service/objects_backfill.go`). Migration 009 queues every existing repository, and each server start also queues any repository that has changesets but no recorded objects. The server then walks the queued repositories one at a time in the background, recording for each changeset what differs from its parent's tree, and logs its progress. An object request for a repository that is still queued backfills that repository first, so it waits for its own walk only. The walk is idempotent and resumable; `vx-server backfill-objects [--repo OWNER/NAME]` runs it by hand.
+
 ## Landing
 
 ```mermaid
@@ -52,7 +67,7 @@ sequenceDiagram
   participant S as vx-server
   participant DB as Postgres
   A->>A: snapshot working copy into trees
-  A->>S: upload objects the server lacks
+  A->>S: upload objects the repository lacks on the server
   A->>S: Land(workspace, base, tree, evidence)
   S->>DB: read effort head
   alt head == base

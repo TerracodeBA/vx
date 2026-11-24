@@ -105,7 +105,7 @@ Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 | Step | What happens |
 |---|---|
-| Snapshot | The CLI scans the working copy (with `.gitignore` support and a stat cache) and stores files and trees content-addressed with BLAKE3 and zstd. Only objects the server lacks are uploaded. |
+| Snapshot | The CLI scans the working copy (with `.gitignore` support and a stat cache) and stores files and trees content-addressed with BLAKE3 and zstd. Only objects the repository lacks on the server are uploaded; objects are served only through repositories the caller can read. |
 | Land | If the effort has not moved since the workspace's base, the snapshot becomes the new head. Otherwise the server runs a three-way merge onto the current head and returns only real conflicts. |
 | Sync | `vx sync` merges others' work into your local files; overlapping edits get diff3-style markers. |
 | Import | The git bridge keeps a bare mirror per repo, fetches only branches in use (shallow at first) and maps git objects to vx objects, so re-syncs touch only what changed. |

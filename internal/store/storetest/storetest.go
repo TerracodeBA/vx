@@ -15,8 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/hash"
+	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/store"
 )
 
@@ -66,4 +70,19 @@ func New(t testing.TB) *store.Store {
 		conn.Close(ctx)
 	})
 	return s
+}
+
+// AddTree records the objects of tree that are not at the same path in
+// from as part of the repo, as an upload with that repo would. Tests that
+// write trees straight into a blob store call it before landing them.
+func AddTree(t testing.TB, s *store.Store, blobs blob.Store, repoID uuid.UUID, from, tree hash.Hash) {
+	t.Helper()
+	ctx := context.Background()
+	trees, files, err := object.NewObjects(ctx, blobs, from, tree)
+	if err != nil {
+		t.Fatalf("walk tree %s: %v", tree.Short(), err)
+	}
+	if err := s.AddRepoObjects(ctx, repoID, append(trees, files...)); err != nil {
+		t.Fatalf("record objects: %v", err)
+	}
 }

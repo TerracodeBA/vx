@@ -67,6 +67,7 @@ func (e *env) snapshot(repo store.Repo, base hash.Hash, files map[string]*string
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	storetest.AddTree(e.t, e.svc.Store, e.blobs, repo.ID, row.Tree, tree)
 	return tree
 }
 
@@ -202,6 +203,9 @@ func TestLandValidation(t *testing.T) {
 	missing := hash.Of(hash.KindBlob, []byte("never uploaded"))
 	tree, err := object.ApplyChanges(e.ctx, e.blobs, row.Tree, []object.Change{{Path: "x.go", Op: object.OpAdd, New: object.File{Hash: missing, Mode: object.ModeFile}}})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Store.AddRepoObjects(e.ctx, w.Repo.ID, []hash.Hash{tree}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = e.svc.Land(e.ctx, e.agent, service.LandInput{WorkspaceID: w.Workspace.ID, Tree: tree})

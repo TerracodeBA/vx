@@ -89,15 +89,18 @@ const (
 	batchBytes   = 16 << 20
 )
 
-// Upload sends the objects in hashes that the server does not have yet.
-func (c *Client) Upload(ctx context.Context, local blob.Store, hashes []hash.Hash) (int, error) {
+// Upload sends the objects in hashes that are not part of repo on the
+// server yet. Objects are scoped to repositories: content the server stores
+// for another repository is sent again (storage dedupes it), which proves
+// the caller has it.
+func (c *Client) Upload(ctx context.Context, repo string, local blob.Store, hashes []hash.Hash) (int, error) {
 	if len(hashes) == 0 {
 		return 0, nil
 	}
 	var missing []string
 	for start := 0; start < len(hashes); start += 20000 {
 		end := min(start+20000, len(hashes))
-		req := &vxv1.MissingObjectsRequest{}
+		req := &vxv1.MissingObjectsRequest{Repo: repo}
 		for _, h := range hashes[start:end] {
 			req.Hashes = append(req.Hashes, h.String())
 		}
@@ -108,7 +111,7 @@ func (c *Client) Upload(ctx context.Context, local blob.Store, hashes []hash.Has
 		missing = append(missing, resp.Msg.Missing...)
 	}
 	sent := 0
-	batch := &vxv1.PutObjectsRequest{}
+	batch := &vxv1.PutObjectsRequest{Repo: repo}
 	size := 0
 	flush := func() error {
 		if len(batch.Objects) == 0 {
@@ -118,7 +121,7 @@ func (c *Client) Upload(ctx context.Context, local blob.Store, hashes []hash.Has
 			return err
 		}
 		sent += len(batch.Objects)
-		batch = &vxv1.PutObjectsRequest{}
+		batch = &vxv1.PutObjectsRequest{Repo: repo}
 		size = 0
 		return nil
 	}
@@ -142,9 +145,9 @@ func (c *Client) Upload(ctx context.Context, local blob.Store, hashes []hash.Has
 	return sent, flush()
 }
 
-// Download fetches objects into local, skipping those already there. Every
-// object is verified against its hash on the way in.
-func (c *Client) Download(ctx context.Context, local blob.Store, hashes []hash.Hash) error {
+// Download fetches objects of repo into local, skipping those already
+// there. Every object is verified against its hash on the way in.
+func (c *Client) Download(ctx context.Context, repo string, local blob.Store, hashes []hash.Hash) error {
 	var need []string
 	for _, h := range hashes {
 		ok, err := local.Has(ctx, h)
@@ -157,7 +160,7 @@ func (c *Client) Download(ctx context.Context, local blob.Store, hashes []hash.H
 	}
 	for len(need) > 0 {
 		n := min(len(need), batchObjects)
-		resp, err := c.Objects.GetObjects(ctx, connect.NewRequest(&vxv1.GetObjectsRequest{Hashes: need[:n]}))
+		resp, err := c.Objects.GetObjects(ctx, connect.NewRequest(&vxv1.GetObjectsRequest{Repo: repo, Hashes: need[:n]}))
 		if err != nil {
 			return err
 		}
@@ -178,12 +181,12 @@ func (c *Client) Download(ctx context.Context, local blob.Store, hashes []hash.H
 	return nil
 }
 
-// FetchTree downloads every tree and blob under root that local lacks,
-// level by level.
-func (c *Client) FetchTree(ctx context.Context, local blob.Store, root hash.Hash) error {
+// FetchTree downloads every tree and blob under root, a tree of repo, that
+// local lacks, level by level.
+func (c *Client) FetchTree(ctx context.Context, repo string, local blob.Store, root hash.Hash) error {
 	level := []hash.Hash{root}
 	for len(level) > 0 {
-		if err := c.Download(ctx, local, level); err != nil {
+		if err := c.Download(ctx, repo, local, level); err != nil {
 			return err
 		}
 		var next, blobs []hash.Hash
@@ -200,7 +203,7 @@ func (c *Client) FetchTree(ctx context.Context, local blob.Store, root hash.Hash
 				}
 			}
 		}
-		if err := c.Download(ctx, local, blobs); err != nil {
+		if err := c.Download(ctx, repo, local, blobs); err != nil {
 			return err
 		}
 		level = next

@@ -123,6 +123,7 @@ func (f *fixture) snapshot(repo store.Repo, base hash.Hash, files map[string]str
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	storetest.AddTree(f.t, f.svc.Store, f.blobs, repo.ID, row.Tree, tree)
 	return tree
 }
 

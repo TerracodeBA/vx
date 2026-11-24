@@ -250,7 +250,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if err != nil {
 		return err
 	}
-	if _, err := c.Upload(ctx, wc.Objects, append(trees, blobs...)); err != nil {
+	if _, err := c.Upload(ctx, wc.Config.Repo, wc.Objects, append(trees, blobs...)); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 	evidence := o.reported
@@ -291,7 +291,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if err != nil {
 		return err
 	}
-	if err := c.FetchTree(ctx, wc.Objects, newTree); err != nil {
+	if err := c.FetchTree(ctx, wc.Config.Repo, wc.Objects, newTree); err != nil {
 		return err
 	}
 	incoming, err := object.DiffTrees(ctx, wc.Objects, tree, newTree)
@@ -462,7 +462,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	if err != nil {
 		return syncResult{}, err
 	}
-	if err := c.FetchTree(ctx, wc.Objects, theirs); err != nil {
+	if err := c.FetchTree(ctx, wc.Config.Repo, wc.Objects, theirs); err != nil {
 		return syncResult{}, err
 	}
 	ours, local, err := wc.Snapshot(ctx)

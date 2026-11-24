@@ -133,6 +133,7 @@ func TestShipToGitHub(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		storetest.AddTree(t, st, blobs, repo.ID, row.Tree, tree)
 		res, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: ws.Workspace.ID, Tree: tree, Evidence: ev, Model: "claude-opus-5-5"})
 		if err != nil || !res.Landed {
 			t.Fatalf("land %q: %+v %v", intent, res, err)

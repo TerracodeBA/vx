@@ -52,6 +52,7 @@ func TestWarningsShownOnEffortAndChange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		storetest.AddTree(t, st, blobs, repo.ID, base.Tree, tree)
 		res, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: l.ws.Workspace.ID, Tree: tree})
 		if err != nil || !res.Landed {
 			t.Fatalf("land %s: %+v %v", l.path, res, err)

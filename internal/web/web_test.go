@@ -42,6 +42,7 @@ func TestPages(t *testing.T) {
 	row, _ := st.GetChangeset(ctx, repo.ID, ws.Workspace.Base)
 	h, _ := blobs.Put(ctx, hash.KindBlob, []byte("package limit\n\nfunc Allow() bool { return true }\n"))
 	tree, _ := object.ApplyChanges(ctx, blobs, row.Tree, []object.Change{{Path: "limit/limit.go", Op: object.OpAdd, New: object.File{Hash: h, Mode: object.ModeFile}}})
+	storetest.AddTree(t, st, blobs, repo.ID, row.Tree, tree)
 	res, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: ws.Workspace.ID, Tree: tree, Model: "claude-opus-5-5",
 		Evidence: &object.Evidence{Checks: []object.Check{{Name: "go test ./...", Result: "pass", RanByVX: true, DurationMs: 1200, Notes: "1 of 3 packages from the Go test cache"}}}})
 	if err != nil || !res.Landed {
@@ -52,6 +53,7 @@ func TestPages(t *testing.T) {
 	row2, _ := st.GetChangeset(ctx, repo.ID, ws2.Workspace.Base)
 	h2, _ := blobs.Put(ctx, hash.KindBlob, []byte("package limit\n\nfunc Allow() bool { return false }\n\n// Allow says <no>.\n"))
 	tree2, _ := object.ApplyChanges(ctx, blobs, row2.Tree, []object.Change{{Path: "limit/limit.go", Op: object.OpModify, Old: object.File{Hash: h, Mode: object.ModeFile}, New: object.File{Hash: h2, Mode: object.ModeFile}}})
+	storetest.AddTree(t, st, blobs, repo.ID, row2.Tree, tree2)
 	res2, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: ws2.Workspace.ID, Tree: tree2, Model: "claude-opus-5-5"})
 	if err != nil || !res2.Landed {
 		t.Fatal("second land", err)
