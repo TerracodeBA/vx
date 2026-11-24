@@ -19,6 +19,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
+	"github.com/TerracodeBA/vx/internal/web"
 )
 
 // Config is the server configuration.
@@ -69,6 +70,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	svc := service.New(st, blobs, up)
 	mux := http.NewServeMux()
 	api.Mount(mux, svc)
+	if err := web.Mount(mux, svc, log); err != nil {
+		st.Close()
+		return nil, err
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := st.Ping(r.Context()); err != nil {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)

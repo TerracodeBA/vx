@@ -1,0 +1,107 @@
+{{define "content"}}
+{{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}{{$wc := .WorkColor}}
+<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{q $repo}}">{{$repo}}</a> / <span>{{.Effort.Name}}</span></nav>
+
+<div class="head head-row">
+  <div>
+    <h1>{{.Effort.Name}}</h1>
+    {{if .Effort.Goal}}<p class="goal">{{.Effort.Goal}}</p>{{end}}
+    <div class="meta-line">
+      <span class="state state-{{.Effort.State}}">{{.Effort.State}}</span>
+      <span>based on <span class="mono">{{.Effort.BaseBranch}}</span>{{if .BaseGit}} at <span class="mono">{{short .BaseGit}}</span>{{end}}</span>
+      <span>head <span class="mono">{{short .Effort.Head}}</span></span>
+      <span>owner {{principal .Owner}}</span>
+    </div>
+  </div>
+  <div class="head-actions">
+    <span class="live" data-poll="/ui/effort/head?repo={{q $repo}}&amp;slug={{q $slug}}" data-key="{{$repo}}/{{$slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span>Live</span>
+    <a class="btn primary" href="/ui/ship?repo={{q $repo}}&amp;slug={{q $slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
+  </div>
+</div>
+
+<p class="summary">
+  <strong>{{len .Lands}}</strong> changes landed by <strong>{{len .Agents}}</strong> agent{{if ne (len .Agents) 1}}s{{end}},
+  <span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span> lines.
+  {{if .Merged}}The server merged <strong>{{.Merged}}</strong> onto newer work.{{end}}
+  {{if .Verified}}<strong>{{.Verified}}</strong> checked by vx itself.{{end}}
+</p>
+
+<div class="cols">
+  <section class="col-main">
+    <h2 class="sec">Timeline</h2>
+    {{if not .Lands}}
+    <div class="empty"><p>Nothing landed yet. Agents start with:</p>
+      <pre class="code">vx clone {{$repo}} {{$slug}}
+vx new "what you are about to do"
+vx land --run "go test ./..."</pre></div>
+    {{end}}
+    <ol class="timeline">
+    {{range .Lands}}
+      <li class="land a{{.Color}}" data-hash="{{.Hash}}">
+        <span class="dot" aria-hidden="true"></span>
+        <div class="land-body">
+          <div class="land-top">
+            <a class="land-title" href="/ui/change?repo={{q .Repo}}&amp;ref={{.Hash}}">{{.Title}}</a>
+            <span class="mono muted">{{.ChangeID}}</span>
+          </div>
+          <div class="land-meta">
+            <span class="agent-name">{{principal .Author.Principal}}</span>
+            {{if .Author.OnBehalfOf}}<span class="muted">for {{principal .Author.OnBehalfOf}}</span>{{end}}
+            {{if .Author.Model}}<span class="muted">· {{.Author.Model}}</span>{{end}}
+            <span class="muted">· {{ago .CreatedAt}}</span>
+            <span class="lines"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></span>
+          </div>
+          <ul class="files">
+            {{range .Files}}<li><span class="op op-{{.Op}}">{{.Op}}</span><span class="mono">{{.Path}}</span><span class="add">+{{.Added}}</span><span class="del">-{{.Deleted}}</span></li>{{end}}
+          </ul>
+          <div class="pills">
+            {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
+            {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
+              <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}">
+                {{.Name}}: {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}
+              </span>
+            {{end}}{{else}}<span class="pill neutral">no evidence</span>{{end}}
+          </div>
+        </div>
+      </li>
+    {{end}}
+    </ol>
+  </section>
+
+  <aside class="col-side">
+    <section class="side-card">
+      <h2 class="sec">Working now</h2>
+      {{if not .Working}}<p class="muted small">No open workspaces. Everything started has landed.</p>{{end}}
+      <ul class="working">
+      {{range .Working}}
+        <li class="a{{color $wc .Owner}}"><span class="pulse"></span><div><div class="agent-name">{{principal .Owner}}</div><div class="small">{{.Intent}}</div><div class="muted small mono">{{.ChangeID}} · since {{ago .CreatedAt}}</div></div></li>
+      {{end}}
+      </ul>
+    </section>
+
+    <section class="side-card">
+      <h2 class="sec">Agents</h2>
+      {{$max := maxLines .Agents}}
+      <ul class="agents">
+      {{range .Agents}}
+        <li class="a{{.Color}}">
+          <div class="agent-row"><span class="swatch"></span><span class="agent-name">{{principal .Principal}}</span><span class="muted small">{{.Lands}} land{{if ne .Lands 1}}s{{end}}</span></div>
+          <div class="bar-track" aria-hidden="true"><span class="bar-fill" data-w="{{pct (.Added) $max}}"></span></div>
+          <div class="small"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span>{{if .OnBehalfOf}} <span class="muted">for {{principal .OnBehalfOf}}</span>{{end}}</div>
+        </li>
+      {{end}}
+      </ul>
+    </section>
+
+    <section class="side-card">
+      <h2 class="sec">Shipped</h2>
+      {{if not .Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
+      <ul class="plain-list">
+      {{range .Shipments}}
+        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits to {{.Target}} · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" rel="noopener" target="_blank">{{if .ProviderRef}}Pull request #{{.ProviderRef}}{{else}}Open the pull request{{end}}</a>{{end}}</li>
+      {{end}}
+      </ul>
+    </section>
+  </aside>
+</div>
+{{end}}

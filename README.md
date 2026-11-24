@@ -46,6 +46,15 @@ export VX_TOKEN=<that token>  # in the agent's environment
 export VX_MODEL=claude-opus-5-5
 ```
 
+## Web UI
+
+`vx-server` serves a web UI at its address, for example http://127.0.0.1:7070. Sign in with your token.
+
+- **Efforts:** every repository and effort, with who is working right now.
+- **Effort:** a live timeline of every land (agent, person, model, files, evidence, merged or not), the open workspaces, per-agent activity and shipments. It updates by itself as agents land.
+- **Change:** the full diff of one change with its provenance and evidence.
+- **Ship:** the commits that would go to the git host, the pull request description, and a button to push.
+
 ## Connecting GitHub
 
 ```sh

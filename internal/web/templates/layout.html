@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · vx</title>
+<link rel="stylesheet" href="/ui/static/vx.css">
+<script src="/ui/static/vx.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="/ui"><span class="brand-mark">vx</span><span class="brand-sub">workbench</span></a>
+    {{if .Actor}}
+    <div class="who">
+      <span class="who-ref">{{.Actor.Ref}}</span>
+      <form method="post" action="/ui/logout"><button class="link-btn" type="submit">Log out</button></form>
+    </div>
+    {{end}}
+  </div>
+</header>
+<main class="page">
+{{template "content" .}}
+</main>
+</body>
+</html>

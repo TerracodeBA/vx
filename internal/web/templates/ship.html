@@ -1,0 +1,62 @@
+{{define "content"}}
+{{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}
+<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{q $repo}}">{{$repo}}</a> / <a href="/ui/effort?repo={{q $repo}}&amp;slug={{q $slug}}">{{.Effort.Name}}</a> / <span>Ship</span></nav>
+<div class="head">
+  <h1>Ship {{.Effort.Name}}</h1>
+  <p class="muted">Every landed change becomes one commit, replayed onto the latest head of the target branch and pushed to a <span class="mono">vx/</span> branch. vx never merges; that stays your decision on {{if eq .Repo.Provider "github"}}GitHub{{else}}the git host{{end}}.</p>
+</div>
+{{if .Shipped}}<p class="note ok">Pushed. {{with index .Shipments 0}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Open pull request #{{.ProviderRef}}{{else}}Open the pull request on GitHub{{end}}</a>{{end}}{{end}}</p>{{end}}
+{{if .PlanError}}<p class="note bad">{{.PlanError}}</p>{{end}}
+
+{{with .Plan}}
+<div class="cols">
+  <section class="col-main">
+    <h2 class="sec">{{$.Commits}} commit{{if ne $.Commits 1}}s{{end}} onto <span class="mono">{{.Target}}</span> at <span class="mono">{{short .TargetHead.GitSHA}}</span></h2>
+    {{if .Conflicts}}
+    <div class="note bad"><p>Change <span class="mono">{{.ConflictedAt.ChangeID}}</span> conflicts with {{.Target}}:</p>
+      <ul>{{range .Conflicts}}<li><span class="mono">{{.Path}}</span> ({{.Kind}})</li>{{end}}</ul>
+      <p>Sync the effort onto {{.Target}} and resolve these before shipping.</p></div>
+    {{end}}
+    <ol class="commits">
+      {{range .Steps}}
+      <li class="{{if .Skipped}}skipped{{end}}">
+        <span class="mono muted">{{.Changeset.ChangeID}}</span>
+        <a href="/ui/change?repo={{q $repo}}&amp;ref={{.Changeset.Hash}}">{{.Changeset.Title}}</a>
+        <span class="muted small">{{principal .Changeset.Author.Principal}} · {{.Files}} file{{if ne .Files 1}}s{{end}}{{if .Skipped}} · already in {{$.Plan.Target}}{{end}}</span>
+      </li>
+      {{end}}
+    </ol>
+
+    <h2 class="sec">Pull request</h2>
+    <div class="pr-preview">
+      <div class="pr-title">{{.Title}}</div>
+      <div class="muted small mono">{{.Branch}} → {{.Target}}</div>
+      <pre class="pr-body">{{.Body}}</pre>
+    </div>
+  </section>
+  <aside class="col-side">
+    <section class="side-card">
+      <h2 class="sec">Push</h2>
+      <form method="post" action="/ui/ship" class="stack">
+        <input type="hidden" name="repo" value="{{$repo}}">
+        <input type="hidden" name="slug" value="{{$slug}}">
+        <label for="to">Target branch</label>
+        <input id="to" name="to" value="{{.Target}}">
+        <label class="check"><input type="checkbox" name="draft" id="draft" checked> Open as a draft</label>
+        <button class="btn primary" type="submit" {{if .Conflicts}}disabled{{end}}>Push {{.Branch}}</button>
+        <p class="muted small">Pushing replaces {{.Branch}} with these commits and updates its pull request.</p>
+      </form>
+    </section>
+    <section class="side-card">
+      <h2 class="sec">Shipped before</h2>
+      {{if not $.Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
+      <ul class="plain-list">
+      {{range $.Shipments}}
+        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Pull request #{{.ProviderRef}}{{else}}Open the pull request{{end}}</a>{{end}}</li>
+      {{end}}
+      </ul>
+    </section>
+  </aside>
+</div>
+{{end}}
+{{end}}

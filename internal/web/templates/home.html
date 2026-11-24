@@ -1,0 +1,47 @@
+{{define "content"}}
+<div class="head">
+  <h1>Efforts</h1>
+  <p class="muted">Every repository vx follows, and the efforts where agents are building.</p>
+</div>
+{{if not .Repos}}
+<div class="empty">
+  <h2>No repositories yet</h2>
+  <p>Connect one from the command line:</p>
+  <pre class="code">vx repo create acme/shop-api --github acme/shop-api
+vx effort new "Rate limiting" --repo acme/shop-api</pre>
+</div>
+{{end}}
+{{range .Repos}}
+<section class="repo-block">
+  <div class="repo-title">
+    <h2><a href="/ui/repo?name={{q .Name}}">{{.Name}}</a></h2>
+    <span class="chip">{{.Provider}}{{if .Remote}} · {{.Remote}}{{end}}</span>
+  </div>
+  {{if .Efforts}}
+  <ul class="efforts">
+    {{$repo := .Name}}
+    {{range .Efforts}}
+    <li>
+      <a class="effort-card" href="/ui/effort?repo={{q $repo}}&amp;slug={{q .Slug}}">
+        <div class="effort-top">
+          <span class="effort-name">{{.Name}}</span>
+          <span class="state state-{{.State}}">{{.State}}</span>
+        </div>
+        {{if .Goal}}<p class="effort-goal">{{.Goal}}</p>{{end}}
+        <div class="effort-meta">
+          <span>{{.Changes}} change{{if ne .Changes 1}}s{{end}}</span>
+          <span>{{.Agents}} agent{{if ne .Agents 1}}s{{end}}</span>
+          {{if .Open}}<span class="live-dot">{{.Open}} working now</span>{{end}}
+          <span>on {{.BaseBranch}}</span>
+          <span>updated {{ago .UpdatedAt}}</span>
+        </div>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No efforts yet. <code>vx effort new "NAME" --repo {{.Name}}</code></p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
