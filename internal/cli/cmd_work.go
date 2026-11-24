@@ -81,16 +81,22 @@ func (a *App) cloneCmd() *cobra.Command {
 // ---------- new ----------
 
 func (a *App) newCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "new INTENT",
+	var taskID string
+	cmd := &cobra.Command{
+		Use:   "new INTENT [--task ID]",
 		Short: "Open a workspace for one task in the current effort",
 		Long: `Open a workspace: one task, described by its intent, that ends in one land.
 Other agents see your intent in vx status while you work. The intent
 becomes the change's description and, when shipped, its commit message.
 
 Keep tasks small and land often: vx land closes the workspace, so run
-vx new again for the next task.`,
-		Args: cobra.ExactArgs(1),
+vx new again for the next task.
+
+With --task ID, vx new takes that task of the effort's plan (vx tasks
+--open lists them) and uses its title as the intent when none is given.`,
+		Example: `  vx new "Add limiter middleware"
+  vx new --task 1a2b3c4d`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -99,15 +105,31 @@ vx new again for the next task.`,
 			if wc.Config.Workspace != "" {
 				return fmt.Errorf("workspace %q is still open: land it with `vx land` or close it with `vx abandon`", wc.Config.Intent)
 			}
-			w, err := a.openWorkspace(ctxOf(cmd), c, wc, args[0])
+			ctx := ctxOf(cmd)
+			task, intent, err := a.taskOnNew(ctx, c, taskID, args)
+			if err != nil {
+				return err
+			}
+			w, err := a.openWorkspace(ctx, c, wc, intent)
 			if err != nil {
 				return err
 			}
 			a.printf("Opened workspace %s: %s\nEdit files, then run `vx land`.\n", w.ChangeId, w.Intent)
-			a.emit(w)
+			out := map[string]any{"workspace": w}
+			if task != nil {
+				a.printf("You took task %s; when it has landed: vx task done %s\n", noteID(task.Id), noteID(task.Id))
+				out["task"] = task
+			}
+			if len(out) == 1 {
+				a.emit(w)
+			} else {
+				a.emit(out)
+			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&taskID, "task", "", "take this task of the effort's plan and work on it here")
+	return cmd
 }
 
 func (a *App) openWorkspace(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, intent string) (*vxv1.Workspace, error) {
@@ -243,6 +265,9 @@ func (a *App) statusCmd() *cobra.Command {
 			if c, err := a.client(); err == nil {
 				if board := a.boardStatus(ctx, c, wc, changes); board != nil {
 					out["board"] = board
+				}
+				if tasks := a.taskStatus(ctx, c, wc.Config.Repo, wc.Config.Effort); tasks != nil {
+					out["tasks"] = tasks
 				}
 			}
 			a.emit(out)
