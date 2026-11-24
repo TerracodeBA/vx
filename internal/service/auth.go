@@ -103,26 +103,91 @@ func mayManage(actor Actor, p store.Principal) bool {
 // ListTokens returns the tokens of the caller (agent empty) or of one of the
 // caller's agents, given by name ("backend") or handle ("alice/backend").
 func (s *Service) ListTokens(ctx context.Context, actor Actor, agent string) (store.Principal, []store.Token, error) {
-	target := actor.Principal
-	if agent = strings.TrimSpace(agent); agent != "" {
-		handle := agent
-		if !strings.Contains(handle, "/") {
-			handle = actor.Human().Handle + "/" + agent
-		}
-		p, err := s.Store.PrincipalByHandle(ctx, handle)
-		if errors.Is(err, store.ErrNotFound) {
-			return store.Principal{}, nil, errf(CodeNotFound, "no agent %s; `vx agent list` shows yours", handle)
-		}
-		if err != nil {
-			return store.Principal{}, nil, err
-		}
-		target = p
+	target, err := s.tokenOwner(ctx, actor, agent)
+	if err != nil {
+		return store.Principal{}, nil, err
 	}
 	if !mayManage(actor, target) {
 		return store.Principal{}, nil, errf(CodePermission, "%s cannot see the tokens of %s: only your own and your agents'", actor.Ref(), target.Ref())
 	}
 	tokens, err := s.Store.ListTokens(ctx, target.ID)
 	return target, tokens, classify(err)
+}
+
+// tokenOwner resolves the principal a token command is about: the caller
+// (agent empty) or an agent given by name ("backend") or handle
+// ("alice/backend"). It does not check permissions.
+func (s *Service) tokenOwner(ctx context.Context, actor Actor, agent string) (store.Principal, error) {
+	agent = strings.TrimSpace(agent)
+	if agent == "" {
+		return actor.Principal, nil
+	}
+	handle := agent
+	if !strings.Contains(handle, "/") {
+		handle = actor.Human().Handle + "/" + agent
+	}
+	p, err := s.Store.PrincipalByHandle(ctx, handle)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Principal{}, errf(CodeNotFound, "no agent %s; `vx agent list` shows yours", handle)
+	}
+	return p, err
+}
+
+// MaxTokenName is the longest token label CreateToken accepts.
+const MaxTokenName = 100
+
+// CreateToken issues a new token to the caller (agent empty) or to one of
+// the caller's agents and returns it with its secret, which is shown once.
+//
+// Only people can create tokens, also for themselves. Agents can list and
+// revoke their own tokens, but if an agent could mint tokens, a leaked agent
+// token could create replacements that survive its revocation, so revoking
+// it would no longer contain the leak. An agent that needs a new token asks
+// the person it acts for.
+func (s *Service) CreateToken(ctx context.Context, actor Actor, agent, name string) (store.Token, store.Principal, string, error) {
+	if actor.Kind != store.KindHuman {
+		return store.Token{}, store.Principal{}, "", errf(CodePermission,
+			"only people can create tokens; %s is an agent. Ask %s to run `vx token create --agent %s`", actor.Ref(), ownerRef(actor), agentName(actor.Handle))
+	}
+	target, err := s.tokenOwner(ctx, actor, agent)
+	if err != nil {
+		return store.Token{}, store.Principal{}, "", err
+	}
+	if !mayManage(actor, target) {
+		return store.Token{}, store.Principal{}, "", errf(CodePermission, "%s cannot create tokens for %s: only for yourself and your agents", actor.Ref(), target.Ref())
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "created by " + actor.Ref()
+	}
+	if len([]rune(name)) > MaxTokenName {
+		return store.Token{}, store.Principal{}, "", errf(CodeInvalid, "token name is %d characters; keep it to %d", len([]rune(name)), MaxTokenName)
+	}
+	if strings.ContainsAny(name, "\r\n\t") {
+		return store.Token{}, store.Principal{}, "", errf(CodeInvalid, "token name must be one line without tabs")
+	}
+	var tok store.Token
+	var secret string
+	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
+		var err error
+		if tok, secret, err = tx.IssueToken(ctx, target.ID, name); err != nil {
+			return err
+		}
+		return tx.LogOp(ctx, nil, &actor.ID, "token.create", target.Ref(), nil,
+			map[string]string{"token": tok.ID.String(), "name": tok.Name})
+	})
+	if err != nil {
+		return store.Token{}, store.Principal{}, "", classify(err)
+	}
+	return tok, target, secret, nil
+}
+
+// agentName is the part of an agent handle after the slash.
+func agentName(handle string) string {
+	if i := strings.LastIndex(handle, "/"); i >= 0 {
+		return handle[i+1:]
+	}
+	return handle
 }
 
 // RevokeInput says which token to revoke.

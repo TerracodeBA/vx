@@ -114,6 +114,21 @@ func (h *Handlers) RevokeToken(ctx context.Context, req *connect.Request[vxv1.Re
 	return connect.NewResponse(&vxv1.RevokeTokenResponse{Token: tokenPB(tok, owner.Ref(), actor.TokenID), AlreadyRevoked: already}), nil
 }
 
+func (h *Handlers) CreateToken(ctx context.Context, req *connect.Request[vxv1.CreateTokenRequest]) (*connect.Response[vxv1.CreateTokenResponse], error) {
+	actor := actorFrom(ctx)
+	tok, owner, secret, err := h.svc.CreateToken(ctx, actor, req.Msg.Agent, req.Msg.Name)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	ownerActor, err := h.svc.ResolveActor(ctx, owner)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.CreateTokenResponse{
+		Principal: principalPB(ownerActor), Token: tokenPB(tok, owner.Ref(), actor.TokenID), Secret: secret,
+	}), nil
+}
+
 // ---------- Objects ----------
 
 func (h *Handlers) MissingObjects(ctx context.Context, req *connect.Request[vxv1.MissingObjectsRequest]) (*connect.Response[vxv1.MissingObjectsResponse], error) {

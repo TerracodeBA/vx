@@ -128,3 +128,65 @@ func TestAgentAndTokenPermissions(t *testing.T) {
 		t.Fatalf("revoked token still authenticates: %v", err)
 	}
 }
+
+func TestCreateToken(t *testing.T) {
+	e := newEnv(t)
+	ctx, st := e.ctx, e.svc.Store
+	bob, _ := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "bob"})
+	if _, err := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindAgent, Handle: "bob/helper", ParentID: &bob.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice creates one for herself; the secret works and names its owner.
+	tok, owner, secret, err := e.svc.CreateToken(ctx, e.alice, "", "  laptop  ")
+	if err != nil || owner.ID != e.alice.ID || tok.Name != "laptop" || !tok.Active() {
+		t.Fatalf("own token = %+v %v %v", tok, owner.Handle, err)
+	}
+	if p, id, err := st.AuthenticateToken(ctx, secret); err != nil || p.ID != e.alice.ID || id != tok.ID {
+		t.Fatalf("authenticate new token = %v %v %v", p.Handle, id, err)
+	}
+
+	// And one for her agent, by name, with the default label.
+	tok, owner, secret, err = e.svc.CreateToken(ctx, e.alice, "claude", "")
+	if err != nil || owner.Handle != "alice/claude" || tok.Name != "created by user:alice" {
+		t.Fatalf("agent token = %+v %v %v", tok, owner.Handle, err)
+	}
+	if p, err := st.Authenticate(ctx, secret); err != nil || p.Handle != "alice/claude" {
+		t.Fatalf("agent token authenticates as %v %v", p.Handle, err)
+	}
+	ops, _ := st.ListActorOps(ctx, e.alice.ID, 10)
+	creates := 0
+	for _, op := range ops {
+		if op.Op == "token.create" {
+			creates++
+			if strings.Contains(string(op.After), secret) {
+				t.Errorf("op log holds the secret: %s", op.After)
+			}
+		}
+	}
+	if creates != 2 {
+		t.Fatalf("token.create ops = %d", creates)
+	}
+
+	// Not for other people's agents, nor for people.
+	if _, _, _, err := e.svc.CreateToken(ctx, e.alice, "bob/helper", ""); code(err) != service.CodePermission {
+		t.Fatalf("token for bob's agent: %v", err)
+	}
+	if _, _, _, err := e.svc.CreateToken(ctx, e.alice, "nope", ""); code(err) != service.CodeNotFound {
+		t.Fatalf("token for a missing agent: %v", err)
+	}
+	// Agents cannot create tokens, not even for themselves.
+	if _, _, _, err := e.svc.CreateToken(ctx, e.agent, "", ""); code(err) != service.CodePermission || !strings.Contains(err.Error(), "--agent claude") {
+		t.Fatalf("agent creating its own token: %v", err)
+	}
+	if _, _, _, err := e.svc.CreateToken(ctx, e.agent, "alice/other", ""); code(err) != service.CodePermission {
+		t.Fatalf("agent creating a sibling's token: %v", err)
+	}
+	// Labels are one short line.
+	if _, _, _, err := e.svc.CreateToken(ctx, e.alice, "", strings.Repeat("x", service.MaxTokenName+1)); code(err) != service.CodeInvalid {
+		t.Fatalf("long name: %v", err)
+	}
+	if _, _, _, err := e.svc.CreateToken(ctx, e.alice, "", "a\nb"); code(err) != service.CodeInvalid {
+		t.Fatalf("multi-line name: %v", err)
+	}
+}

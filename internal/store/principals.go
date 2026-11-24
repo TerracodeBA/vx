@@ -139,17 +139,23 @@ func hashToken(secret string) []byte {
 // CreateToken issues a new token for a principal and returns the secret.
 // Only its hash is stored, so the secret cannot be shown again.
 func (q Q) CreateToken(ctx context.Context, principalID uuid.UUID, name string) (string, error) {
+	_, secret, err := q.IssueToken(ctx, principalID, name)
+	return secret, err
+}
+
+// IssueToken is CreateToken that also returns the new token's record.
+func (q Q) IssueToken(ctx context.Context, principalID uuid.UUID, name string) (Token, string, error) {
 	var raw [24]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
+		return Token{}, "", err
 	}
 	secret := TokenPrefix + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw[:]))
-	_, err := q.db.Exec(ctx, `insert into tokens (principal_id, secret_hash, name) values ($1, $2, $3)`,
-		principalID, hashToken(secret), name)
+	tok, err := scanToken(q.db.QueryRow(ctx, `insert into tokens (principal_id, secret_hash, name) values ($1, $2, $3)
+		returning `+tokenCols, principalID, hashToken(secret), name))
 	if err != nil {
-		return "", err
+		return Token{}, "", err
 	}
-	return secret, nil
+	return tok, secret, nil
 }
 
 // Authenticate resolves a token to its principal.
