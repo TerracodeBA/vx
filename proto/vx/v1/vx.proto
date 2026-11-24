@@ -593,7 +593,16 @@ service BoardService {
   // Context returns everything an agent should know before touching some
   // paths or symbols: notes on them, who is working nearby, recent changes.
   rpc Context(ContextRequest) returns (ContextResponse) {}
+  // MarkRead records that the caller was shown some notes, so vx status,
+  // inbox and the sync feed do not bring them up again.
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse) {}
 }
+
+message MarkReadRequest {
+  repeated string note_ids = 1; // full ids; notes the caller cannot read are skipped
+}
+
+message MarkReadResponse {}
 
 message Note {
   string id = 1;
@@ -662,6 +671,7 @@ message ListNotesRequest {
   string since = 5; // RFC 3339; empty: all
   string thread_id = 6;
   int32 limit = 7; // 0: 100
+  bool include_superseded = 8; // keep notes a newer note replaced (default: left out)
 }
 
 message ListNotesResponse {

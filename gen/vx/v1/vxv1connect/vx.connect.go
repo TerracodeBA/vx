@@ -147,6 +147,8 @@ const (
 	BoardServiceInboxProcedure = "/vx.v1.BoardService/Inbox"
 	// BoardServiceContextProcedure is the fully-qualified name of the BoardService's Context RPC.
 	BoardServiceContextProcedure = "/vx.v1.BoardService/Context"
+	// BoardServiceMarkReadProcedure is the fully-qualified name of the BoardService's MarkRead RPC.
+	BoardServiceMarkReadProcedure = "/vx.v1.BoardService/MarkRead"
 	// CoordinationServiceClaimProcedure is the fully-qualified name of the CoordinationService's Claim
 	// RPC.
 	CoordinationServiceClaimProcedure = "/vx.v1.CoordinationService/Claim"
@@ -1383,6 +1385,9 @@ type BoardServiceClient interface {
 	// Context returns everything an agent should know before touching some
 	// paths or symbols: notes on them, who is working nearby, recent changes.
 	Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error)
+	// MarkRead records that the caller was shown some notes, so vx status,
+	// inbox and the sync feed do not bring them up again.
+	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 }
 
 // NewBoardServiceClient constructs a client for the vx.v1.BoardService service. By default, it uses
@@ -1432,6 +1437,12 @@ func NewBoardServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(boardServiceMethods.ByName("Context")),
 			connect.WithClientOptions(opts...),
 		),
+		markRead: connect.NewClient[v1.MarkReadRequest, v1.MarkReadResponse](
+			httpClient,
+			baseURL+BoardServiceMarkReadProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("MarkRead")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -1443,6 +1454,7 @@ type boardServiceClient struct {
 	listNotes *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
 	inbox     *connect.Client[v1.InboxRequest, v1.InboxResponse]
 	context   *connect.Client[v1.ContextRequest, v1.ContextResponse]
+	markRead  *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
 }
 
 // PostNote calls vx.v1.BoardService.PostNote.
@@ -1475,6 +1487,11 @@ func (c *boardServiceClient) Context(ctx context.Context, req *connect.Request[v
 	return c.context.CallUnary(ctx, req)
 }
 
+// MarkRead calls vx.v1.BoardService.MarkRead.
+func (c *boardServiceClient) MarkRead(ctx context.Context, req *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
+	return c.markRead.CallUnary(ctx, req)
+}
+
 // BoardServiceHandler is an implementation of the vx.v1.BoardService service.
 type BoardServiceHandler interface {
 	// PostNote adds a note to an effort's board. Questions go through Ask.
@@ -1491,6 +1508,9 @@ type BoardServiceHandler interface {
 	// Context returns everything an agent should know before touching some
 	// paths or symbols: notes on them, who is working nearby, recent changes.
 	Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error)
+	// MarkRead records that the caller was shown some notes, so vx status,
+	// inbox and the sync feed do not bring them up again.
+	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 }
 
 // NewBoardServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1536,6 +1556,12 @@ func NewBoardServiceHandler(svc BoardServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(boardServiceMethods.ByName("Context")),
 		connect.WithHandlerOptions(opts...),
 	)
+	boardServiceMarkReadHandler := connect.NewUnaryHandler(
+		BoardServiceMarkReadProcedure,
+		svc.MarkRead,
+		connect.WithSchema(boardServiceMethods.ByName("MarkRead")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.BoardService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BoardServicePostNoteProcedure:
@@ -1550,6 +1576,8 @@ func NewBoardServiceHandler(svc BoardServiceHandler, opts ...connect.HandlerOpti
 			boardServiceInboxHandler.ServeHTTP(w, r)
 		case BoardServiceContextProcedure:
 			boardServiceContextHandler.ServeHTTP(w, r)
+		case BoardServiceMarkReadProcedure:
+			boardServiceMarkReadHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1581,6 +1609,10 @@ func (UnimplementedBoardServiceHandler) Inbox(context.Context, *connect.Request[
 
 func (UnimplementedBoardServiceHandler) Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Context is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.MarkRead is not implemented"))
 }
 
 // CoordinationServiceClient is a client for the vx.v1.CoordinationService service.

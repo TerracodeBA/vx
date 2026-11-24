@@ -31,17 +31,26 @@ type Note struct {
 	CreatedAt  time.Time
 	RepoName   string
 	EffortSlug string
+	// Supersedes is the earlier note this one replaces. SupersededBy is read
+	// from the newest note that replaced this one.
+	Supersedes   *uuid.UUID
+	SupersededBy *uuid.UUID
+	System       bool // posted by vx itself
 }
 
 const noteCols = `n.id, n.seq, n.repo_id, n.effort_id, n.thread_id, n.kind, n.targets, n.author_id, n.to_id,
-	n.body, n.state, n.answer_by, n.created_at, r.name, e.slug`
+	n.body, n.state, n.answer_by, n.created_at, r.name, e.slug, n.supersedes,
+	(select s.id from notes s where s.supersedes = n.id order by s.created_at desc, s.seq desc limit 1), n.system`
+
+// notSuperseded is a where clause that leaves out notes a newer one replaced.
+const notSuperseded = `not exists (select 1 from notes s where s.supersedes = n.id)`
 
 const noteFrom = ` from notes n join efforts e on e.id = n.effort_id join repos r on r.id = n.repo_id `
 
 func scanNote(row interface{ Scan(...any) error }) (Note, error) {
 	var n Note
 	err := row.Scan(&n.ID, &n.Seq, &n.RepoID, &n.EffortID, &n.ThreadID, &n.Kind, &n.Targets, &n.AuthorID, &n.ToID,
-		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug)
+		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug, &n.Supersedes, &n.SupersededBy, &n.System)
 	if n.Targets == nil {
 		n.Targets = []string{}
 	}
@@ -67,7 +76,8 @@ func (q Q) queryNotes(ctx context.Context, sql string, args ...any) ([]Note, err
 
 // InsertNote stores a note. A zero ID gets a new one; a zero ThreadID makes
 // the note a thread root; a zero CreatedAt means now. The repo is taken from
-// the effort.
+// the effort. Supersedes and System are stored as given; SupersededBy is
+// ignored.
 func (q Q) InsertNote(ctx context.Context, n Note) (Note, error) {
 	if n.ID == uuid.Nil {
 		n.ID = NewID()
@@ -85,10 +95,10 @@ func (q Q) InsertNote(ctx context.Context, n Note) (Note, error) {
 	if !n.CreatedAt.IsZero() {
 		created = &n.CreatedAt
 	}
-	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at)
-		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now())
+	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at, supersedes, system)
+		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now()), $12::uuid, $13::boolean
 		from efforts e where e.id = $2::uuid`,
-		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created)
+		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created, n.Supersedes, n.System)
 	if err != nil {
 		return Note{}, err
 	}
@@ -150,6 +160,8 @@ type NoteFilter struct {
 	ThreadID uuid.UUID
 	Before   *NoteCursor
 	Limit    int // 0: 100
+	// Current leaves out notes a newer note superseded.
+	Current bool
 }
 
 // ListNotes lists an effort's notes, newest first.
@@ -175,8 +187,9 @@ func (q Q) ListNotes(ctx context.Context, f NoteFilter) ([]Note, error) {
 		and ($3::timestamptz is null or n.created_at >= $3)
 		and ($4::uuid is null or n.thread_id = $4)
 		and ($5::timestamptz is null or (n.created_at, n.seq) < ($5, $6))
+		and (not $8::boolean or `+notSuperseded+`)
 		order by n.created_at desc, n.seq desc limit $7`,
-		f.EffortID, f.Kinds, since, thread, beforeAt, beforeSeq, f.Limit)
+		f.EffortID, f.Kinds, since, thread, beforeAt, beforeSeq, f.Limit, f.Current)
 }
 
 // OpenQuestionsTo returns open questions (overdue ones included) addressed
@@ -207,4 +220,58 @@ func (q Q) OverdueQuestions(ctx context.Context, owner uuid.UUID, to []uuid.UUID
 func (q Q) MarkNoteAnswered(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, `update notes set state = 'answered' where id = $1 and kind = 'question'`, id)
 	return err
+}
+
+// MarkNotesRead records that principal was shown the notes. Ids of notes
+// that do not exist are skipped; marking a note twice keeps the first time.
+func (q Q) MarkNotesRead(ctx context.Context, principal uuid.UUID, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := q.db.Exec(ctx, `insert into note_reads (principal_id, note_id)
+		select $1, n.id from notes n where n.id = any($2::uuid[])
+		on conflict do nothing`, principal, ids)
+	return err
+}
+
+// NotesRead returns which of the notes principal has seen.
+func (q Q) NotesRead(ctx context.Context, principal uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
+	out := map[uuid.UUID]bool{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := q.db.Query(ctx, `select note_id from note_reads where principal_id = $1 and note_id = any($2::uuid[])`, principal, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// NoteRepos returns the repository of each of the notes that exist.
+func (q Q) NoteRepos(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	out := map[uuid.UUID]uuid.UUID{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := q.db.Query(ctx, `select id, repo_id from notes where id = any($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, repo uuid.UUID
+		if err := rows.Scan(&id, &repo); err != nil {
+			return nil, err
+		}
+		out[id] = repo
+	}
+	return out, rows.Err()
 }

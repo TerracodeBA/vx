@@ -196,6 +196,7 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Show a workspace | `vx status` | read |
 | Read the board, context and notes | `vx board`, `vx context`, `vx_board`, `vx_context` | read |
 | Inbox and wait (only items in repositories you can read) | `vx inbox`, `vx wait`, `vx_inbox` | read |
+| Mark notes read (notes in repositories you cannot read are skipped) | `vx board`, `vx context`, `vx inbox`, `vx wait`, the sync feed, MCP reads | read |
 | List shipments | `vx ship list` | read |
 | List claims and tasks, see a rebase | `vx claims`, `vx tasks`, `vx status`, `vx_claims`, `vx_tasks` | read |
 | Import upstream commits | `vx repo sync` | write |

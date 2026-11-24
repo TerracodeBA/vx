@@ -203,6 +203,39 @@ func (s *Service) findNote(ctx context.Context, id string) (store.Note, error) {
 
 func shortID(id uuid.UUID) string { return id.String()[:MinNoteIDPrefix] }
 
+// supersedable resolves the note a new note in effort replaces: a plan,
+// decision, interface, blocker or handoff note in the same effort, written
+// by the caller, the caller's person or another agent of that person, and
+// not replaced yet.
+func (s *Service) supersedable(ctx context.Context, actor Actor, effort store.Effort, id string) (store.Note, error) {
+	old, err := s.findNote(ctx, id)
+	if err != nil {
+		return store.Note{}, err
+	}
+	if err := s.noteFor(ctx, actor, old, RoleRead); err != nil {
+		return store.Note{}, err
+	}
+	if old.EffortID != effort.ID {
+		return store.Note{}, errf(CodeInvalid, "note %s is on the board of %s, not %s; a note can only replace one in its own effort", shortID(old.ID), old.EffortSlug, effort.Slug)
+	}
+	if !postKinds[NoteKind(old.Kind)] {
+		return store.Note{}, errf(CodeInvalid, "note %s is a %s; only plan, decision, interface, blocker and handoff notes can be replaced (answer a question instead)", shortID(old.ID), old.Kind)
+	}
+	author, err := s.Store.PrincipalByID(ctx, old.AuthorID)
+	if err != nil {
+		return store.Note{}, err
+	}
+	person := actor.Human().ID
+	if old.System || (author.ID != actor.ID && author.ID != person && (author.ParentID == nil || *author.ParentID != person)) {
+		return store.Note{}, errf(CodePermission, "note %s is by %s; you can only replace your own notes and those of your person's agents. Post a new note instead, or ask its author to replace it",
+			shortID(old.ID), author.Ref())
+	}
+	if old.SupersededBy != nil {
+		return store.Note{}, errf(CodeInvalid, "note %s was already replaced by %s; replace that one instead: --supersedes %s", shortID(old.ID), shortID(*old.SupersededBy), shortID(*old.SupersededBy))
+	}
+	return old, nil
+}
+
 var refKinds = map[string]store.PrincipalKind{"user": store.KindHuman, "agent": store.KindAgent, "service": store.KindService}
 
 // resolvePrincipal finds who a question is addressed to: a ref
@@ -246,13 +279,41 @@ func (s *Service) resolvePrincipal(ctx context.Context, actor Actor, to string) 
 }
 
 // noteCache turns stored notes into Notes, loading each principal once.
+// With a reader, it fills Note.Read for that principal.
 type noteCache struct {
 	s          *Service
 	principals map[uuid.UUID]store.Principal
+	reader     uuid.UUID
 }
 
 func (s *Service) newNoteCache() *noteCache {
 	return &noteCache{s: s, principals: map[uuid.UUID]store.Principal{}}
+}
+
+// notesFor is a noteCache that fills Note.Read for actor.
+func (s *Service) notesFor(actor Actor) *noteCache {
+	c := s.newNoteCache()
+	c.reader = actor.ID
+	return c
+}
+
+// fillRead sets Read on notes the cache's reader has seen.
+func (c *noteCache) fillRead(ctx context.Context, notes []Note) error {
+	if c.reader == uuid.Nil || len(notes) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(notes))
+	for i, n := range notes {
+		ids[i] = n.ID
+	}
+	read, err := c.s.Store.NotesRead(ctx, c.reader, ids)
+	if err != nil {
+		return err
+	}
+	for i := range notes {
+		notes[i].Read = read[notes[i].ID]
+	}
+	return nil
 }
 
 func (c *noteCache) principal(ctx context.Context, id uuid.UUID) (store.Principal, error) {
@@ -268,10 +329,22 @@ func (c *noteCache) principal(ctx context.Context, id uuid.UUID) (store.Principa
 }
 
 func (c *noteCache) note(ctx context.Context, r store.Note, now time.Time) (Note, error) {
+	n, err := c.convert(ctx, r, now)
+	if err != nil {
+		return Note{}, err
+	}
+	one := []Note{n}
+	if err := c.fillRead(ctx, one); err != nil {
+		return Note{}, err
+	}
+	return one[0], nil
+}
+
+func (c *noteCache) convert(ctx context.Context, r store.Note, now time.Time) (Note, error) {
 	n := Note{
 		ID: r.ID, RepoName: r.RepoName, EffortSlug: r.EffortSlug, EffortID: r.EffortID, ThreadID: r.ThreadID,
 		Kind: NoteKind(r.Kind), Targets: r.Targets, Body: r.Body, State: noteState(r, now), AnswerBy: r.AnswerBy,
-		CreatedAt: r.CreatedAt,
+		CreatedAt: r.CreatedAt, Supersedes: r.Supersedes, SupersededBy: r.SupersededBy, System: r.System,
 	}
 	var err error
 	if n.Author, err = c.principal(ctx, r.AuthorID); err != nil {
@@ -297,11 +370,14 @@ func (c *noteCache) note(ctx context.Context, r store.Note, now time.Time) (Note
 func (c *noteCache) notes(ctx context.Context, rows []store.Note, now time.Time) ([]Note, error) {
 	out := make([]Note, 0, len(rows))
 	for _, r := range rows {
-		n, err := c.note(ctx, r, now)
+		n, err := c.convert(ctx, r, now)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, n)
+	}
+	if err := c.fillRead(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

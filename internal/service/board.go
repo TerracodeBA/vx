@@ -105,6 +105,9 @@ type ListNotesInput struct {
 	Since        time.Time
 	ThreadID     uuid.UUID
 	Limit        int // 0: DefaultNoteListLimit
+	// IncludeSuperseded keeps notes a newer note replaced (vx board --all);
+	// by default they are left out.
+	IncludeSuperseded bool
 }
 
 // Inbox is what needs a principal's attention.
@@ -167,14 +170,23 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 	if err != nil {
 		return Note{}, err
 	}
-	row, err := s.insertNote(ctx, actor, "note.post", store.Note{
+	row := store.Note{
 		EffortID: v.Effort.ID, Kind: string(in.Kind), Targets: targets, AuthorID: actor.ID, Body: body,
 		State: NoteOpen, CreatedAt: s.Now(),
-	}, nil)
-	if err != nil {
+	}
+	var extra map[string]string
+	if strings.TrimSpace(in.Supersedes) != "" {
+		old, err := s.supersedable(ctx, actor, v.Effort, in.Supersedes)
+		if err != nil {
+			return Note{}, err
+		}
+		row.Supersedes = &old.ID
+		extra = map[string]string{"supersedes": old.ID.String()}
+	}
+	if row, err = s.insertNote(ctx, actor, "note.post", row, extra); err != nil {
 		return Note{}, err
 	}
-	return s.newNoteCache().note(ctx, row, s.Now())
+	return s.notesFor(actor).note(ctx, row, s.Now())
 }
 
 // Ask posts a question, optionally to one principal, that escalates after
@@ -260,6 +272,9 @@ func (s *Service) AnswerNote(ctx context.Context, actor Actor, questionID string
 		if err := tx.MarkNoteAnswered(ctx, q.ID); err != nil {
 			return err
 		}
+		if err := tx.MarkNotesRead(ctx, actor.ID, []uuid.UUID{q.ID}); err != nil { // answering it means it was seen
+			return err
+		}
 		if question, err = tx.NoteByID(ctx, q.ID); err != nil {
 			return err
 		}
@@ -269,7 +284,7 @@ func (s *Service) AnswerNote(ctx context.Context, actor Actor, questionID string
 	if err != nil {
 		return Note{}, Note{}, classify(err)
 	}
-	c := s.newNoteCache()
+	c := s.notesFor(actor)
 	a, err := c.note(ctx, answer, now)
 	if err != nil {
 		return Note{}, Note{}, err
@@ -300,11 +315,13 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.listNotes(ctx, store.NoteFilter{EffortID: v.Effort.ID, Kinds: kinds, Since: in.Since, ThreadID: in.ThreadID}, targets, limit)
+	rows, err := s.listNotes(ctx, store.NoteFilter{
+		EffortID: v.Effort.ID, Kinds: kinds, Since: in.Since, ThreadID: in.ThreadID, Current: !in.IncludeSuperseded,
+	}, targets, limit)
 	if err != nil {
 		return nil, err
 	}
-	return s.newNoteCache().notes(ctx, rows, s.Now())
+	return s.notesFor(actor).notes(ctx, rows, s.Now())
 }
 
 // GetInbox returns what needs the caller's attention across efforts, in
@@ -326,7 +343,7 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 		}
 	}
 	now := s.Now()
-	c := s.newNoteCache()
+	c := s.notesFor(actor)
 	var in Inbox
 	rows, err := s.Store.OpenQuestionsTo(ctx, ids, maxInboxNotes)
 	if err != nil {
@@ -367,9 +384,9 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 		return NoteContext{}, err
 	}
 	now := s.Now()
-	c := s.newNoteCache()
+	c := s.notesFor(actor)
 	var out NoteContext
-	rows, err := s.listNotes(ctx, store.NoteFilter{EffortID: v.Effort.ID}, targets, contextNotes)
+	rows, err := s.listNotes(ctx, store.NoteFilter{EffortID: v.Effort.ID, Current: true}, targets, contextNotes)
 	if err != nil {
 		return NoteContext{}, err
 	}
@@ -421,7 +438,7 @@ func (s *Service) GetNote(ctx context.Context, actor Actor, id string) (Note, er
 	if err := s.noteFor(ctx, actor, row, RoleRead); err != nil {
 		return Note{}, err
 	}
-	return s.newNoteCache().note(ctx, row, s.Now())
+	return s.notesFor(actor).note(ctx, row, s.Now())
 }
 
 // TrustOf says how actor relates to the author of n: TrustSelf, TrustYours
