@@ -109,7 +109,7 @@ func TestParseRulesErrors(t *testing.T) {
 		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks], [automation], [[policy]])`},
 		{"bad rebase mode", "[checks]\nrequired = [\"go test\"]\n\n[automation]\nrebase = \"always\"\n", 5, `[automation] rebase is "always"; use "auto"`},
 		{"unknown table", "\n[merge]\nstrategy = \"ours\"\n", 2, `unknown table or key "merge"`},
-		{"unknown key in unique", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"n\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\npattern = \"x\"\n", 10, `unknown key "pattern" in [[unique]] (known: name, glob, key)`},
+		{"unknown key in unique", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"n\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\npattern = \"x\"\n", 10, `unknown key "pattern" in [[unique]] (known: name, glob, key, content, scope)`},
 		{"unknown key in generated", "[[generated]]\nglob = \"gen/**\"\ncmd = \"make\"\n", 3, `unknown key "cmd" in [[generated]] (known: glob, command)`},
 		{"unknown key in checks", "[checks]\noptional = [\"x\"]\n", 2, `unknown key "optional" in [checks] (known: required)`},
 		{"missing name", "[[unique]]\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n", 1, "name is missing"},

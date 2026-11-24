@@ -27,8 +27,9 @@ the files that would not merge, and what the combined code breaks
 (duplicate Go declarations, vx.toml rules such as migration numbers).
 
 The forecast runs after every land and when the base branch moves; vx
-overlaps recomputes a stale one first. Clean pairs are left out unless you
-pass --all.`,
+overlaps recomputes a stale one first. Clean pairs are left out and long
+file lists are cut to a few unless you pass --all; --json always has every
+file.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -55,7 +56,9 @@ pass --all.`,
 			default:
 				a.printf("Overlaps of %s with other efforts (%d of %d):\n", slug, len(shown), len(os))
 				if !a.jsonOut {
-					writeOverlaps(a.Out, shown)
+					for _, o := range shown {
+						fmt.Fprintf(a.Out, "  %s\n", overlapLineAll(o, all))
+					}
 				}
 				if hasConflict(shown) {
 					a.printf("Agree with the other effort's owner on the board who changes what, or rebase after the other ships.\n")
@@ -69,7 +72,7 @@ pass --all.`,
 		},
 	}
 	boardScopeFlags(cmd, &repoFlag, &effortFlag)
-	cmd.Flags().BoolVar(&all, "all", false, "also list the efforts that do not collide")
+	cmd.Flags().BoolVar(&all, "all", false, "also list the efforts that do not collide, and every shared file")
 	return cmd
 }
 
@@ -154,17 +157,38 @@ func writeOverlaps(w io.Writer, os []*vxv1.Overlap) {
 }
 
 // overlapLine is one collision: "conflict  audit-log (user:bob): conflicts in auth.go".
-func overlapLine(o *vxv1.Overlap) string {
+func overlapLine(o *vxv1.Overlap) string { return overlapLineAll(o, false) }
+
+// overlapLineAll is overlapLine with every file listed when every is set
+// (vx overlaps --all) instead of the first few.
+func overlapLineAll(o *vxv1.Overlap, every bool) string {
+	few := func(paths []string) string { return listFew(paths, every) }
 	var b strings.Builder
 	fmt.Fprintf(&b, "%-9s %s (%s): ", o.Status, o.OtherEffort, o.OtherOwner)
+	// Generated files both change never merge: they are regenerated.
+	regen := map[string]bool{}
+	for _, w := range o.Warnings {
+		if w.Kind == "generated" && w.Path != "" {
+			regen[w.Path] = true
+		}
+	}
+	var merging []string
+	for _, f := range o.SharedFiles {
+		if !regen[f] && !contains(o.Conflicts, f) {
+			merging = append(merging, f)
+		}
+	}
 	var parts []string
 	if len(o.Conflicts) > 0 {
-		parts = append(parts, "conflicts in "+listFew(o.Conflicts))
+		parts = append(parts, "conflicts in "+few(o.Conflicts))
 	}
-	if shared := len(o.SharedFiles) - len(o.Conflicts); shared > 0 && len(o.Conflicts) > 0 {
-		parts = append(parts, fmt.Sprintf("%d more shared file(s) merge", shared))
-	} else if len(o.Conflicts) == 0 && len(o.SharedFiles) > 0 {
-		parts = append(parts, "shares "+listFew(o.SharedFiles)+", merges cleanly")
+	if len(merging) > 0 && len(o.Conflicts) > 0 {
+		parts = append(parts, fmt.Sprintf("%d more shared file(s) merge", len(merging)))
+		if every {
+			parts[len(parts)-1] += ": " + few(merging)
+		}
+	} else if len(merging) > 0 {
+		parts = append(parts, "shares "+few(merging)+", merges cleanly")
 	}
 	for _, w := range o.Warnings {
 		parts = append(parts, strings.TrimSuffix(w.Detail, "."))
@@ -176,10 +200,11 @@ func overlapLine(o *vxv1.Overlap) string {
 	return b.String()
 }
 
-func listFew(paths []string) string {
+// listFew lists paths, the first few and how many more unless all is set.
+func listFew(paths []string, all bool) string {
 	const max = 5
-	if len(paths) <= max {
+	if all || len(paths) <= max {
 		return strings.Join(paths, ", ")
 	}
-	return fmt.Sprintf("%s and %d more", strings.Join(paths[:max], ", "), len(paths)-max)
+	return fmt.Sprintf("%s and %d more (vx overlaps --all lists them)", strings.Join(paths[:max], ", "), len(paths)-max)
 }

@@ -6,6 +6,15 @@ name = "migration"
 glob = "internal/store/migrations/*.sql"
 key  = '^(\d+)_'
 
+# Two fields of one proto message may not share a number: two efforts that
+# both add field 12 to message LandResponse each merge cleanly, and the
+# combined file does not compile (or, worse, does).
+[[unique]]
+name    = "proto-field"
+glob    = "proto/**/*.proto"
+scope   = '^\s*message\s+(\w+)'
+content = '^\s*(?:(?:optional|repeated|required)\s+)?(?:map<[^>]+>|[A-Za-z_][\w.]*)\s+[A-Za-z_]\w*\s*=\s*(\d+)'
+
 # Generated code: never text-merged; regenerate it instead.
 [[generated]]
 glob    = "gen/**"

@@ -374,6 +374,14 @@ func (r *forecastRun) compute(ctx context.Context, repo store.Repo, branch store
 		}
 	}
 	sort.Strings(fc.conflicts)
+	// Generated files both change are never text-merged: whoever ships
+	// second regenerates them.
+	for _, g := range r2.Generated {
+		if shared[g.Path] && !seen[g.Path] {
+			fc.warnings = append(fc.warnings, regenerateWarning(g))
+			fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, g.Path), append(fc.involvedOfB, g.Path)
+		}
+	}
 
 	if combined := r2.Tree; !combined.IsZero() {
 		union := make([]string, 0, len(a.changed)+len(b.changed))
@@ -578,21 +586,35 @@ func overlapNoteText(other store.Effort, owner store.Principal, fc forecast, min
 		fmt.Fprintf(&b, "%s changes %s, next to this effort's %s.", who, fileList(theirs), fileList(mine))
 		targets = uniqueSorted(append(append([]string{}, mine...), theirs...))
 	}
-	if len(fc.conflicts) > 0 {
+	regen, others := splitRegenerate(fc.warnings)
+	switch {
+	case len(fc.conflicts) > 0:
 		fmt.Fprintf(&b, " Shipping both conflicts in %s.", fileList(fc.conflicts))
-	} else {
+	case len(regen) > 0:
+		// Not "merges cleanly": the generated files need regenerating.
+		fmt.Fprintf(&b, " Shipping both: %s", regenerateText(regen))
+		if len(regen) < len(fc.shared) {
+			b.WriteString("; the other shared files merge")
+		}
+		if len(others) == 0 {
+			b.WriteString(".")
+		}
+	default:
 		b.WriteString(" Shipping both merges cleanly")
-		if len(fc.warnings) == 0 {
+		if len(others) == 0 {
 			b.WriteString(".")
 		}
 	}
-	if len(fc.warnings) > 0 {
+	if len(fc.conflicts) > 0 && len(regen) > 0 {
+		others = append([]engine.Warning{{Kind: engine.WarningGenerated, Detail: regenerateText(regen)}}, others...)
+	}
+	if len(others) > 0 {
 		if len(fc.conflicts) > 0 {
 			b.WriteString(" Also:")
 		} else {
 			b.WriteString(", but:")
 		}
-		for i, w := range fc.warnings {
+		for i, w := range others {
 			if i > 0 {
 				b.WriteString(";")
 			}
@@ -604,6 +626,51 @@ func overlapNoteText(other store.Effort, owner store.Principal, fc forecast, min
 		targets = targets[:MaxNoteTargets]
 	}
 	return finishNote(b.String()), targets
+}
+
+// regenerateWarning is a generated file both efforts change: never
+// text-merged, so it has to be regenerated when the second one ships.
+func regenerateWarning(g engine.GeneratedFile) engine.Warning {
+	d := fmt.Sprintf("regenerate when shipping (%s)", g.Path)
+	if g.Command != "" {
+		d += fmt.Sprintf(" with `%s`", g.Command)
+	}
+	return engine.Warning{Path: g.Path, Kind: engine.WarningGenerated, Name: g.Command, Files: []string{g.Path}, Detail: d}
+}
+
+// splitRegenerate separates the generated-file warnings of a forecast from
+// the others.
+func splitRegenerate(ws []engine.Warning) (regen, others []engine.Warning) {
+	for _, w := range ws {
+		if w.Kind == engine.WarningGenerated && w.Path != "" {
+			regen = append(regen, w)
+		} else {
+			others = append(others, w)
+		}
+	}
+	return regen, others
+}
+
+// regenerateText says which generated files to regenerate, grouped by
+// command: "regenerate when shipping (gen/a.go, gen/b.go) with `buf generate`".
+func regenerateText(regen []engine.Warning) string {
+	var order []string
+	files := map[string][]string{}
+	for _, w := range regen {
+		if _, ok := files[w.Name]; !ok {
+			order = append(order, w.Name)
+		}
+		files[w.Name] = append(files[w.Name], w.Path)
+	}
+	parts := make([]string, 0, len(order))
+	for _, cmd := range order {
+		p := fmt.Sprintf("regenerate when shipping (%s)", fileList(files[cmd]))
+		if cmd != "" {
+			p += fmt.Sprintf(" with `%s`", cmd)
+		}
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // overlapWarningText says what a warning of the combined tree means.

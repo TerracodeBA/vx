@@ -132,6 +132,13 @@ name = "migration"                         # vx reserve migration
 glob = "internal/store/migrations/*.sql"
 key  = '^(\d+)_'                           # first group, matched on the file name
 
+# Two fields of one proto message may not share a number.
+[[unique]]
+name    = "proto-field"
+glob    = "proto/**/*.proto"
+scope   = '^\s*message\s+(\w+)'           # first group names the scope
+content = '^\s*(?:(?:optional|repeated|required)\s+)?(?:map<[^>]+>|[A-Za-z_][\w.]*)\s+[A-Za-z_]\w*\s*=\s*(\d+)'
+
 # Generated code: never text-merged; regenerate it instead.
 [[generated]]
 glob    = "gen/**"
@@ -143,6 +150,7 @@ required = ['test -z "$(gofmt -l cmd internal)"', "go vet ./...", "go test -coun
 
 - **Globs** match paths from the repository root: `*` and `?` within one path segment, a `**` segment across any number of them (`gen/**`, `**/*_string.go`, `api/**/types.go`). Character classes and braces are not supported.
 - **`[[unique]]`**: files matching `glob` may not share `key`, the first group of a regular expression matched on the file's name. When a land, `vx sync` or a ship plan produces two files with one key and at least one of them is new or changed, vx warns (kind `rule`): `Warning: migration 008 is used by 008_effort_rebases.sql and 008_orgs.sql (rule migration in vx.toml)`. A clash that predates the change is not repeated on every land. The overlap forecast reports the same clash between two efforts before either ships.
+- **`[[unique]]` inside files**: with `content` instead of `key`, the rule looks inside the files `glob` covers. `content` is a regular expression matched against each line (text after `//` is ignored); its first group may not be used twice. `scope` (optional) is a regular expression whose first group names a scope; values only need to be unique within one. A scope opened on a line with `{` ends at its matching `}`, and nested scopes are named `outer.inner` (`LandResponse.Inner`); in files without braces a scope lasts until the next line `scope` matches. Scopes of one name in different files count as one. Two efforts that both add field 12 to `message LandResponse` each land cleanly; the forecast of the two, and the land that brings them together, warn: `proto-field 12 in LandResponse is used twice: proto/vx/v1/vx.proto lines 612 and 620 (rule proto-field in vx.toml)` (`decl` is `LandResponse 12`). Only values used more often than before the change are reported. `vx reserve` does not hand out content values; pick one and let the forecast check it. vx's own `vx.toml` has this rule for `proto/**/*.proto`.
 - **`vx reserve RULE`** hands out the next free key before you add the file: one more than the largest used on the target branch, in any open effort or reserved before, with the same zero padding. Concurrent calls get different values. `Reserved migration 017 for this effort: name it internal/store/migrations/017_<name>.sql`. Reservations are listed by `vx rules` and on the repository page.
 - **`[[generated]]`**: a file matching `glob` is never text-merged. When both sides changed it (a land merging onto newer work, `vx sync`, a ship plan, a rebase), vx keeps the side being brought in (your working copy or workspace on land and sync, the effort's change on ship and rebase), writes no markers and warns (kind `generated`): `` Warning: generated file gen/vx/v1/vx.pb.go: regenerate with `buf generate` ``. Regenerate from the merged sources and land the result. Files whose first lines say `// Code generated ... DO NOT EDIT.` are treated the same way without a rule. A rebase that stops on another file lists the generated ones too, holding the change's version.
 - **`[checks] required`**: commands every land should run. `vx land` without a `--run` of exactly that command (spaces trimmed) prints `` Not verified: required check `go vet ./...` (vx.toml) was not run by vx ``; the change's evidence keeps it (`not_verified`), shown by `vx log`, the web UI and the pull request body. A check you report with `--check` does not count. It never blocks a land.
@@ -332,8 +340,9 @@ vx release                                     # end your claims tied to the ope
 Two efforts of one repository ship separately, so a collision between them used to surface only when the second one shipped (two efforts each adding migration 008). vx now forecasts it: for every pair of open efforts with the same base branch it simulates shipping both, and tells both sides when the outcome changes.
 
 ```sh
-vx overlaps                 # this effort's collisions with other open efforts; --all lists clean pairs too
-vx overlaps --json          # the same as data: other_effort, status, shared_files, conflicts, warnings
+vx overlaps                 # this effort's collisions with other open efforts (long file lists cut to five)
+vx overlaps --all           # also clean pairs, and every shared file instead of "and 4 more"
+vx overlaps --json          # the same as data, every file: other_effort, status, shared_files, conflicts, warnings
 ```
 
 ```
@@ -342,7 +351,7 @@ Overlaps of auth with other efforts (1 of 2):
 ```
 
 - Status: `clean` (no file changed by both, nothing breaks), `overlap` (shared files that merge cleanly, or files next to each other that break a rule together) or `conflict` (shipping both stops on a file).
-- Warnings are what the combined code breaks although the text merges: a Go name declared twice across the two efforts (`both declare func helper in package internal/api`), a signature one effort changed that the other calls the old way, or a name one removed that the other uses (kinds `signature`, `removed`; only within packages or directories both efforts touch), a shared Go file that only merges by declaration (`merged-by-declaration`), and `vx.toml` rules such as two migrations with one number (`migration 016 is used by 016_a.sql and 016_b.sql`). Only problems that involve files of both efforts are listed; an effort's own problems are in its land warnings.
+- Warnings are what the combined code breaks although the text merges: a Go name declared twice across the two efforts (`both declare func helper in package internal/api`), a signature one effort changed that the other calls the old way, or a name one removed that the other uses (kinds `signature`, `removed`; only within packages or directories both efforts touch), a shared Go file that only merges by declaration (`merged-by-declaration`), and `vx.toml` rules such as two migrations with one number (`migration 016 is used by 016_a.sql and 016_b.sql`) or two fields with one number in a proto message. A generated file both efforts change is never text-merged, so it does not "merge cleanly": the forecast says `` regenerate when shipping (gen/vx/v1/vx.pb.go) with `buf generate` `` (kind `generated`). Only problems that involve files of both efforts are listed; an effort's own problems are in its land warnings.
 - The forecast runs after every land, in the background (the land never waits for it or fails because of it), and again for every open effort when the base branch moves (`vx repo sync`, a GitHub push). `vx overlaps`, `vx status` and `vx_overlaps` recompute a stale one first, within 20 seconds.
 - Where you see it: `vx land` prints `Overlaps with other efforts:` after the result and warnings, before the board feed (the forecast as of before this land; the new one follows on the board); `vx status` has an Overlaps section; `vx context` lists the collisions on the paths you name; the web UI has an "Overlaps with other efforts" panel on the effort page and a badge in the efforts lists.
 - Notes: when a pair's status, conflicts or warnings change, vx posts a system note (kind `overlap`, author `vx`, trust `teammate`) on **both** boards, on the shared files: `Effort "Audit log" (audit-log, user:bob) also changes auth.go. Shipping both conflicts in auth.go.` The next note for the pair replaces the previous one, so the board keeps one current note per pair; when the efforts stop sharing files, one short `Resolved:` note says so. Only people and agents who can read the repository see any of it.
