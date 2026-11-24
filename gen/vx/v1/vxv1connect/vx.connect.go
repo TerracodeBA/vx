@@ -68,6 +68,11 @@ const (
 	// AuthServiceCreateLoginCodeProcedure is the fully-qualified name of the AuthService's
 	// CreateLoginCode RPC.
 	AuthServiceCreateLoginCodeProcedure = "/vx.v1.AuthService/CreateLoginCode"
+	// AuthServiceGetAgentProcedure is the fully-qualified name of the AuthService's GetAgent RPC.
+	AuthServiceGetAgentProcedure = "/vx.v1.AuthService/GetAgent"
+	// AuthServiceSetAgentScopeProcedure is the fully-qualified name of the AuthService's SetAgentScope
+	// RPC.
+	AuthServiceSetAgentScopeProcedure = "/vx.v1.AuthService/SetAgentScope"
 	// ObjectServiceMissingObjectsProcedure is the fully-qualified name of the ObjectService's
 	// MissingObjects RPC.
 	ObjectServiceMissingObjectsProcedure = "/vx.v1.ObjectService/MissingObjects"
@@ -244,6 +249,13 @@ type AuthServiceClient interface {
 	// CreateLoginCode returns a one-time code that signs the caller in to the
 	// web UI (vx ui). It expires after two minutes and works once.
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
+	// GetAgent returns an agent with its path scope, budgets and today's
+	// usage. An agent may read its own (agent empty), a person their agents',
+	// a site admin anyone's.
+	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
+	// SetAgentScope changes an agent's path scope and budgets. Only the
+	// agent's person or a site admin may; an agent cannot, not even its own.
+	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the vx.v1.AuthService service. By default, it uses
@@ -299,6 +311,18 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
 			connect.WithClientOptions(opts...),
 		),
+		getAgent: connect.NewClient[v1.GetAgentRequest, v1.GetAgentResponse](
+			httpClient,
+			baseURL+AuthServiceGetAgentProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetAgent")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentScope: connect.NewClient[v1.SetAgentScopeRequest, v1.SetAgentScopeResponse](
+			httpClient,
+			baseURL+AuthServiceSetAgentScopeProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SetAgentScope")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -311,6 +335,8 @@ type authServiceClient struct {
 	revokeToken     *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
 	createToken     *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
 	createLoginCode *connect.Client[v1.CreateLoginCodeRequest, v1.CreateLoginCodeResponse]
+	getAgent        *connect.Client[v1.GetAgentRequest, v1.GetAgentResponse]
+	setAgentScope   *connect.Client[v1.SetAgentScopeRequest, v1.SetAgentScopeResponse]
 }
 
 // WhoAmI calls vx.v1.AuthService.WhoAmI.
@@ -348,6 +374,16 @@ func (c *authServiceClient) CreateLoginCode(ctx context.Context, req *connect.Re
 	return c.createLoginCode.CallUnary(ctx, req)
 }
 
+// GetAgent calls vx.v1.AuthService.GetAgent.
+func (c *authServiceClient) GetAgent(ctx context.Context, req *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error) {
+	return c.getAgent.CallUnary(ctx, req)
+}
+
+// SetAgentScope calls vx.v1.AuthService.SetAgentScope.
+func (c *authServiceClient) SetAgentScope(ctx context.Context, req *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error) {
+	return c.setAgentScope.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the vx.v1.AuthService service.
 type AuthServiceHandler interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
@@ -369,6 +405,13 @@ type AuthServiceHandler interface {
 	// CreateLoginCode returns a one-time code that signs the caller in to the
 	// web UI (vx ui). It expires after two minutes and works once.
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
+	// GetAgent returns an agent with its path scope, budgets and today's
+	// usage. An agent may read its own (agent empty), a person their agents',
+	// a site admin anyone's.
+	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
+	// SetAgentScope changes an agent's path scope and budgets. Only the
+	// agent's person or a site admin may; an agent cannot, not even its own.
+	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -420,6 +463,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceGetAgentHandler := connect.NewUnaryHandler(
+		AuthServiceGetAgentProcedure,
+		svc.GetAgent,
+		connect.WithSchema(authServiceMethods.ByName("GetAgent")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSetAgentScopeHandler := connect.NewUnaryHandler(
+		AuthServiceSetAgentScopeProcedure,
+		svc.SetAgentScope,
+		connect.WithSchema(authServiceMethods.ByName("SetAgentScope")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceWhoAmIProcedure:
@@ -436,6 +491,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceCreateTokenHandler.ServeHTTP(w, r)
 		case AuthServiceCreateLoginCodeProcedure:
 			authServiceCreateLoginCodeHandler.ServeHTTP(w, r)
+		case AuthServiceGetAgentProcedure:
+			authServiceGetAgentHandler.ServeHTTP(w, r)
+		case AuthServiceSetAgentScopeProcedure:
+			authServiceSetAgentScopeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -471,6 +530,14 @@ func (UnimplementedAuthServiceHandler) CreateToken(context.Context, *connect.Req
 
 func (UnimplementedAuthServiceHandler) CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.CreateLoginCode is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.GetAgent is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.SetAgentScope is not implemented"))
 }
 
 // ObjectServiceClient is a client for the vx.v1.ObjectService service.

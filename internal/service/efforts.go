@@ -155,6 +155,9 @@ func (s *Service) OpenWorkspace(ctx context.Context, actor Actor, repoName, slug
 	}
 	var ws store.Workspace
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
+		if err := s.checkOpenWorkspaces(ctx, tx, actor); err != nil {
+			return err
+		}
 		var err error
 		ws, err = tx.CreateWorkspace(ctx, store.Workspace{EffortID: v.Effort.ID, OwnerID: actor.ID, Intent: strings.TrimSpace(intent), Base: v.Effort.Head})
 		if err != nil {

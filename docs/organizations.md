@@ -130,7 +130,7 @@ Prune afterwards, as a site admin: see [deploy.md](deploy.md#upgrading-to-v02).
 ## Limits today
 
 - **Sign-in.** With a GitHub App set up, people sign in with GitHub (see [getting-started.md](getting-started.md#signing-in)); new accounts follow the sign-up mode (invite, open or closed). Otherwise tokens: site admins create people with `vx-server user-add`, the web UI (Admin, People) or the API.
-- **Agents.** An agent can change any path its person can, and there are no per-agent budgets for lands or check minutes.
+- **Agents.** A person can limit each agent to some paths and give it budgets for lands per day, lines and files per land and open workspaces (see [agents.md](agents.md#scopes-and-budgets)). There are no budgets per person, for check minutes or for storage yet.
 - **Scale.** Objects live on the server's disk, so one instance. It scales up well; it does not scale out yet.
 - **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants on the GitHub side.
 
@@ -147,8 +147,8 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 
 ### 2. Agent governance
 
-- Path scopes per agent (`internal/http/**`), checked on every land.
-- Budgets per agent and per person: lands per hour, check minutes, storage.
+- Path scopes per agent (`internal/http/**`), checked on every land: done, `vx agent scope` (see [agents.md](agents.md#scopes-and-budgets)).
+- Budgets per agent: lands per day, lines and files per land, open workspaces: done. Still to come: budgets per person, check minutes, storage.
 - Landing policies per path: `fast`, `gated` (checks before landing) and `human` (approval from an owner).
 - Trust levels: new agents land gated until they have a track record.
 
@@ -186,7 +186,7 @@ Organizations evaluating vx: open a [discussion](https://github.com/TerracodeBA/
 
 ## Roles and what they allow
 
-A repository role is read, write or admin; each includes the one before it. Agents have exactly the role of the person they act for. A repository you cannot read is reported as not found, in the CLI, the API, the web UI (the normal 404 page) and MCP, so its existence does not leak; one you can read but need more on is a permission error that names the role needed and who can grant it.
+A repository role is read, write or admin; each includes the one before it. Agents have exactly the role of the person they act for; a [scope](agents.md#scopes-and-budgets) can narrow what they may change within it, never widen it. A repository you cannot read is reported as not found, in the CLI, the API, the web UI (the normal 404 page) and MCP, so its existence does not leak; one you can read but need more on is a permission error that names the role needed and who can grant it.
 
 | Operation | CLI, MCP | Role |
 |---|---|---|
@@ -211,8 +211,12 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
+| Set an agent's path scope and budgets (no repository role: only the agent's person or a site admin; never an agent, not even for itself) | `vx agent scope`, Settings | person or site admin |
+| See an agent's scope, budgets and usage (the agent itself, its person, site admins) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person, agent or site admin |
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
 
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).
+
+An agent's [scope and budgets](agents.md#scopes-and-budgets) come on top of its role: writes need the role first, then the scope. A refused path or a spent budget is a permission or quota error that names who can widen it; it never hides a repository the agent can read.
 
 Lists (repositories, efforts, the inbox) only contain what you can read. `internal/service/authz_test.go` checks every row of this table for no access, read, write and admin, for a person and their agent, with vx grants (`TestAuthzMatrix`) and with roles from GitHub (`TestAuthzMatrixGitHub`).

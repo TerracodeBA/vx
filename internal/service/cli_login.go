@@ -334,7 +334,7 @@ type ServerInfo struct {
 
 // Features this server has, for CLIs that need to tell "your server is
 // too old" apart from other errors.
-var Features = []string{"board", "claims", "tasks", "rebase", "orgs", "github", "cli-login", "install-script"}
+var Features = []string{"board", "claims", "tasks", "rebase", "orgs", "github", "cli-login", "install-script", "agent-scopes"}
 
 // CLI version states in ServerInfo answers.
 const (

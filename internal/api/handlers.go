@@ -80,7 +80,43 @@ func (h *Handlers) principal(ctx context.Context, a service.Actor) *vxv1.Princip
 }
 
 func (h *Handlers) WhoAmI(ctx context.Context, _ *connect.Request[vxv1.WhoAmIRequest]) (*connect.Response[vxv1.WhoAmIResponse], error) {
-	return connect.NewResponse(&vxv1.WhoAmIResponse{Principal: h.principal(ctx, actorFrom(ctx))}), nil
+	actor := actorFrom(ctx)
+	out := &vxv1.WhoAmIResponse{Principal: h.principal(ctx, actor)}
+	if actor.Kind == store.KindAgent {
+		// The scope is extra: who the caller is matters more than a
+		// failure to read it.
+		if v, err := h.svc.GetAgent(ctx, actor, ""); err == nil {
+			out.Agent = h.agentInfoPB(ctx, v)
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handlers) GetAgent(ctx context.Context, req *connect.Request[vxv1.GetAgentRequest]) (*connect.Response[vxv1.GetAgentResponse], error) {
+	v, err := h.svc.GetAgent(ctx, actorFrom(ctx), req.Msg.Agent)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.GetAgentResponse{Agent: h.agentInfoPB(ctx, v)}), nil
+}
+
+func (h *Handlers) SetAgentScope(ctx context.Context, req *connect.Request[vxv1.SetAgentScopeRequest]) (*connect.Response[vxv1.SetAgentScopeResponse], error) {
+	m := req.Msg
+	opt := func(p *int32) *int {
+		if p == nil {
+			return nil
+		}
+		v := int(*p)
+		return &v
+	}
+	v, err := h.svc.SetAgentScope(ctx, actorFrom(ctx), m.Agent, service.ScopeInput{
+		Clear: m.Clear, SetAllow: m.SetAllow, Allow: m.Allow, SetDeny: m.SetDeny, Deny: m.Deny,
+		MaxLandsPerDay: opt(m.MaxLandsPerDay), MaxLines: opt(m.MaxLines), MaxFiles: opt(m.MaxFiles), MaxWorkspaces: opt(m.MaxWorkspaces),
+	})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.SetAgentScopeResponse{Agent: h.agentInfoPB(ctx, v)}), nil
 }
 
 func (h *Handlers) CreateAgent(ctx context.Context, req *connect.Request[vxv1.CreateAgentRequest]) (*connect.Response[vxv1.CreateAgentResponse], error) {
