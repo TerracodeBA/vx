@@ -9,6 +9,8 @@ package service
 //   - Site admins are admin on every repository.
 //   - Agents have exactly their person's role.
 //   - Service principals have only their direct grants.
+//   - On GitHub-backed repositories none of the above but site admin
+//     counts: the role comes from GitHub (github_roles.go).
 //
 // A repository the caller cannot read is reported exactly like one that
 // does not exist; one it can read but needs more on is a permission error
@@ -62,14 +64,18 @@ func repoNotFound(name string) error {
 // Agents are checked as the person they act for.
 //
 // Every service function that takes a repository name calls this first.
-// It runs one query.
+// It runs one query, plus a cache lookup (and when that is stale, a call
+// to GitHub) for GitHub-backed repositories.
 func (s *Service) Authorize(ctx context.Context, actor Actor, repo string, need RepoRole) (store.Repo, RepoRole, error) {
 	subject, direct := roleSubject(actor)
 	r, facts, err := s.Store.RepoRoleFacts(ctx, repo, subject, direct)
 	if err != nil {
 		return store.Repo{}, RoleNone, classify(err)
 	}
-	role := effectiveRole(facts)
+	role, err := s.roleFrom(ctx, actor, r, facts)
+	if err != nil {
+		return store.Repo{}, RoleNone, err
+	}
 	if role == RoleNone {
 		return store.Repo{}, RoleNone, repoNotFound(repo)
 	}
@@ -87,7 +93,10 @@ func (s *Service) AuthorizeID(ctx context.Context, actor Actor, repoID uuid.UUID
 	if err != nil {
 		return RoleNone, classify(err)
 	}
-	role := effectiveRole(facts)
+	role, err := s.roleFrom(ctx, actor, r, facts)
+	if err != nil {
+		return RoleNone, err
+	}
 	if role == RoleNone {
 		return RoleNone, classify(fmt.Errorf("repo: %w", store.ErrNotFound))
 	}
@@ -101,11 +110,32 @@ func (s *Service) AuthorizeID(ctx context.Context, actor Actor, repoID uuid.UUID
 // filling my_role in responses. It is RoleNone when the actor cannot read r.
 func (s *Service) RepoRoleOf(ctx context.Context, actor Actor, r store.Repo) RepoRole {
 	subject, direct := roleSubject(actor)
-	_, facts, err := s.Store.RepoRoleFactsByID(ctx, r.ID, subject, direct)
+	repo, facts, err := s.Store.RepoRoleFactsByID(ctx, r.ID, subject, direct)
 	if err != nil {
 		return RoleNone
 	}
-	return effectiveRole(facts)
+	role, err := s.roleFrom(ctx, actor, repo, facts)
+	if err != nil {
+		return RoleNone
+	}
+	return role
+}
+
+// roleFrom is actor's role on r: from vx's own facts, or for a
+// GitHub-backed repository from GitHub (site admins keep admin, service
+// principals keep their direct grants, vx grants count for nothing else).
+func (s *Service) roleFrom(ctx context.Context, actor Actor, r store.Repo, facts store.RoleFacts) (RepoRole, error) {
+	if !r.GitHubBacked() {
+		return effectiveRole(facts), nil
+	}
+	if facts.SiteAdmin {
+		return RoleAdmin, nil
+	}
+	if _, direct := roleSubject(actor); direct {
+		return RepoRole(facts.Grant), nil
+	}
+	role, _, err := s.GitHubRole(ctx, r, actor.Human())
+	return role, err
 }
 
 // ReadableRepos lists the repositories actor can read, by name, with its
@@ -117,10 +147,35 @@ func (s *Service) ReadableRepos(ctx context.Context, actor Actor, org *uuid.UUID
 	if err != nil {
 		return nil, nil, classify(err)
 	}
+	var gh []store.Repo
+	for i, r := range repos {
+		if r.GitHubBacked() && !facts[i].SiteAdmin && !direct {
+			gh = append(gh, r)
+		}
+	}
+	var ghRoles map[uuid.UUID]RepoRole
+	if len(gh) > 0 {
+		sub, err := s.githubSubjectOf(ctx, actor.Human())
+		if err != nil {
+			return nil, nil, err
+		}
+		ghRoles, _ = s.githubRoles(ctx, sub, gh, true) // unanswered ones are left out
+	}
 	var outR []store.Repo
 	var outRoles []RepoRole
 	for i, r := range repos {
-		if role := effectiveRole(facts[i]); role != RoleNone {
+		role := effectiveRole(facts[i])
+		if r.GitHubBacked() {
+			switch {
+			case facts[i].SiteAdmin:
+				role = RoleAdmin
+			case direct:
+				role = RepoRole(facts[i].Grant)
+			default:
+				role = ghRoles[r.ID]
+			}
+		}
+		if role != RoleNone {
 			outR = append(outR, r)
 			outRoles = append(outRoles, role)
 		}
@@ -137,7 +192,21 @@ func (s *Service) ReadableRepoIDs(ctx context.Context, actor Actor) (ids []uuid.
 	}
 	subject, direct := roleSubject(actor)
 	ids, err = s.Store.ReadableRepoIDs(ctx, subject, direct)
-	return ids, false, classify(err)
+	if err != nil || direct {
+		return ids, false, classify(err)
+	}
+	sub, err := s.githubSubjectOf(ctx, actor.Human())
+	if err != nil {
+		return nil, false, err
+	}
+	gh, _, err := s.githubReadable(ctx, sub, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, r := range gh {
+		ids = append(ids, r.ID)
+	}
+	return ids, false, nil
 }
 
 // IsSiteAdmin reports whether actor (or, for agents, its person) is a site
@@ -157,6 +226,10 @@ func (s *Service) needRole(ctx context.Context, actor Actor, r store.Repo, have,
 	who := actor.Ref()
 	if actor.Parent != nil {
 		who = fmt.Sprintf("%s acts for %s, who", actor.Ref(), actor.Parent.Ref())
+	}
+	if r.GitHubBacked() && actor.Human().Kind == store.KindHuman {
+		return errf(CodePermission, "%s has %s on %s and this needs %s. Roles on %s come from GitHub: an admin of the repository changes them in GitHub (%s); vx sees the change within %s, at once with webhooks",
+			who, have, r.Name, need, r.Name, s.GitHubSettingsURL(r), GitHubRoleTTL)
 	}
 	granters := "an owner or admin of organization " + r.Org
 	if owners := s.orgOwnerRefs(ctx, r.OrgID); owners != "" {

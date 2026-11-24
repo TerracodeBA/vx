@@ -20,13 +20,20 @@ type Org struct {
 	DefaultRepoRole string // none, read or write
 	Personal        bool
 	CreatedAt       time.Time
+	// GitHubOrgID and GitHubLogin are set for an organization linked to a
+	// GitHub organization: its membership follows GitHub.
+	GitHubOrgID *int64
+	GitHubLogin string
 }
 
-const orgCols = `o.id, o.handle, o.display_name, o.default_repo_role, o.personal, o.created_at`
+// GitHubLinked reports whether o follows a GitHub organization.
+func (o Org) GitHubLinked() bool { return o.GitHubOrgID != nil }
+
+const orgCols = `o.id, o.handle, o.display_name, o.default_repo_role, o.personal, o.created_at, o.github_org_id, coalesce(o.github_login, '')`
 
 func scanOrg(row interface{ Scan(...any) error }, extra ...any) (Org, error) {
 	var o Org
-	err := row.Scan(append([]any{&o.ID, &o.Handle, &o.DisplayName, &o.DefaultRepoRole, &o.Personal, &o.CreatedAt}, extra...)...)
+	err := row.Scan(append([]any{&o.ID, &o.Handle, &o.DisplayName, &o.DefaultRepoRole, &o.Personal, &o.CreatedAt, &o.GitHubOrgID, &o.GitHubLogin}, extra...)...)
 	return o, err
 }
 
@@ -416,12 +423,17 @@ func (q Q) ListRepoRoleFacts(ctx context.Context, principal uuid.UUID, directOnl
 // ReadableRepoIDs returns the ids of the repositories principal can read
 // through grants, teams and organization membership (directOnly: through
 // direct grants only). Site admins are not special here; callers check.
+// GitHub-backed repositories are left out, except for directOnly
+// (service principals keep their direct grants there): roles on them come
+// from GitHub, and the service adds them.
 func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly bool) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, `select repo_id from repo_grants where person_id = $1
+	rows, err := q.db.Query(ctx, `select x.repo_id from (select repo_id from repo_grants where person_id = $1
 		union select g.repo_id from repo_grants g join team_members tm on tm.team_id = g.team_id
 			where not $2 and tm.person_id = $1
 		union select r.id from repos r join org_members m on m.org_id = r.org_id join orgs o on o.id = r.org_id
-			where not $2 and m.person_id = $1 and (m.role in ('owner', 'admin') or o.default_repo_role <> 'none')`,
+			where not $2 and m.person_id = $1 and (m.role in ('owner', 'admin') or o.default_repo_role <> 'none')
+		) x join repos r on r.id = x.repo_id
+		where $2 or r.github_repo_id is null or r.github_installation_id is null`,
 		principal, directOnly)
 	if err != nil {
 		return nil, err

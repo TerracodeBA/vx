@@ -159,7 +159,11 @@ func (a *App) repoCmd() *cobra.Command {
 				if org == "" {
 					org = "-"
 				}
-				a.printf("%-30s %-16s %-6s %-7s %s\n", r.Name, org, r.MyRole, r.Provider, r.Remote)
+				line := fmt.Sprintf("%-30s %-16s %-6s %-7s %s", r.Name, org, r.MyRole, r.Provider, r.Remote)
+				if r.GithubBacked {
+					line += "  (roles from GitHub)"
+				}
+				a.printf("%s\n", line)
 			}
 			a.emit(resp.Msg)
 			return nil

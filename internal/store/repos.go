@@ -30,7 +30,16 @@ type Repo struct {
 	OrgID         uuid.UUID // the owning organization
 	Org           string    // its handle
 	CreatedAt     time.Time
+	// GitHubRepoID and GitHubInstallationID are set for a repository linked
+	// to a GitHub App installation. Such a repository is GitHub-backed:
+	// roles on it come from GitHub, never from vx grants.
+	GitHubRepoID         *int64
+	GitHubInstallationID *int64
 }
+
+// GitHubBacked reports whether roles on r come from GitHub: it is linked
+// to a GitHub repository through an installation of the vx GitHub App.
+func (r Repo) GitHubBacked() bool { return r.GitHubRepoID != nil && r.GitHubInstallationID != nil }
 
 var repoName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?$`)
 
@@ -80,7 +89,7 @@ func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 	return r, err
 }
 
-const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, r.org_id, o.handle, r.created_at`
+const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, r.org_id, o.handle, r.created_at, r.github_repo_id, r.github_installation_id`
 
 const repoFrom = ` from repos r join upstreams u on u.repo_id = r.id join orgs o on o.id = r.org_id`
 
@@ -88,7 +97,7 @@ const repoSelect = `select ` + repoCols + repoFrom
 
 func scanRepo(row interface{ Scan(...any) error }, extra ...any) (Repo, error) {
 	var r Repo
-	err := row.Scan(append([]any{&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.OrgID, &r.Org, &r.CreatedAt}, extra...)...)
+	err := row.Scan(append([]any{&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.OrgID, &r.Org, &r.CreatedAt, &r.GitHubRepoID, &r.GitHubInstallationID}, extra...)...)
 	return r, err
 }
 

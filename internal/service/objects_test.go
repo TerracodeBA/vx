@@ -318,20 +318,32 @@ func TestRepoObjectsMigrationBackfillsOldRepos(t *testing.T) {
 	}
 	blobs := blob.NewMem()
 	old := service.New(st, blobs, nil)
-	alice, err := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "alice", DisplayName: "Alice"})
+	// The old schema is written with store calls only: today's service
+	// reads columns (GitHub links, migration 011) that version 9 lacks.
+	// Alice is a site admin, so she reads the repository in "default".
+	alice, err := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "alice", DisplayName: "Alice", SiteAdmin: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	actor, _ := old.ResolveActor(ctx, alice)
-	repo, err := old.CreateRepo(ctx, actor, service.CreateRepoInput{Name: "legacy"})
+	repo, err := st.CreateRepo(ctx, store.Repo{Name: "legacy"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	branches, err := st.ListBranches(ctx, repo.ID)
-	if err != nil || len(branches) == 0 {
-		t.Fatalf("branches = %v %v", branches, err)
+	empty, err := object.EmptyTree(ctx, blobs)
+	if err != nil {
+		t.Fatal(err)
 	}
-	root, err := st.GetChangeset(ctx, repo.ID, branches[0].Head)
+	rootCS := &object.Changeset{Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Tree: empty,
+		Origin: object.OriginUpstream, Author: object.Author{Principal: "user:alice"}, Intent: "Empty repository", CreatedAt: time.Now()}
+	rootHash, err := st.InsertChangeset(ctx, repo.ID, nil, rootCS, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertBranch(ctx, store.Branch{RepoID: repo.ID, Name: repo.DefaultBranch, Head: rootHash}); err != nil {
+		t.Fatal(err)
+	}
+	root, err := st.GetChangeset(ctx, repo.ID, rootHash)
 	if err != nil {
 		t.Fatal(err)
 	}

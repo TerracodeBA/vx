@@ -19,8 +19,6 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/TerracodeBA/vx/internal/store"
 )
 
 // GitHubAPI is what vx needs from GitHub. internal/github implements it over
@@ -140,9 +138,4 @@ func (s *Service) SyncInstallation(ctx context.Context, installationID int64) er
 	return githubNotImplemented()
 }
 
-// GitHubRole returns a person's role on a GitHub-backed repository, from
-// the cache or GitHub. ok is false when the repository is not GitHub-backed
-// (then vx's own roles apply). Authorize calls it.
-func (s *Service) GitHubRole(ctx context.Context, repo store.Repo, person store.Principal) (role RepoRole, ok bool, err error) {
-	return RoleNone, false, nil // until the permissions part lands: not GitHub-backed
-}
+// GitHubRole is in github_roles.go.
