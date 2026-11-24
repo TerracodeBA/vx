@@ -18,6 +18,9 @@ var (
 // String returns a one-line description of the build.
 func String() string {
 	v, c := Version, Commit
+	if info, ok := debug.ReadBuildInfo(); ok && v == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		v = info.Main.Version // go install module@version
+	}
 	if c == "" {
 		if info, ok := debug.ReadBuildInfo(); ok {
 			for _, s := range info.Settings {
