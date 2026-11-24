@@ -41,6 +41,8 @@ const (
 	OrgServiceName = "vx.v1.OrgService"
 	// PublicServiceName is the fully-qualified name of the PublicService service.
 	PublicServiceName = "vx.v1.PublicService"
+	// RulesServiceName is the fully-qualified name of the RulesService service.
+	RulesServiceName = "vx.v1.RulesService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -91,6 +93,9 @@ const (
 	// EffortServiceListEffortsProcedure is the fully-qualified name of the EffortService's ListEfforts
 	// RPC.
 	EffortServiceListEffortsProcedure = "/vx.v1.EffortService/ListEfforts"
+	// EffortServiceListOverlapsProcedure is the fully-qualified name of the EffortService's
+	// ListOverlaps RPC.
+	EffortServiceListOverlapsProcedure = "/vx.v1.EffortService/ListOverlaps"
 	// EffortServiceLogProcedure is the fully-qualified name of the EffortService's Log RPC.
 	EffortServiceLogProcedure = "/vx.v1.EffortService/Log"
 	// EffortServiceGetChangesetProcedure is the fully-qualified name of the EffortService's
@@ -201,6 +206,13 @@ const (
 	// PublicServicePollCLILoginProcedure is the fully-qualified name of the PublicService's
 	// PollCLILogin RPC.
 	PublicServicePollCLILoginProcedure = "/vx.v1.PublicService/PollCLILogin"
+	// RulesServiceGetRulesProcedure is the fully-qualified name of the RulesService's GetRules RPC.
+	RulesServiceGetRulesProcedure = "/vx.v1.RulesService/GetRules"
+	// RulesServiceReserveProcedure is the fully-qualified name of the RulesService's Reserve RPC.
+	RulesServiceReserveProcedure = "/vx.v1.RulesService/Reserve"
+	// RulesServiceListReservationsProcedure is the fully-qualified name of the RulesService's
+	// ListReservations RPC.
+	RulesServiceListReservationsProcedure = "/vx.v1.RulesService/ListReservations"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -730,6 +742,9 @@ type EffortServiceClient interface {
 	CreateEffort(context.Context, *connect.Request[v1.CreateEffortRequest]) (*connect.Response[v1.CreateEffortResponse], error)
 	GetEffort(context.Context, *connect.Request[v1.GetEffortRequest]) (*connect.Response[v1.GetEffortResponse], error)
 	ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error)
+	// ListOverlaps returns the forecast collisions of an effort with the
+	// repository's other open efforts.
+	ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error)
 	// Log lists the changes landed in an effort, newest first.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
 	GetChangeset(context.Context, *connect.Request[v1.GetChangesetRequest]) (*connect.Response[v1.GetChangesetResponse], error)
@@ -773,6 +788,12 @@ func NewEffortServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+EffortServiceListEffortsProcedure,
 			connect.WithSchema(effortServiceMethods.ByName("ListEfforts")),
+			connect.WithClientOptions(opts...),
+		),
+		listOverlaps: connect.NewClient[v1.ListOverlapsRequest, v1.ListOverlapsResponse](
+			httpClient,
+			baseURL+EffortServiceListOverlapsProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("ListOverlaps")),
 			connect.WithClientOptions(opts...),
 		),
 		log: connect.NewClient[v1.LogRequest, v1.LogResponse](
@@ -819,6 +840,7 @@ type effortServiceClient struct {
 	createEffort   *connect.Client[v1.CreateEffortRequest, v1.CreateEffortResponse]
 	getEffort      *connect.Client[v1.GetEffortRequest, v1.GetEffortResponse]
 	listEfforts    *connect.Client[v1.ListEffortsRequest, v1.ListEffortsResponse]
+	listOverlaps   *connect.Client[v1.ListOverlapsRequest, v1.ListOverlapsResponse]
 	log            *connect.Client[v1.LogRequest, v1.LogResponse]
 	getChangeset   *connect.Client[v1.GetChangesetRequest, v1.GetChangesetResponse]
 	rebaseEffort   *connect.Client[v1.RebaseEffortRequest, v1.RebaseEffortResponse]
@@ -840,6 +862,11 @@ func (c *effortServiceClient) GetEffort(ctx context.Context, req *connect.Reques
 // ListEfforts calls vx.v1.EffortService.ListEfforts.
 func (c *effortServiceClient) ListEfforts(ctx context.Context, req *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error) {
 	return c.listEfforts.CallUnary(ctx, req)
+}
+
+// ListOverlaps calls vx.v1.EffortService.ListOverlaps.
+func (c *effortServiceClient) ListOverlaps(ctx context.Context, req *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error) {
+	return c.listOverlaps.CallUnary(ctx, req)
 }
 
 // Log calls vx.v1.EffortService.Log.
@@ -877,6 +904,9 @@ type EffortServiceHandler interface {
 	CreateEffort(context.Context, *connect.Request[v1.CreateEffortRequest]) (*connect.Response[v1.CreateEffortResponse], error)
 	GetEffort(context.Context, *connect.Request[v1.GetEffortRequest]) (*connect.Response[v1.GetEffortResponse], error)
 	ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error)
+	// ListOverlaps returns the forecast collisions of an effort with the
+	// repository's other open efforts.
+	ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error)
 	// Log lists the changes landed in an effort, newest first.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
 	GetChangeset(context.Context, *connect.Request[v1.GetChangesetRequest]) (*connect.Response[v1.GetChangesetResponse], error)
@@ -916,6 +946,12 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 		EffortServiceListEffortsProcedure,
 		svc.ListEfforts,
 		connect.WithSchema(effortServiceMethods.ByName("ListEfforts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effortServiceListOverlapsHandler := connect.NewUnaryHandler(
+		EffortServiceListOverlapsProcedure,
+		svc.ListOverlaps,
+		connect.WithSchema(effortServiceMethods.ByName("ListOverlaps")),
 		connect.WithHandlerOptions(opts...),
 	)
 	effortServiceLogHandler := connect.NewUnaryHandler(
@@ -962,6 +998,8 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 			effortServiceGetEffortHandler.ServeHTTP(w, r)
 		case EffortServiceListEffortsProcedure:
 			effortServiceListEffortsHandler.ServeHTTP(w, r)
+		case EffortServiceListOverlapsProcedure:
+			effortServiceListOverlapsHandler.ServeHTTP(w, r)
 		case EffortServiceLogProcedure:
 			effortServiceLogHandler.ServeHTTP(w, r)
 		case EffortServiceGetChangesetProcedure:
@@ -993,6 +1031,10 @@ func (UnimplementedEffortServiceHandler) GetEffort(context.Context, *connect.Req
 
 func (UnimplementedEffortServiceHandler) ListEfforts(context.Context, *connect.Request[v1.ListEffortsRequest]) (*connect.Response[v1.ListEffortsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.ListEfforts is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) ListOverlaps(context.Context, *connect.Request[v1.ListOverlapsRequest]) (*connect.Response[v1.ListOverlapsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.ListOverlaps is not implemented"))
 }
 
 func (UnimplementedEffortServiceHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
@@ -2307,4 +2349,132 @@ func (UnimplementedPublicServiceHandler) StartCLILogin(context.Context, *connect
 
 func (UnimplementedPublicServiceHandler) PollCLILogin(context.Context, *connect.Request[v1.PollCLILoginRequest]) (*connect.Response[v1.PollCLILoginResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.PublicService.PollCLILogin is not implemented"))
+}
+
+// RulesServiceClient is a client for the vx.v1.RulesService service.
+type RulesServiceClient interface {
+	// GetRules returns the rules at a ref (default: the effort head or the default branch).
+	GetRules(context.Context, *connect.Request[v1.GetRulesRequest]) (*connect.Response[v1.GetRulesResponse], error)
+	// Reserve hands out the next free value of a [[unique]] rule, across the
+	// target branch, every open effort and earlier reservations.
+	Reserve(context.Context, *connect.Request[v1.ReserveRequest]) (*connect.Response[v1.ReserveResponse], error)
+	ListReservations(context.Context, *connect.Request[v1.ListReservationsRequest]) (*connect.Response[v1.ListReservationsResponse], error)
+}
+
+// NewRulesServiceClient constructs a client for the vx.v1.RulesService service. By default, it uses
+// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRulesServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RulesServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	rulesServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("RulesService").Methods()
+	return &rulesServiceClient{
+		getRules: connect.NewClient[v1.GetRulesRequest, v1.GetRulesResponse](
+			httpClient,
+			baseURL+RulesServiceGetRulesProcedure,
+			connect.WithSchema(rulesServiceMethods.ByName("GetRules")),
+			connect.WithClientOptions(opts...),
+		),
+		reserve: connect.NewClient[v1.ReserveRequest, v1.ReserveResponse](
+			httpClient,
+			baseURL+RulesServiceReserveProcedure,
+			connect.WithSchema(rulesServiceMethods.ByName("Reserve")),
+			connect.WithClientOptions(opts...),
+		),
+		listReservations: connect.NewClient[v1.ListReservationsRequest, v1.ListReservationsResponse](
+			httpClient,
+			baseURL+RulesServiceListReservationsProcedure,
+			connect.WithSchema(rulesServiceMethods.ByName("ListReservations")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// rulesServiceClient implements RulesServiceClient.
+type rulesServiceClient struct {
+	getRules         *connect.Client[v1.GetRulesRequest, v1.GetRulesResponse]
+	reserve          *connect.Client[v1.ReserveRequest, v1.ReserveResponse]
+	listReservations *connect.Client[v1.ListReservationsRequest, v1.ListReservationsResponse]
+}
+
+// GetRules calls vx.v1.RulesService.GetRules.
+func (c *rulesServiceClient) GetRules(ctx context.Context, req *connect.Request[v1.GetRulesRequest]) (*connect.Response[v1.GetRulesResponse], error) {
+	return c.getRules.CallUnary(ctx, req)
+}
+
+// Reserve calls vx.v1.RulesService.Reserve.
+func (c *rulesServiceClient) Reserve(ctx context.Context, req *connect.Request[v1.ReserveRequest]) (*connect.Response[v1.ReserveResponse], error) {
+	return c.reserve.CallUnary(ctx, req)
+}
+
+// ListReservations calls vx.v1.RulesService.ListReservations.
+func (c *rulesServiceClient) ListReservations(ctx context.Context, req *connect.Request[v1.ListReservationsRequest]) (*connect.Response[v1.ListReservationsResponse], error) {
+	return c.listReservations.CallUnary(ctx, req)
+}
+
+// RulesServiceHandler is an implementation of the vx.v1.RulesService service.
+type RulesServiceHandler interface {
+	// GetRules returns the rules at a ref (default: the effort head or the default branch).
+	GetRules(context.Context, *connect.Request[v1.GetRulesRequest]) (*connect.Response[v1.GetRulesResponse], error)
+	// Reserve hands out the next free value of a [[unique]] rule, across the
+	// target branch, every open effort and earlier reservations.
+	Reserve(context.Context, *connect.Request[v1.ReserveRequest]) (*connect.Response[v1.ReserveResponse], error)
+	ListReservations(context.Context, *connect.Request[v1.ListReservationsRequest]) (*connect.Response[v1.ListReservationsResponse], error)
+}
+
+// NewRulesServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRulesServiceHandler(svc RulesServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	rulesServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("RulesService").Methods()
+	rulesServiceGetRulesHandler := connect.NewUnaryHandler(
+		RulesServiceGetRulesProcedure,
+		svc.GetRules,
+		connect.WithSchema(rulesServiceMethods.ByName("GetRules")),
+		connect.WithHandlerOptions(opts...),
+	)
+	rulesServiceReserveHandler := connect.NewUnaryHandler(
+		RulesServiceReserveProcedure,
+		svc.Reserve,
+		connect.WithSchema(rulesServiceMethods.ByName("Reserve")),
+		connect.WithHandlerOptions(opts...),
+	)
+	rulesServiceListReservationsHandler := connect.NewUnaryHandler(
+		RulesServiceListReservationsProcedure,
+		svc.ListReservations,
+		connect.WithSchema(rulesServiceMethods.ByName("ListReservations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.RulesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RulesServiceGetRulesProcedure:
+			rulesServiceGetRulesHandler.ServeHTTP(w, r)
+		case RulesServiceReserveProcedure:
+			rulesServiceReserveHandler.ServeHTTP(w, r)
+		case RulesServiceListReservationsProcedure:
+			rulesServiceListReservationsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRulesServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRulesServiceHandler struct{}
+
+func (UnimplementedRulesServiceHandler) GetRules(context.Context, *connect.Request[v1.GetRulesRequest]) (*connect.Response[v1.GetRulesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RulesService.GetRules is not implemented"))
+}
+
+func (UnimplementedRulesServiceHandler) Reserve(context.Context, *connect.Request[v1.ReserveRequest]) (*connect.Response[v1.ReserveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RulesService.Reserve is not implemented"))
+}
+
+func (UnimplementedRulesServiceHandler) ListReservations(context.Context, *connect.Request[v1.ListReservationsRequest]) (*connect.Response[v1.ListReservationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RulesService.ListReservations is not implemented"))
 }

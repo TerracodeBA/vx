@@ -348,6 +348,9 @@ service EffortService {
   rpc CreateEffort(CreateEffortRequest) returns (CreateEffortResponse) {}
   rpc GetEffort(GetEffortRequest) returns (GetEffortResponse) {}
   rpc ListEfforts(ListEffortsRequest) returns (ListEffortsResponse) {}
+  // ListOverlaps returns the forecast collisions of an effort with the
+  // repository's other open efforts.
+  rpc ListOverlaps(ListOverlapsRequest) returns (ListOverlapsResponse) {}
   // Log lists the changes landed in an effort, newest first.
   rpc Log(LogRequest) returns (LogResponse) {}
   rpc GetChangeset(GetChangesetRequest) returns (GetChangesetResponse) {}
@@ -478,6 +481,7 @@ message LandResponse {
   repeated Warning warnings = 8; // problems found in the landed tree; they never block a land
   repeated Claim overlapping_claims = 9; // active claims of others on files this land changed; they never block a land
   repeated string kept_both = 10; // paths where both sides inserted different lines at the same place and vx kept both
+  repeated Overlap overlaps = 11; // this effort's forecast collisions after the land
 }
 
 message AbandonRequest {
@@ -608,6 +612,10 @@ message Note {
   // "yours" (the caller's own person or one of that person's agents),
   // "teammate" (someone else's). Clients show it next to the note.
   string trust = 13;
+  string supersedes = 14; // id of the note this one replaces
+  string superseded_by = 15; // set when a newer note of the author replaced this one
+  bool system = 16; // posted by vx itself (overlaps, reviews, CI), not by a person or agent
+  bool read = 17; // the caller has seen this note
 }
 
 message PostNoteRequest {
@@ -616,6 +624,7 @@ message PostNoteRequest {
   string kind = 3; // plan, decision, interface, blocker, handoff
   repeated string targets = 4;
   string body = 5;
+  string supersedes = 6; // optional: id or 8+ character prefix of the author's own earlier note this replaces
 }
 
 message PostNoteResponse {
@@ -688,6 +697,34 @@ message ContextResponse {
   repeated ContextWorkspace working = 2; // open workspaces in the effort
   repeated Changeset recent_changes = 3; // landed changes touching the targets, newest first, with files
   repeated Claim claims = 4; // active claims on the targets (all active claims when no targets)
+  repeated OtherEffort other_efforts = 5; // the same targets in other open efforts of the repository the caller can read
+  repeated Overlap overlaps = 6; // forecast collisions of this effort with others
+}
+
+// OtherEffort is activity of another open effort on the targets asked about.
+message OtherEffort {
+  string effort = 1; // slug
+  string name = 2;
+  string owner = 3; // principal ref
+  repeated Claim claims = 4;
+  repeated Note notes = 5; // interface and decision notes on the targets, newest first
+  repeated ContextWorkspace working = 6; // its open workspaces
+  repeated string changed_paths = 7; // paths among the targets it changed and has not shipped
+}
+
+// Overlap is a forecast collision between two open efforts: what happens
+// when both ship, whichever first.
+message Overlap {
+  string repo = 1;
+  string effort = 2; // the caller's effort
+  string other_effort = 3;
+  string other_name = 4;
+  string other_owner = 5;
+  string status = 6; // clean (no shared files), overlap (shared files merge cleanly), conflict
+  repeated string shared_files = 7;
+  repeated string conflicts = 8;
+  repeated Warning warnings = 9; // rule violations (kind "rule") and semantic warnings (kind "duplicate") of the combination
+  string checked_at = 10;
 }
 
 // ---------- Coordination: claims and tasks ----------
@@ -1095,4 +1132,84 @@ message PollCLILoginResponse {
   string status = 1; // pending, approved, denied, expired
   string token = 2; // set once, when approved
   Principal principal = 3;
+}
+
+message ListOverlapsRequest {
+  string repo = 1;
+  string effort = 2; // empty: every pair in the repository the caller can read
+}
+
+message ListOverlapsResponse {
+  repeated Overlap overlaps = 1;
+}
+
+// ---------- Repository rules (vx.toml) ----------
+//
+// vx.toml at the root of a repository declares what text merges cannot see:
+//   [[unique]]    two files may not share a key (for example a migration number)
+//   [[generated]] files never text-merged; the command regenerates them
+//   [checks]      the commands that make evidence "verified" here
+
+service RulesService {
+  // GetRules returns the rules at a ref (default: the effort head or the default branch).
+  rpc GetRules(GetRulesRequest) returns (GetRulesResponse) {}
+  // Reserve hands out the next free value of a [[unique]] rule, across the
+  // target branch, every open effort and earlier reservations.
+  rpc Reserve(ReserveRequest) returns (ReserveResponse) {}
+  rpc ListReservations(ListReservationsRequest) returns (ListReservationsResponse) {}
+}
+
+message UniqueRule {
+  string name = 1; // e.g. "migration"
+  string glob = 2; // e.g. "internal/store/migrations/*.sql"
+  string key = 3; // regular expression; its first group is the key, e.g. "^(\\d+)_"
+}
+
+message GeneratedRule {
+  string glob = 1; // e.g. "gen/**"
+  string command = 2; // e.g. "buf generate"
+}
+
+message RepoRules {
+  repeated UniqueRule unique = 1;
+  repeated GeneratedRule generated = 2;
+  repeated string required_checks = 3;
+  string source = 4; // where they came from, e.g. "vx.toml at 3f2a1c9d0e7b"; empty: no vx.toml
+}
+
+message GetRulesRequest {
+  string repo = 1;
+  string effort = 2; // optional
+}
+
+message GetRulesResponse {
+  RepoRules rules = 1;
+}
+
+message ReserveRequest {
+  string repo = 1;
+  string effort = 2;
+  string rule = 3; // a [[unique]] rule's name
+}
+
+message ReserveResponse {
+  string value = 1; // e.g. "016", in the format of the existing keys
+  string example = 2; // e.g. "internal/store/migrations/016_<name>.sql"
+}
+
+message ListReservationsRequest {
+  string repo = 1;
+  string rule = 2; // optional
+}
+
+message Reservation {
+  string rule = 1;
+  string value = 2;
+  string effort = 3;
+  string reserved_by = 4;
+  string created_at = 5;
+}
+
+message ListReservationsResponse {
+  repeated Reservation reservations = 1;
 }

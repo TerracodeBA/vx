@@ -1,0 +1,15 @@
+# Rules vx checks on every land and between open efforts (see docs/agents.md).
+
+# Two migrations may not share a number (the 008 clash of 2026-11-24).
+[[unique]]
+name = "migration"
+glob = "internal/store/migrations/*.sql"
+key  = '^(\d+)_'
+
+# Generated code: never text-merged; regenerate it instead.
+[[generated]]
+glob    = "gen/**"
+command = "buf generate"
+
+[checks]
+required = ['test -z "$(gofmt -l cmd internal)"', "go vet ./...", "VX_REQUIRE_DB=1 go test -count=1 ./..."]
