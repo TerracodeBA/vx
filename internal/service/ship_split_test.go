@@ -22,6 +22,7 @@ import (
 	gitobject "github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/engine"
 	"github.com/TerracodeBA/vx/internal/gitbridge"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/object"
@@ -754,4 +755,31 @@ func TestSplitPreparePullRequestsPage(t *testing.T) {
 	}
 	page = get(resp.Header.Get("Location"))
 	contains("after opening", page, "Pushed every part.", `href="https://github.com/acme/shop/pull/41"`, "#42", "updates pull request #41")
+}
+
+// A part whose replay needed the merge by declaration says so, like a
+// whole-effort ship plan does.
+func TestSplitPartCarriesMergeWarnings(t *testing.T) {
+	e := newSplitEnv(t, map[string]string{"shop/x.go": "package shop\n\nfunc A() int { return 1 }\nfunc B() int { return 2 }\n"})
+	e.land("Change A", map[string]string{"shop/x.go": "package shop\n\nfunc A() int { return 10 }\nfunc B() int { return 2 }\n"})
+	e.land("Add notes", map[string]string{"NOTES.md": "notes\n"})
+	e.commit("Change B upstream", map[string]string{"shop/x.go": "package shop\n\nfunc A() int { return 1 }\nfunc B() int { return 20 }\n"})
+	plan := e.plan(service.SplitIndependent)
+	if len(plan.Groups) != 2 {
+		t.Fatalf("parts = %d, want 2", len(plan.Groups))
+	}
+	var found bool
+	for _, g := range plan.Groups {
+		for _, w := range g.Warnings {
+			if w.Kind == engine.WarningMergedByDecl && strings.Contains(w.Detail, "shop/x.go") {
+				found = true
+			}
+		}
+		if len(g.Conflicts) > 0 {
+			t.Fatalf("part %q conflicts: %v", g.Name, g.Conflicts)
+		}
+	}
+	if !found {
+		t.Fatalf("no part says shop/x.go was merged by declaration: %+v", plan.Groups)
+	}
 }
