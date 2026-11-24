@@ -168,7 +168,7 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 
 - A vx GitHub App installed per organization: short-lived installation tokens, repository selection, webhooks for upstream pushes and review comments.
 - Review feedback mapped back to the change and the agent that wrote the line.
-- Adapters for GitLab, Bitbucket, Gitea and Forgejo.
+- Adapters for GitLab, Bitbucket, Gitea and Forgejo (done in v0.4, with vx's own roles); roles read from those hosts' permissions.
 
 ### 4. Scale and operations
 
@@ -234,5 +234,7 @@ A repository role is read, write or admin; each includes the one before it. Agen
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).
 
 An agent's [scope and budgets](agents.md#scopes-and-budgets) come on top of its role: writes need the role first, then the scope. A refused path or a spent budget is a permission or quota error that names who can widen it; it never hides a repository the agent can read.
+
+GitLab, Gitea, Forgejo and Bitbucket repositories use vx's roles in this table (grants, teams, organization defaults), never the host's permissions: someone with Maintainer on GitLab has no role in vx until granted one, and a vx admin may ship there even without a role on the host (vx pushes and opens the merge request with the repository's token).
 
 Lists (repositories, efforts, the inbox) only contain what you can read. `internal/service/authz_test.go` checks every row of this table for no access, read, write and admin, for a person and their agent, with vx grants (`TestAuthzMatrix`) and with roles from GitHub (`TestAuthzMatrixGitHub`).

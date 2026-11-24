@@ -33,7 +33,7 @@ What the first multi-agent runs showed agents need most. Next up: efforts that s
 - [#15](https://github.com/TerracodeBA/vx/issues/15) Rebase open efforts automatically when the target branch moves (manual `vx effort rebase` done; automatic with #7)
 - [#16](https://github.com/TerracodeBA/vx/issues/16) Prepare PR screen: split an effort into independent or stacked pull requests
 - [#17](https://github.com/TerracodeBA/vx/issues/17) Code-aware merging (tree-sitter) for fewer false conflicts
-- [#8](https://github.com/TerracodeBA/vx/issues/8) GitLab, Bitbucket, Gitea and Forgejo adapters
+- [#8](https://github.com/TerracodeBA/vx/issues/8) GitLab, Bitbucket, Gitea and Forgejo adapters (pull requests, webhooks for pushes and merges, vx's own roles; review and CI feedback and host-backed roles later)
 
 ## v0.5: Ready for organizations
 

@@ -61,6 +61,11 @@ vx checks the server's version when you log in and about once a day after that. 
 
 ```sh
 vx repo create acme/shop-api --github acme/shop-api   # GitHub
+vx repo create acme/shop --gitlab acme/shop            # GitLab (gitlab.com)
+vx repo create acme/shop --gitlab acme/platform/shop --gitlab-url https://gitlab.example.com
+vx repo create acme/shop --gitea acme/shop --gitea-url https://gitea.example.com
+vx repo create acme/shop --forgejo acme/shop --forgejo-url https://codeberg.org
+vx repo create acme/shop --bitbucket acme/shop         # Bitbucket Cloud: workspace/repo
 vx repo create shop --git /path/or/url/to/repo         # any git remote or local path
 vx repo create scratch                                 # vx only, no upstream
 ```
@@ -69,6 +74,30 @@ vx imports the default branch right away. How it reaches GitHub depends on the s
 
 - **Without `VX_GITHUB_TOKEN`**: over SSH with the server user's keys. In Docker, that means the container needs SSH access; for a personal setup it is often simpler to run `vx-server` directly (see below).
 - **With `VX_GITHUB_TOKEN`** (in `deploy/.env`): over HTTPS, and vx opens pull requests itself. Use a fine-grained token with Contents and Pull requests read/write.
+
+### GitLab, Gitea, Forgejo and Bitbucket
+
+vx reaches these over HTTPS with a token and opens merge requests (GitLab) or pull requests itself. Give the repository its own token, or let it use the server's (`VX_GITLAB_TOKEN`, `VX_GITEA_TOKEN`, `VX_FORGEJO_TOKEN`, `VX_BITBUCKET_TOKEN`, see [Deploying](deploy.md#gitlab-gitea-forgejo-and-bitbucket)):
+
+```sh
+printf '%s' "$GITLAB_TOKEN" > ~/.gitlab-token && chmod 600 ~/.gitlab-token
+vx repo create acme/shop --gitlab acme/platform/shop --gitlab-url https://gitlab.example.com --token-file ~/.gitlab-token
+```
+
+The token is stored encrypted on the server and never shown again; `--token-file -` reads it from stdin, and a Bitbucket app password goes in as `USERNAME:APP_PASSWORD`. GitLab tokens need the `api` scope, Gitea and Forgejo tokens `write:repository`, Bitbucket access tokens `repository:write` and `pullrequest:write`.
+
+`vx repo create` then prints the webhook to register on the host, with a secret made for this repository (shown once):
+
+```
+Register the webhook on GitLab: Settings > Webhooks > Add new webhook:
+  URL:     https://vx.example.com/hooks/gitlab
+  Secret token: 3f9c...
+  Events:  Push events, Merge request events
+```
+
+With the webhook, pushes to the default branch are imported right away and a merged `vx/` merge request marks its effort merged. Without it, run `vx repo sync` now and then. Later changes: `vx repo host acme/shop --token-file FILE` replaces the token, `--clear-token` goes back to the server's, `--rotate-webhook-secret` makes a new secret. `vx repo list` and the repository page in the web UI show the host.
+
+Roles on these repositories are vx's own: grant people access with `vx repo grant` (or the organization's default role), whatever they can do on GitLab, Gitea or Bitbucket.
 
 ## 5. Start an effort and work in it
 
@@ -146,5 +175,6 @@ bin/vx-server user-add alice --name "Alice Example"
 | `VX_DATA_DIR` | `.vxdata` | Objects and git mirrors |
 | `VX_ADDR` | `127.0.0.1:7070` | Listen address |
 | `VX_GITHUB_TOKEN` | empty | GitHub token; without it, GitHub uses SSH |
+| `VX_GITLAB_TOKEN`, `VX_GITEA_TOKEN`, `VX_FORGEJO_TOKEN`, `VX_BITBUCKET_TOKEN` | empty | Server-wide token per host (only sent to `VX_<HOST>_URL`; GitLab defaults to gitlab.com) |
 
 CLI environment: `VX_SERVER`, `VX_TOKEN`, `VX_CONFIG` (config file path), `VX_REPO` (default repo), `VX_MODEL` and `VX_SESSION` (recorded on each change).

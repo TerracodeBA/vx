@@ -32,6 +32,35 @@ With a GitHub App, people sign in with GitHub, roles on installed repositories c
 
 Repositories of an installation fetch, push `vx/` branches and open pull requests with the App's installation token, so they need neither `VX_GITHUB_TOKEN` nor an SSH key. The App's private key, client secret and webhook secret are stored encrypted with `VX_SECRET_KEY`. Webhooks need `https://vx.example.com/hooks/github` reachable from GitHub; nothing else has to be open.
 
+## GitLab, Gitea, Forgejo and Bitbucket
+
+vx ships to GitLab (gitlab.com and self-managed, merge requests through the REST API v4), Gitea and Forgejo (one adapter, pull requests API) and Bitbucket Cloud (pull requests API 2.0) the way it ships to GitHub: it pushes `vx/` branches over HTTPS with a token and opens or updates the pull request (merge request). Each repository is connected with `vx repo create` (see [Getting started](getting-started.md#4-connect-a-repository)).
+
+**Tokens.** A repository uses its own token when it has one (`vx repo create ... --token-file FILE`, or later `vx repo host NAME --token-file FILE`), stored encrypted with `VX_SECRET_KEY` and never shown again. Otherwise it uses the server's token for its host, `VX_<HOST>_TOKEN`, which vx only sends to the address in `VX_<HOST>_URL`: a repository on another address needs its own token. Without any token vx can read public repositories, and `vx ship open` prints the host's page to open the pull request by hand.
+
+| Host | Token | Scopes |
+|---|---|---|
+| GitLab | personal, project or group access token | `api` (it covers git over HTTPS too); role Developer or higher on the project |
+| Gitea, Forgejo | access token (Settings > Applications) | `write:repository` |
+| Bitbucket Cloud | repository, project or workspace access token; or `USERNAME:APP_PASSWORD` | `repository:write`, `pullrequest:write` (app passwords: Repositories write, Pull requests write) |
+
+Git over HTTPS uses the token as the password of `oauth2` (GitLab, Gitea, Forgejo) or `x-token-auth` (Bitbucket access tokens); a Bitbucket app password goes as `USERNAME:APP_PASSWORD` in the token file. Tokens only travel in `Authorization` headers, never in URLs or logs.
+
+**Webhooks** keep vx in sync without polling: a push to the default branch, or to another branch an effort started from, is imported (and efforts whose changes reached it are marked merged), and a merged `vx/` pull request marks its effort merged at once, even after a squash merge. `vx repo create` prints the URL and a webhook secret made for that repository (shown once; `vx repo host NAME --rotate-webhook-secret` makes a new one). Instead of one secret per repository you can set `VX_<HOST>_WEBHOOK_SECRET` on the server and use it in every webhook of that host; a repository's own secret wins. Deliveries without the secret, or with a wrong one, are refused with 401. Register:
+
+| Host | Where | URL | Secret | Events |
+|---|---|---|---|---|
+| GitLab | Project > Settings > Webhooks > Add new webhook (or a group webhook for many projects) | `https://vx.example.com/hooks/gitlab` | Secret token (sent as `X-Gitlab-Token`) | Push events (all branches), Merge request events |
+| Gitea | Repository > Settings > Webhooks > Add webhook > Gitea, POST, `application/json` | `https://vx.example.com/hooks/gitea` | Secret (HMAC-SHA256 in `X-Gitea-Signature`) | Custom events: Push, Pull Request |
+| Forgejo, Codeberg | the same, webhook type Forgejo | `https://vx.example.com/hooks/forgejo` (or `/hooks/gitea`) | Secret (`X-Forgejo-Signature`) | Custom events: Push, Pull Request |
+| Bitbucket Cloud | Repository settings > Webhooks > Add webhook | `https://vx.example.com/hooks/bitbucket` | Secret (HMAC in `X-Hub-Signature`); a webhook without a secret may use `https://vx.example.com/hooks/bitbucket?secret=SECRET` | Repository: Push; Pull request: Merged |
+
+Deliveries are matched to vx repositories by the project path in the payload (`group/project`, `owner/repo`, `workspace/repo`) and the host's address, so two servers with the same path are kept apart. A delivery is applied once: redeliveries of the same delivery id are acknowledged and skipped.
+
+**Roles.** These repositories use vx's own roles: grants (`vx repo grant`), teams and the organization's default role, as for repositories without a host. Permissions on GitLab, Gitea or Bitbucket are not read; give the people who work there the vx roles they need. Roles from the host, like GitHub-backed repositories have, are a later step.
+
+**Not yet:** review comments and CI results (pipelines, commit statuses) from these hosts do not reach the board, and vx does not read the host's permissions.
+
 ## HTTPS
 
 vx listens on 127.0.0.1:7070. Put a reverse proxy with TLS in front of it. With Caddy:
@@ -155,9 +184,16 @@ docker compose exec -T postgres psql -U vx vx -c "update principals set site_adm
 | `VX_ADDR` | `0.0.0.0:7070` in the image | Listen address |
 | `VX_GITHUB_TOKEN` | empty | GitHub API and HTTPS git access |
 | `VX_PUBLIC_URL` | empty | This server's public address, like `https://vx.example.com`; needed for the GitHub App (callbacks, webhooks) and the CLI login |
-| `VX_SECRET_KEY` | empty | 32 bytes, 64 hex characters or base64 (`openssl rand -hex 32`); seals the GitHub App's credentials at rest. Required once a GitHub App exists: the server does not start without it. Keep it with your backups; never change it |
+| `VX_SECRET_KEY` | empty | 32 bytes, 64 hex characters or base64 (`openssl rand -hex 32`); seals the GitHub App's credentials and the tokens and webhook secrets of GitLab, Gitea, Forgejo and Bitbucket repositories at rest. Required once a GitHub App exists: the server does not start without it. Keep it with your backups; never change it |
 | `VX_SIGNUP` | `invite` | Who may create an account by signing in with GitHub: `invite` (logins a site admin invited), `open` (anyone) or `closed` (nobody new) |
 | `VX_GITHUB_URL`, `VX_GITHUB_API_URL` | github.com | GitHub Enterprise Server only: `https://HOST` and `https://HOST/api/v3` (set both) |
+| `VX_GITLAB_URL` | `https://gitlab.com` | GitLab address repositories default to (`--gitlab-url` overrides per repository) |
+| `VX_GITLAB_TOKEN` | empty | GitLab token for repositories on `VX_GITLAB_URL` |
+| `VX_GITEA_URL`, `VX_FORGEJO_URL` | empty | Gitea or Forgejo address repositories default to; without it every repository needs `--gitea-url` or `--forgejo-url` |
+| `VX_GITEA_TOKEN`, `VX_FORGEJO_TOKEN` | empty | Token for repositories on that address |
+| `VX_BITBUCKET_TOKEN` | empty | Bitbucket Cloud access token, or `USERNAME:APP_PASSWORD` |
+| `VX_GITLAB_WEBHOOK_SECRET`, `VX_GITEA_WEBHOOK_SECRET`, `VX_FORGEJO_WEBHOOK_SECRET`, `VX_BITBUCKET_WEBHOOK_SECRET` | empty | Server-wide webhook secret per host, for repositories without their own |
+| `VX_<HOST>_API_URL` | derived | API address when it is not the default (`URL/api/v4`, `URL/api/v1`, `https://api.bitbucket.org/2.0`) |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 
