@@ -92,10 +92,10 @@ The token is stored encrypted on the server and never shown again; `--token-file
 Register the webhook on GitLab: Settings > Webhooks > Add new webhook:
   URL:     https://vx.example.com/hooks/gitlab
   Secret token: 3f9c...
-  Events:  Push events, Merge request events
+  Events:  Push events, Merge request events, Comments, Pipeline events
 ```
 
-With the webhook, pushes to the default branch are imported right away and a merged `vx/` merge request marks its effort merged. Without it, run `vx repo sync` now and then. Later changes: `vx repo host acme/shop --token-file FILE` replaces the token, `--clear-token` goes back to the server's, `--rotate-webhook-secret` makes a new secret. `vx repo list` and the repository page in the web UI show the host.
+With the webhook, pushes to the default branch are imported right away, a merged `vx/` merge request marks its effort merged, and review comments and pipeline results reach the agents. Without it, run `vx repo sync` now and then. Later changes: `vx repo host acme/shop --token-file FILE` replaces the token, `--clear-token` goes back to the server's, `--rotate-webhook-secret` makes a new secret. `vx repo list` and the repository page in the web UI show the host.
 
 Roles on these repositories are vx's own: grant people access with `vx repo grant` (or the organization's default role), whatever they can do on GitLab, Gitea or Bitbucket.
 
