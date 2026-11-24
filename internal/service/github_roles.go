@@ -19,7 +19,8 @@ package service
 //     repositories give read to every GitHub user. Outside collaborators
 //     with write, maintain or admin keep it; those with only read do not.
 //   - A suspended installation, or one vx has no record of (removed),
-//     gives nobody a role (site admins aside).
+//     gives nobody a role (site admins aside); so does a linked repository
+//     no installation reaches any more (github_installation_id cleared).
 //   - Answers are cached in github_role_cache and
 //     github_org_membership_cache for GitHubRoleTTL; webhooks drop them
 //     sooner (DropGitHubRoles). When GitHub cannot be reached, an answer
@@ -148,6 +149,9 @@ func (s *Service) githubRoles(ctx context.Context, sub githubSubject, repos []st
 	now := s.now()
 	var ask []store.Repo
 	for _, r := range repos {
+		if r.GitHubInstallationID == nil {
+			continue // no installation reaches it any more: nobody has a role
+		}
 		if inst, found := insts[*r.GitHubInstallationID]; !found || inst.SuspendedAt != nil {
 			continue // a removed or suspended installation gives nobody a role
 		}

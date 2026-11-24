@@ -30,16 +30,18 @@ type Repo struct {
 	OrgID         uuid.UUID // the owning organization
 	Org           string    // its handle
 	CreatedAt     time.Time
-	// GitHubRepoID and GitHubInstallationID are set for a repository linked
-	// to a GitHub App installation. Such a repository is GitHub-backed:
-	// roles on it come from GitHub, never from vx grants.
+	// GitHubRepoID is set for a repository linked to GitHub, and
+	// GitHubInstallationID while an installation of the App reaches it.
+	// Such a repository is GitHub-backed: roles on it come from GitHub,
+	// never from vx grants. Without an installation nobody but site admins
+	// has a role on it (it stays GitHub-backed, so access fails closed).
 	GitHubRepoID         *int64
 	GitHubInstallationID *int64
 }
 
 // GitHubBacked reports whether roles on r come from GitHub: it is linked
-// to a GitHub repository through an installation of the vx GitHub App.
-func (r Repo) GitHubBacked() bool { return r.GitHubRepoID != nil && r.GitHubInstallationID != nil }
+// to a GitHub repository (with or without an installation reaching it now).
+func (r Repo) GitHubBacked() bool { return r.GitHubRepoID != nil }
 
 var repoName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?$`)
 

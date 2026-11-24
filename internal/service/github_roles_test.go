@@ -442,6 +442,18 @@ func TestGitHubRolesInstallation(t *testing.T) {
 	if got := e.listed(e.alice); len(got) != 0 {
 		t.Errorf("alice lists %v after the installation was removed", got)
 	}
+	// Removed from the installation (github_installation_id cleared): it
+	// stays GitHub-backed and fails closed, old vx grants do not come back.
+	if _, err := e.svc.Store.SetRepoGrant(e.ctx, e.api.ID, &e.carol.ID, nil, "write"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Store.SetRepoGitHub(e.ctx, e.api.ID, e.api.GitHubRepoID, nil); err != nil {
+		t.Fatal(err)
+	}
+	e.want(e.carol, "acme/api", service.RoleNone)
+	if got := e.listed(e.carol); len(got) != 0 {
+		t.Errorf("carol lists %v through an old grant on a repository no installation reaches", got)
+	}
 	e.inst = installOn(e.env, e.gh, e.acmeGH, e.org)
 	for _, r := range []store.Repo{e.api, e.secret} {
 		gid := *r.GitHubRepoID

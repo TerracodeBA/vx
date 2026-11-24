@@ -433,7 +433,7 @@ func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly 
 		union select r.id from repos r join org_members m on m.org_id = r.org_id join orgs o on o.id = r.org_id
 			where not $2 and m.person_id = $1 and (m.role in ('owner', 'admin') or o.default_repo_role <> 'none')
 		) x join repos r on r.id = x.repo_id
-		where $2 or r.github_repo_id is null or r.github_installation_id is null`,
+		where $2 or r.github_repo_id is null`,
 		principal, directOnly)
 	if err != nil {
 		return nil, err
