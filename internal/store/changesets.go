@@ -149,8 +149,11 @@ func (q Q) ResolveChangeset(ctx context.Context, repoID uuid.UUID, ref string) (
 	if object.ValidChangeID(ref) {
 		var h hash.Hash
 		// The newest changeset with this change ID is the current version.
+		// A rebased change keeps its creation time, so the one stored last
+		// wins a tie; one a rebase stored without an effort (it was aborted
+		// or is still stopped) never wins over the effort's own.
 		err := q.db.QueryRow(ctx, `select hash from changesets where repo_id = $1 and change_id = $2
-			order by created_at desc limit 1`, repoID, ref).Scan(&h)
+			order by (effort_id is not null) desc, created_at desc, seq desc limit 1`, repoID, ref).Scan(&h)
 		if err != nil {
 			return ChangesetRow{}, notFound(err, "change "+ref)
 		}

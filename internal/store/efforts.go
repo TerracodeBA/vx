@@ -153,11 +153,11 @@ func (q Q) AdvanceEffort(ctx context.Context, id uuid.UUID, seenVersion int64, n
 	return tag.RowsAffected() == 1, nil
 }
 
-// RebaseEffort moves the effort onto a new base and head, with the same
-// compare-and-swap as AdvanceEffort.
-func (q Q) RebaseEffort(ctx context.Context, id uuid.UUID, seenVersion int64, newBase, newHead hash.Hash) (bool, error) {
-	tag, err := q.db.Exec(ctx, `update efforts set base = $1, head = $2, version = version + 1, updated_at = now()
-		where id = $3 and version = $4 and state = 'open'`, newBase, newHead, id, seenVersion)
+// RebaseEffort moves the effort onto a new base branch, base and head, with
+// the same compare-and-swap as AdvanceEffort.
+func (q Q) RebaseEffort(ctx context.Context, id uuid.UUID, seenVersion int64, baseBranch string, newBase, newHead hash.Hash) (bool, error) {
+	tag, err := q.db.Exec(ctx, `update efforts set base_branch = $1, base = $2, head = $3, version = version + 1, updated_at = now()
+		where id = $4 and version = $5 and state = 'open'`, baseBranch, newBase, newHead, id, seenVersion)
 	if err != nil {
 		return false, err
 	}

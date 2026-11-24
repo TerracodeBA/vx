@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -55,6 +56,8 @@ type EffortView struct {
 	Repo       store.Repo
 	Effort     store.Effort
 	Workspaces []store.Workspace
+	// Rebase is the effort's rebase in progress (running or stopped), if any.
+	Rebase *store.Rebase
 }
 
 // GetEffort loads an effort by repo name and slug.
@@ -71,7 +74,13 @@ func (s *Service) GetEffort(ctx context.Context, repoName, slug string) (EffortV
 	if err != nil {
 		return EffortView{}, err
 	}
-	return EffortView{Repo: repo, Effort: eff, Workspaces: ws}, nil
+	v := EffortView{Repo: repo, Effort: eff, Workspaces: ws}
+	if r, err := s.Store.ActiveRebase(ctx, eff.ID); err == nil {
+		v.Rebase = &r
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return EffortView{}, err
+	}
+	return v, nil
 }
 
 // ListEfforts lists a repo's efforts.
@@ -243,8 +252,21 @@ func (s *Service) checkOnEffort(ctx context.Context, repo store.Repo, eff store.
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return errf(CodeInvalid, "snapshot base %s is not part of effort %s", base.Short(), eff.Slug)
+	if ok {
+		return nil
 	}
-	return nil
+	// A workspace opened before a rebase is based on the old chain, which
+	// is still a valid merge base: its land merges onto the rebased head.
+	heads, err := s.Store.FinishedRebaseHeads(ctx, eff.ID)
+	if err != nil {
+		return err
+	}
+	for _, h := range heads {
+		if ok, err := s.Store.OnChain(ctx, repo.ID, h, base, 100000); err != nil {
+			return err
+		} else if ok {
+			return nil
+		}
+	}
+	return errf(CodeInvalid, "snapshot base %s is not part of effort %s", base.Short(), eff.Slug)
 }

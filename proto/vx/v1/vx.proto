@@ -45,6 +45,8 @@ message Effort {
   int32 open_workspaces = 11;
   string created_at = 12;
   string updated_at = 13;
+  // The rebase in progress (running or stopped on a conflict), if any.
+  Rebase rebase = 14;
 }
 
 message Author {
@@ -102,6 +104,15 @@ message Changeset {
   // Problems the server found in the tree when this change landed, such as
   // a Go function declared twice. Stored beside the changeset, not hashed.
   repeated Warning warnings = 16;
+  // Set when a rebase of the effort replayed this change onto a newer base:
+  // the evidence was gathered before the rebase, on rebased_from's tree.
+  bool rebased = 17;
+  string rebased_onto = 18; // git commit of the target, or its changeset hash
+  string rebased_onto_branch = 19;
+  string rebased_from = 20; // the changeset this one replays
+  string rebased_by = 21;
+  // Who resolved a conflict on this change during the rebase, if one did.
+  string resolved_by = 22;
 }
 
 message Workspace {
@@ -331,6 +342,17 @@ service EffortService {
   // Log lists the changes landed in an effort, newest first.
   rpc Log(LogRequest) returns (LogResponse) {}
   rpc GetChangeset(GetChangesetRequest) returns (GetChangesetResponse) {}
+  // RebaseEffort replays the effort's changes onto the latest head of a
+  // branch (default: its base branch). It finishes, or stops on the first
+  // change that conflicts.
+  rpc RebaseEffort(RebaseEffortRequest) returns (RebaseEffortResponse) {}
+  // ContinueRebase records the resolution of the change a rebase stopped on
+  // and replays the rest. It may stop again.
+  rpc ContinueRebase(ContinueRebaseRequest) returns (ContinueRebaseResponse) {}
+  // AbortRebase drops the rebase in progress; the effort stays as it was.
+  rpc AbortRebase(AbortRebaseRequest) returns (AbortRebaseResponse) {}
+  // GetRebase returns the rebase in progress, or else the latest one.
+  rpc GetRebase(GetRebaseRequest) returns (GetRebaseResponse) {}
 }
 
 message CreateEffortRequest {
@@ -774,4 +796,82 @@ message ListTasksRequest {
 
 message ListTasksResponse {
   repeated Task tasks = 1;
+}
+
+// ---------- rebase ----------
+
+message Rebase {
+  string id = 1;
+  string state = 2; // running, stopped, done, aborted
+  string onto_branch = 3;
+  string onto = 4; // target changeset hash
+  string onto_git_sha = 5;
+  string old_base = 6;
+  string old_head = 7;
+  string new_head = 8; // tip of the rebased chain so far
+  int32 replayed = 9; // changes replayed so far
+  int32 pending = 10; // changes still to replay, the stopped one included
+  string started_by = 11;
+  string updated_by = 12;
+  string created_at = 13;
+  string updated_at = 14;
+  // When stopped: the change whose replay conflicts, its conflicts, and the
+  // three trees whose merge with conflict markers reproduces them.
+  Changeset stopped_at = 15;
+  repeated RebaseConflict conflicts = 16;
+  string base_tree = 17; // the stopped change's parent tree
+  string change_tree = 18; // the stopped change's tree
+  string onto_tree = 19; // the rebased chain so far
+}
+
+message RebaseConflict {
+  string path = 1;
+  string kind = 2;
+  string detail = 3;
+  // The file says "// Code generated ... DO NOT EDIT.": regenerate it
+  // instead of editing conflict markers.
+  bool generated = 4;
+}
+
+message RebaseEffortRequest {
+  string repo = 1;
+  string effort = 2;
+  string onto = 3; // branch; empty: the effort's base branch
+}
+
+message RebaseEffortResponse {
+  Rebase rebase = 1; // empty when up_to_date
+  Effort effort = 2;
+  bool up_to_date = 3; // the effort already sits on the branch head
+}
+
+message ContinueRebaseRequest {
+  string repo = 1;
+  string effort = 2;
+  string stopped_at = 3; // hash of the change that was resolved (Rebase.stopped_at.hash)
+  string tree = 4; // resolved tree on top of Rebase.onto_tree; objects must be uploaded
+}
+
+message ContinueRebaseResponse {
+  Rebase rebase = 1;
+  Effort effort = 2;
+}
+
+message AbortRebaseRequest {
+  string repo = 1;
+  string effort = 2;
+}
+
+message AbortRebaseResponse {
+  Rebase rebase = 1;
+  Effort effort = 2;
+}
+
+message GetRebaseRequest {
+  string repo = 1;
+  string effort = 2;
+}
+
+message GetRebaseResponse {
+  Rebase rebase = 1; // empty if the effort was never rebased
 }

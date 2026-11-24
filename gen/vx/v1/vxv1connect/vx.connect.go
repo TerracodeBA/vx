@@ -92,6 +92,17 @@ const (
 	// EffortServiceGetChangesetProcedure is the fully-qualified name of the EffortService's
 	// GetChangeset RPC.
 	EffortServiceGetChangesetProcedure = "/vx.v1.EffortService/GetChangeset"
+	// EffortServiceRebaseEffortProcedure is the fully-qualified name of the EffortService's
+	// RebaseEffort RPC.
+	EffortServiceRebaseEffortProcedure = "/vx.v1.EffortService/RebaseEffort"
+	// EffortServiceContinueRebaseProcedure is the fully-qualified name of the EffortService's
+	// ContinueRebase RPC.
+	EffortServiceContinueRebaseProcedure = "/vx.v1.EffortService/ContinueRebase"
+	// EffortServiceAbortRebaseProcedure is the fully-qualified name of the EffortService's AbortRebase
+	// RPC.
+	EffortServiceAbortRebaseProcedure = "/vx.v1.EffortService/AbortRebase"
+	// EffortServiceGetRebaseProcedure is the fully-qualified name of the EffortService's GetRebase RPC.
+	EffortServiceGetRebaseProcedure = "/vx.v1.EffortService/GetRebase"
 	// WorkspaceServiceOpenWorkspaceProcedure is the fully-qualified name of the WorkspaceService's
 	// OpenWorkspace RPC.
 	WorkspaceServiceOpenWorkspaceProcedure = "/vx.v1.WorkspaceService/OpenWorkspace"
@@ -677,6 +688,17 @@ type EffortServiceClient interface {
 	// Log lists the changes landed in an effort, newest first.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
 	GetChangeset(context.Context, *connect.Request[v1.GetChangesetRequest]) (*connect.Response[v1.GetChangesetResponse], error)
+	// RebaseEffort replays the effort's changes onto the latest head of a
+	// branch (default: its base branch). It finishes, or stops on the first
+	// change that conflicts.
+	RebaseEffort(context.Context, *connect.Request[v1.RebaseEffortRequest]) (*connect.Response[v1.RebaseEffortResponse], error)
+	// ContinueRebase records the resolution of the change a rebase stopped on
+	// and replays the rest. It may stop again.
+	ContinueRebase(context.Context, *connect.Request[v1.ContinueRebaseRequest]) (*connect.Response[v1.ContinueRebaseResponse], error)
+	// AbortRebase drops the rebase in progress; the effort stays as it was.
+	AbortRebase(context.Context, *connect.Request[v1.AbortRebaseRequest]) (*connect.Response[v1.AbortRebaseResponse], error)
+	// GetRebase returns the rebase in progress, or else the latest one.
+	GetRebase(context.Context, *connect.Request[v1.GetRebaseRequest]) (*connect.Response[v1.GetRebaseResponse], error)
 }
 
 // NewEffortServiceClient constructs a client for the vx.v1.EffortService service. By default, it
@@ -720,16 +742,44 @@ func NewEffortServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(effortServiceMethods.ByName("GetChangeset")),
 			connect.WithClientOptions(opts...),
 		),
+		rebaseEffort: connect.NewClient[v1.RebaseEffortRequest, v1.RebaseEffortResponse](
+			httpClient,
+			baseURL+EffortServiceRebaseEffortProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("RebaseEffort")),
+			connect.WithClientOptions(opts...),
+		),
+		continueRebase: connect.NewClient[v1.ContinueRebaseRequest, v1.ContinueRebaseResponse](
+			httpClient,
+			baseURL+EffortServiceContinueRebaseProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("ContinueRebase")),
+			connect.WithClientOptions(opts...),
+		),
+		abortRebase: connect.NewClient[v1.AbortRebaseRequest, v1.AbortRebaseResponse](
+			httpClient,
+			baseURL+EffortServiceAbortRebaseProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("AbortRebase")),
+			connect.WithClientOptions(opts...),
+		),
+		getRebase: connect.NewClient[v1.GetRebaseRequest, v1.GetRebaseResponse](
+			httpClient,
+			baseURL+EffortServiceGetRebaseProcedure,
+			connect.WithSchema(effortServiceMethods.ByName("GetRebase")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // effortServiceClient implements EffortServiceClient.
 type effortServiceClient struct {
-	createEffort *connect.Client[v1.CreateEffortRequest, v1.CreateEffortResponse]
-	getEffort    *connect.Client[v1.GetEffortRequest, v1.GetEffortResponse]
-	listEfforts  *connect.Client[v1.ListEffortsRequest, v1.ListEffortsResponse]
-	log          *connect.Client[v1.LogRequest, v1.LogResponse]
-	getChangeset *connect.Client[v1.GetChangesetRequest, v1.GetChangesetResponse]
+	createEffort   *connect.Client[v1.CreateEffortRequest, v1.CreateEffortResponse]
+	getEffort      *connect.Client[v1.GetEffortRequest, v1.GetEffortResponse]
+	listEfforts    *connect.Client[v1.ListEffortsRequest, v1.ListEffortsResponse]
+	log            *connect.Client[v1.LogRequest, v1.LogResponse]
+	getChangeset   *connect.Client[v1.GetChangesetRequest, v1.GetChangesetResponse]
+	rebaseEffort   *connect.Client[v1.RebaseEffortRequest, v1.RebaseEffortResponse]
+	continueRebase *connect.Client[v1.ContinueRebaseRequest, v1.ContinueRebaseResponse]
+	abortRebase    *connect.Client[v1.AbortRebaseRequest, v1.AbortRebaseResponse]
+	getRebase      *connect.Client[v1.GetRebaseRequest, v1.GetRebaseResponse]
 }
 
 // CreateEffort calls vx.v1.EffortService.CreateEffort.
@@ -757,6 +807,26 @@ func (c *effortServiceClient) GetChangeset(ctx context.Context, req *connect.Req
 	return c.getChangeset.CallUnary(ctx, req)
 }
 
+// RebaseEffort calls vx.v1.EffortService.RebaseEffort.
+func (c *effortServiceClient) RebaseEffort(ctx context.Context, req *connect.Request[v1.RebaseEffortRequest]) (*connect.Response[v1.RebaseEffortResponse], error) {
+	return c.rebaseEffort.CallUnary(ctx, req)
+}
+
+// ContinueRebase calls vx.v1.EffortService.ContinueRebase.
+func (c *effortServiceClient) ContinueRebase(ctx context.Context, req *connect.Request[v1.ContinueRebaseRequest]) (*connect.Response[v1.ContinueRebaseResponse], error) {
+	return c.continueRebase.CallUnary(ctx, req)
+}
+
+// AbortRebase calls vx.v1.EffortService.AbortRebase.
+func (c *effortServiceClient) AbortRebase(ctx context.Context, req *connect.Request[v1.AbortRebaseRequest]) (*connect.Response[v1.AbortRebaseResponse], error) {
+	return c.abortRebase.CallUnary(ctx, req)
+}
+
+// GetRebase calls vx.v1.EffortService.GetRebase.
+func (c *effortServiceClient) GetRebase(ctx context.Context, req *connect.Request[v1.GetRebaseRequest]) (*connect.Response[v1.GetRebaseResponse], error) {
+	return c.getRebase.CallUnary(ctx, req)
+}
+
 // EffortServiceHandler is an implementation of the vx.v1.EffortService service.
 type EffortServiceHandler interface {
 	CreateEffort(context.Context, *connect.Request[v1.CreateEffortRequest]) (*connect.Response[v1.CreateEffortResponse], error)
@@ -765,6 +835,17 @@ type EffortServiceHandler interface {
 	// Log lists the changes landed in an effort, newest first.
 	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
 	GetChangeset(context.Context, *connect.Request[v1.GetChangesetRequest]) (*connect.Response[v1.GetChangesetResponse], error)
+	// RebaseEffort replays the effort's changes onto the latest head of a
+	// branch (default: its base branch). It finishes, or stops on the first
+	// change that conflicts.
+	RebaseEffort(context.Context, *connect.Request[v1.RebaseEffortRequest]) (*connect.Response[v1.RebaseEffortResponse], error)
+	// ContinueRebase records the resolution of the change a rebase stopped on
+	// and replays the rest. It may stop again.
+	ContinueRebase(context.Context, *connect.Request[v1.ContinueRebaseRequest]) (*connect.Response[v1.ContinueRebaseResponse], error)
+	// AbortRebase drops the rebase in progress; the effort stays as it was.
+	AbortRebase(context.Context, *connect.Request[v1.AbortRebaseRequest]) (*connect.Response[v1.AbortRebaseResponse], error)
+	// GetRebase returns the rebase in progress, or else the latest one.
+	GetRebase(context.Context, *connect.Request[v1.GetRebaseRequest]) (*connect.Response[v1.GetRebaseResponse], error)
 }
 
 // NewEffortServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -804,6 +885,30 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(effortServiceMethods.ByName("GetChangeset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	effortServiceRebaseEffortHandler := connect.NewUnaryHandler(
+		EffortServiceRebaseEffortProcedure,
+		svc.RebaseEffort,
+		connect.WithSchema(effortServiceMethods.ByName("RebaseEffort")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effortServiceContinueRebaseHandler := connect.NewUnaryHandler(
+		EffortServiceContinueRebaseProcedure,
+		svc.ContinueRebase,
+		connect.WithSchema(effortServiceMethods.ByName("ContinueRebase")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effortServiceAbortRebaseHandler := connect.NewUnaryHandler(
+		EffortServiceAbortRebaseProcedure,
+		svc.AbortRebase,
+		connect.WithSchema(effortServiceMethods.ByName("AbortRebase")),
+		connect.WithHandlerOptions(opts...),
+	)
+	effortServiceGetRebaseHandler := connect.NewUnaryHandler(
+		EffortServiceGetRebaseProcedure,
+		svc.GetRebase,
+		connect.WithSchema(effortServiceMethods.ByName("GetRebase")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.EffortService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EffortServiceCreateEffortProcedure:
@@ -816,6 +921,14 @@ func NewEffortServiceHandler(svc EffortServiceHandler, opts ...connect.HandlerOp
 			effortServiceLogHandler.ServeHTTP(w, r)
 		case EffortServiceGetChangesetProcedure:
 			effortServiceGetChangesetHandler.ServeHTTP(w, r)
+		case EffortServiceRebaseEffortProcedure:
+			effortServiceRebaseEffortHandler.ServeHTTP(w, r)
+		case EffortServiceContinueRebaseProcedure:
+			effortServiceContinueRebaseHandler.ServeHTTP(w, r)
+		case EffortServiceAbortRebaseProcedure:
+			effortServiceAbortRebaseHandler.ServeHTTP(w, r)
+		case EffortServiceGetRebaseProcedure:
+			effortServiceGetRebaseHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -843,6 +956,22 @@ func (UnimplementedEffortServiceHandler) Log(context.Context, *connect.Request[v
 
 func (UnimplementedEffortServiceHandler) GetChangeset(context.Context, *connect.Request[v1.GetChangesetRequest]) (*connect.Response[v1.GetChangesetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.GetChangeset is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) RebaseEffort(context.Context, *connect.Request[v1.RebaseEffortRequest]) (*connect.Response[v1.RebaseEffortResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.RebaseEffort is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) ContinueRebase(context.Context, *connect.Request[v1.ContinueRebaseRequest]) (*connect.Response[v1.ContinueRebaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.ContinueRebase is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) AbortRebase(context.Context, *connect.Request[v1.AbortRebaseRequest]) (*connect.Response[v1.AbortRebaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.AbortRebase is not implemented"))
+}
+
+func (UnimplementedEffortServiceHandler) GetRebase(context.Context, *connect.Request[v1.GetRebaseRequest]) (*connect.Response[v1.GetRebaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.EffortService.GetRebase is not implemented"))
 }
 
 // WorkspaceServiceClient is a client for the vx.v1.WorkspaceService service.
