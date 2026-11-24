@@ -6,8 +6,10 @@ package helm
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 )
 
 func helmBin(t *testing.T) string {
@@ -70,5 +72,39 @@ func TestHelmTemplate(t *testing.T) {
 	out, err = helm(t, "template", "vx", "vx")
 	if err == nil || !strings.Contains(out, "database.existingSecret") {
 		t.Fatalf("helm template without a database: err=%v\n%s", err, out)
+	}
+}
+
+// TestHelmTemplatesParse runs without helm: every template must parse as
+// a Go template with Helm's functions, so a typo fails here even where
+// helm is not installed.
+func TestHelmTemplatesParse(t *testing.T) {
+	stub := func(...any) any { return "" }
+	funcs := template.FuncMap{}
+	for _, name := range []string{"include", "nindent", "indent", "toYaml", "default", "quote", "trunc", "trimSuffix",
+		"contains", "replace", "has", "dict", "fail", "required", "tpl", "list", "b64enc"} {
+		funcs[name] = stub
+	}
+	files, err := filepath.Glob("vx/templates/*")
+	if err != nil || len(files) < 8 {
+		t.Fatalf("templates: %v %v", files, err)
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := template.New(filepath.Base(f)).Funcs(funcs).Parse(string(data)); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	for _, f := range []string{"vx/Chart.yaml", "vx/values.yaml"} {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "\t") {
+			t.Errorf("%s has tabs; YAML needs spaces", f)
+		}
 	}
 }
