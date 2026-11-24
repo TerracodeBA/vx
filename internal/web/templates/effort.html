@@ -1,6 +1,6 @@
 {{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a><span class="sep">/</span><span>{{.Effort.Name}}</span>{{end}}
 {{define "actions"}}
-<span class="live" data-poll="/ui/effort/head?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}" data-key="{{.Repo.Name}}/{{.Effort.Slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span><span class="live-label">Live</span></span>
+<span class="live" data-poll="/ui/effort/head?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}{{if .BoardView}}&amp;board=1{{end}}" data-key="{{.Repo.Name}}/{{.Effort.Slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span><span class="live-label">Live</span></span>
 <a class="btn primary" href="/ui/ship?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
 {{end}}
 {{define "content"}}
@@ -18,13 +18,14 @@
   <div class="kpi"><span class="kpi-label">Lines</span><span class="kpi-value"><span class="add">+{{.Added}}</span> <span class="del">-{{.Deleted}}</span></span></div>
   <div class="kpi"><span class="kpi-label">Merged by server</span><span class="kpi-value">{{.Merged}}</span><span class="kpi-note">landed onto newer work</span></div>
   <div class="kpi"><span class="kpi-label">Checked by vx</span><span class="kpi-value">{{.Verified}}</span><span class="kpi-note">ran with vx land --run</span></div>
-  <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{len .Working}}</span></div>
+  <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{len .Working}}</span>{{if .Board.Open}}<a class="kpi-note{{if .Board.Escalated}} kpi-warn{{end}}" href="/ui/effort?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}&amp;view=board">{{.Board.Open}} open question{{if ne .Board.Open 1}}s{{end}}{{if .Board.Escalated}}, {{.Board.Escalated}} escalated{{end}}</a>{{end}}</div>
 </div>
 
 <div class="tabs-row">
   <nav class="tabs" aria-label="Effort views">
-    <a class="tab{{if not .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="count">{{len .Lands}}</span></a>
+    <a class="tab{{if not (or .ChangesView .BoardView)}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="count">{{len .Lands}}</span></a>
     <a class="tab{{if .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=changes">All changes{{if .ChangesView}} <span class="count">{{len .AllFiles}}</span>{{end}}</a>
+    <a class="tab{{if .BoardView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=board">Board{{if .Board.Open}} <span class="count{{if .Board.Escalated}} count-warn{{end}}" title="open questions">{{.Board.Open}}</span>{{end}}</a>
     <a class="tab" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">Ship</a>
   </nav>
   {{template "modeswitch"}}
@@ -59,6 +60,8 @@
       </details>
       {{end}}
     </div>
+  {{else if .BoardView}}
+    {{template "boardview" .}}
   {{else}}
     {{if not .Lands}}
     <div class="panel empty"><p>Nothing landed yet. Agents start with:</p>
@@ -160,4 +163,48 @@ vx land --run "go test ./..."</pre></div>
     </div>
   </aside>
 </div>
+{{end}}
+
+{{define "boardview"}}{{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}
+{{if .Board.Err}}<div class="panel empty"><p class="muted">The board is not available: {{.Board.Err}}</p></div>
+{{else if not .Board.Threads}}
+<div class="panel empty"><p>Nothing on the board yet. Agents post what they are about to change and ask instead of guessing:</p>
+  <pre class="code">vx context internal/http/limit.go
+vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/
+vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div>
+{{else}}
+<p class="board-note muted small">Notes are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-yours">yours</span> you or one of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
+<ol class="board">
+  {{range .Board.Threads}}
+  <li class="bn-thread{{if eq .State "escalated"}} bn-escalated{{end}}" id="n-{{.ID}}">
+    {{template "boardnote" .}}
+    {{if .Replies}}<ol class="bn-replies">{{range .Replies}}<li id="n-{{.ID}}">{{template "boardnote" .}}</li>{{end}}</ol>{{end}}
+    {{if .CanAnswer}}
+    <form class="bn-answer stack" method="post" action="/ui/board/answer">
+      <input type="hidden" name="note" value="{{.ID}}">
+      <label for="answer-{{.ID}}">Nobody answered in time. Answer as yourself:</label>
+      <textarea id="answer-{{.ID}}" name="body" rows="3" maxlength="2000" required></textarea>
+      <div><button class="btn primary" type="submit">Answer</button></div>
+    </form>
+    {{end}}
+  </li>
+  {{end}}
+</ol>
+{{end}}
+{{end}}
+
+{{define "boardnote"}}
+<article class="bn">
+  <header class="bn-head">
+    <span class="trust trust-{{.Trust}}">{{.Trust}}</span>
+    <span class="pill k-{{.Kind}}">{{.Kind}}</span>
+    <span class="agent-name">{{principal .Author}}</span>{{if .For}}<span class="muted small">for {{principal .For}}</span>{{end}}
+    {{if eq (printf "%s" .Kind) "question"}}<span class="muted small">to {{if .To}}{{principal .To}}{{else}}anyone{{end}}</span>
+      <span class="pill {{if eq .State "escalated"}}bad{{else if eq .State "answered"}}ok{{else}}warn{{end}}">{{.State}}</span>{{end}}
+    <span class="muted small">{{ago .CreatedAt}}</span>
+    <span class="mono muted small bn-id">{{printf "%.8s" .ID.String}}</span>
+  </header>
+  {{if .Targets}}<div class="bn-targets">{{range .Targets}}<span class="mono">{{.}}</span>{{end}}</div>{{end}}
+  <div class="bn-body">{{.Body}}</div>
+</article>
 {{end}}

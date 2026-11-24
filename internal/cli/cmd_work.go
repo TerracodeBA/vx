@@ -240,6 +240,11 @@ func (a *App) statusCmd() *cobra.Command {
 				a.printf("\nNo conflict markers; ready to land.\n")
 			}
 			out["conflict_markers"] = marked
+			if c, err := a.client(); err == nil {
+				if board := a.boardStatus(ctx, c, wc.Config.Repo, wc.Config.Effort, changes); board != nil {
+					out["board"] = board
+				}
+			}
 			a.emit(out)
 			return nil
 		},
