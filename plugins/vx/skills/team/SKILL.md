@@ -104,6 +104,15 @@ vx ship open --repo REPO SLUG --draft
 
 With a GitHub token on the server this opens the pull request; without one it prints the link to open it.
 
+### When to split into several pull requests
+
+Split when one pull request would be too big to review well, or when parts can land on their own schedule. Keep one pull request when the effort is small or every change touches the same files.
+
+- `vx ship plan --split independent --repo REPO SLUG`: parts that merge in any order. Good when agents worked on separate areas (a docs part, a backend part, a UI part). vx keeps changes that share a file or `--depends-on` each other in one part.
+- `vx ship plan --split stacked --repo REPO SLUG`: an ordered stack, each part based on the previous one. Good for a feature built in steps (schema, then service, then UI) that reviewers should read in order. Default: one part per change; regroup with `--group ID,ID --group ID` (one flag per part, in order).
+- If the plan says `This split cannot ship`, follow the reason (put two changes in one part, or stack instead), or use the Prepare pull requests page on the ship page of the web UI, where the user can move changes between parts.
+- Show the user the parts and their pull request text; open them only when they agree: `vx ship open --split MODE --repo REPO SLUG --draft`. Shipping again updates the same branches and pull requests.
+
 ## Tips
 
 - Fewer, well-separated parts beat many overlapping ones. Shared files (routes, main, options) cause most conflicts; assign an owner.

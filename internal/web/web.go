@@ -184,6 +184,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/diff", u.auth(u.diff))
 	mux.HandleFunc("GET /ui/ship", u.auth(u.ship))
 	mux.HandleFunc("POST /ui/ship", u.auth(u.shipPost))
+	mux.HandleFunc("POST /ui/ship/split", u.auth(u.shipSplitPost))
 	mux.HandleFunc("GET /ui/settings", u.auth(u.settings))
 	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
@@ -1277,6 +1278,10 @@ func renderHunks(edits []merge.Edit, a, b []string, context int) []diffLine {
 func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, slug, target := param(r, "repo"), param(r, "slug"), param(r, "to")
+	if mode, err := service.ParseSplitMode(param(r, "split")); err == nil && mode != service.SplitNone {
+		u.shipSplit(w, r, actor, repoName, slug, target, mode, nil, nil)
+		return
+	}
 	v, err := u.svc.GetEffort(ctx, actor, repoName, slug)
 	if err != nil {
 		u.fail(w, err)

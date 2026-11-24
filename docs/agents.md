@@ -79,6 +79,27 @@ When an agent lands without `--run` and others landed first, the server merges t
 
 `--require-up-to-date` refuses to land if anyone landed since the last sync.
 
+## Shipping several pull requests
+
+An effort can ship as several pull requests, one per part, when one big pull request would be hard to review:
+
+```sh
+vx ship plan --split independent       # parts that merge in any order
+vx ship plan --split stacked           # each part builds on the previous one
+vx ship plan --split stacked --group kxqr-7m2p,42nv --group 9dfp-3cxa   # your own parts, in order
+vx ship open --split independent --draft
+```
+
+- **independent**: vx keeps together the changes that touch a common file, where one `--depends-on` names the other's change id or a symbol the other changes (`auth.Login`), and puts the rest in parts of their own. Every part is replayed onto the target by itself and must be clean, and two parts that share a file must merge cleanly in either order.
+- **stacked**: one part per change by default, in the order they landed. Part n is based on part n-1's branch, so its pull request shows only its own commits. A change that builds on lines a higher part wrote is refused.
+- Each part is a branch `vx/<effort>/<n>-<name>` (the name comes from its first change's intent) and one pull request; a stacked part's pull request targets the previous part's branch. Every body starts with the series: `**Part 2 of 3** of vx effort ..., stacked: depends on #41.` and the list of all parts.
+- A grouping that would not replay cleanly is refused with the reason, for example `change 9dfp-3cxa (Limit per IP) builds on lines that change kxqr-7m2p (Add limiter) wrote in limit.go, which is in part 2 above it`. `vx ship plan --split` exits 2 then.
+- Shipping again keeps the earlier parts: the same branches and pull requests are updated, and new changes join the part they are tied to (independent) or get a part of their own on top (stacked). A part the new grouping no longer has is listed; close its pull request on the host.
+- The web UI's ship page has a **Prepare pull requests** view for both modes: the parts with their changes, files and evidence, a part number to pick for every change, buttons to merge a part into the one above or split it into one part per change, the check result, and a button to open them all.
+- An effort shipped as one pull request (`vx/<effort>`) cannot also ship as parts, and the other way round: git cannot hold `vx/<effort>` next to `vx/<effort>/1-...`. Close the pull request and delete the branch on the host first.
+- Each part knows its own state: it is marked merged when the target holds all its changes (or its pull request was squash-merged), and the effort when every change is on the target.
+- Squash-merging a stacked part rewrites its commits, so the part above it shows them again until it is rebased on the host; merge stacked parts with a merge commit or rebase merge where you can.
+
 ## When an effort is finished
 
 vx marks an effort **merged** by itself once its target branch contains every change it shipped: after `vx repo sync`, a GitHub push, or a merged pull request (with the vx GitHub App; that also covers squash merges). Commits carry a `Vx-Change-Id` trailer, so rebase and merge commits on the git host are recognised. A merged effort keeps its history and board but takes no new workspaces or lands, and lists, context and overlap forecasts leave it out.

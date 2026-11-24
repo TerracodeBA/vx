@@ -46,6 +46,19 @@ type ShipPlan struct {
 	// Warnings are problems found in the tree that would ship, checked over
 	// every path the effort changes on the target. They do not stop a ship.
 	Warnings []engine.Warning
+
+	// A split (PlanSplit) ships Groups, one pull request each.
+	Split  SplitMode
+	Groups []ShipGroup
+	// Suggested: vx chose the grouping (not a person).
+	Suggested bool
+	// Problems say why the split cannot ship as grouped.
+	Problems []string
+	// Notes are things to know that do not stop the split.
+	Notes []string
+	// Stale are open parts of an earlier split that this one no longer
+	// has: shipping stops updating them.
+	Stale []store.Shipment
 }
 
 // Commits returns the steps that produce a commit.
@@ -229,13 +242,18 @@ type ShipInput struct {
 	Repo, Effort, Target string
 	Title, Body          string // empty: generated
 	Draft                bool
+	// Split ships one pull request per part (PlanSplit); Groups is a
+	// person's grouping, empty for vx's.
+	Split  SplitMode
+	Groups [][]string
 }
 
 // ShipResult is a pushed branch and, where the provider has them, its PR.
 type ShipResult struct {
 	Plan     ShipPlan
-	Shipment store.Shipment
+	Shipment store.Shipment // the first part of a split
 	PR       provider.OpenedPR
+	Parts    []ShipPart // a split's parts, in order
 }
 
 // OpenShipment pushes the planned commits to vx/<effort> and opens or
@@ -249,9 +267,15 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	if s.Shipper == nil {
 		return ShipResult{}, errf(CodeFailedPrecondition, "this server cannot ship: no git bridge configured")
 	}
+	if in.Split != SplitNone {
+		return s.openSplit(ctx, actor, in)
+	}
 	plan, err := s.PlanShipment(ctx, actor, in.Repo, in.Effort, in.Target)
 	if err != nil {
 		return ShipResult{}, err
+	}
+	if err := s.refuseOverSplit(ctx, plan); err != nil {
+		return ShipResult{Plan: plan}, err
 	}
 	if len(plan.Conflicts) > 0 {
 		return ShipResult{Plan: plan}, errf(CodeFailedPrecondition,

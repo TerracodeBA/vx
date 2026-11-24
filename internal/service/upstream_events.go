@@ -7,7 +7,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/TerracodeBA/vx/internal/store"
@@ -42,12 +41,12 @@ func (s *Service) applyUpstreamPush(ctx context.Context, repo store.Repo, branch
 // on repo: it imports base now (the push may arrive later, or not at all
 // for squash merges) and marks efforts whose changes are on it merged.
 // With a squash merge the commits lose vx's change-id trailers, so the
-// effort named by a vx/ head branch is marked merged directly. host names
+// shipment pushed to the vx/ head branch is marked merged directly, and its
+// effort once no other part of a split is open. host names
 // the git host for the effort's history ("GitHub", "GitLab"). Heads
 // outside vx/ are ignored.
 func (s *Service) applyMergedPullRequest(ctx context.Context, repo store.Repo, head, base, host string) error {
-	slug, ok := strings.CutPrefix(head, "vx/")
-	if !ok || slug == "" {
+	if slug, ok := strings.CutPrefix(head, "vx/"); !ok || slug == "" {
 		return nil
 	}
 	if base == "" {
@@ -60,15 +59,6 @@ func (s *Service) applyMergedPullRequest(ctx context.Context, repo store.Repo, h
 		}
 	}
 	s.markMergedEfforts(ctx, repo, base)
-	e, err := s.Store.GetEffort(ctx, repo.ID, slug)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if e.State == store.EffortOpen || e.State == store.EffortShipping {
-		return s.closeEffort(ctx, nil, repo, e, store.EffortMerged, "its pull request was merged on "+host)
-	}
-	return nil
+	_, err := s.markShipmentMergedByHead(ctx, repo, head, "its pull request was merged on "+host)
+	return err
 }
