@@ -151,11 +151,17 @@ func TestReviewCommentReachesTheAgentsInbox(t *testing.T) {
 	if out := person.must("ship", "list", "--repo", "acme/shop", "rate-limits"); !strings.Contains(out, "CI: failed (test, http") {
 		t.Fatalf("vx ship list:\n%s", out)
 	}
-	if out := agent.must("status"); !strings.Contains(out, "Shipped:") || !strings.Contains(out, "CI: failed (test") {
+	// vx status shows the CI result for the agent in full, labelled
+	// [vx]; then vx inbox does not repeat it.
+	if out := agent.must("status"); !strings.Contains(out, "Shipped:") || !strings.Contains(out, "CI: failed (test") ||
+		!strings.Contains(out, "    [vx] ci  just now  id ") || !strings.Contains(out, "│ CI failed on PR #12 at ") || strings.Contains(out, "service:vx") {
 		t.Fatalf("vx status:\n%s", out)
 	}
-	if out := agent.must("inbox"); !strings.Contains(out, "CI failed on PR #12 at ") {
-		t.Fatalf("vx inbox after CI:\n%s", out)
+	if out := agent.must("inbox"); strings.Contains(out, "CI failed on PR #12 at ") || !strings.Contains(out, "read (vx inbox --all)") {
+		t.Fatalf("vx inbox after CI repeats it:\n%s", out)
+	}
+	if out := agent.must("inbox", "--all"); !strings.Contains(out, "[vx] ci in rate-limits just now  id ") || !strings.Contains(out, ": CI failed on PR #12 at ") {
+		t.Fatalf("vx inbox --all after CI:\n%s", out)
 	}
 
 	// main moves: vx repo sync rebases the effort, and the agent hears of it.

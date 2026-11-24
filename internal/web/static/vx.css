@@ -453,6 +453,9 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .trust { font: 600 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
 .trust-self, .trust-same_person { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
 .trust-teammate { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
+.trust-vx { color: var(--muted); border-color: transparent; background: var(--line-soft); }
+.pill.unread { color: var(--a1); border-color: currentColor; }
+.bn-superseded { opacity: .6; }
 .pill.k-plan { color: var(--a1); } .pill.k-decision { color: var(--a4); } .pill.k-interface { color: var(--a6); }
 .pill.k-question { color: var(--a2); } .pill.k-answer { color: var(--a3); } .pill.k-blocker { color: var(--bad); } .pill.k-handoff { color: var(--a5); }
 

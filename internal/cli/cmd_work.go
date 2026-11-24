@@ -136,9 +136,7 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 				if err != nil {
 					return err
 				}
-				if res.upToDate {
-					a.printf("Up to date at %s.\n", short(res.head))
-				}
+				a.printf("%s\n", syncSummary(res))
 				synced = &res
 			}
 			task, intent, err := a.taskOnNew(ctx, c, taskID, args)
@@ -166,7 +164,8 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 				out["claim"], out["overlapping"] = m.Claim, m.Overlapping
 			}
 			if synced != nil && len(synced.conflicts) > 0 {
-				a.printConflicts(wc, synced.conflicts)
+				a.printf("\n%s\n", strings.Join(conflictLines(synced.conflicts), "\n"))
+				a.printf("The sync brought conflicts in %s (exit 2). Resolve them, then `vx land`.\n", conflictPaths(synced.conflicts))
 				a.emit(out)
 				return errConflict
 			}

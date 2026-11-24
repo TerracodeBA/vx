@@ -10,8 +10,10 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -22,8 +24,9 @@ import (
 )
 
 const (
-	// feedShown is how many new notes sync and land print in full.
-	feedShown = 5
+	// feedShown is how many new notes sync and land print (one line
+	// each, but for questions to you and your own person's notes).
+	feedShown = 10
 	// feedFetch is how many new notes one look at the board reads.
 	feedFetch = 100
 	// contextBatch is the most targets one Context request takes.
@@ -36,6 +39,7 @@ type boardFeed struct {
 	claims []*vxv1.Claim // active claims of others on the agent's files
 	newest string        // created_at of the newest note read, to mark as seen
 	me     string        // the caller's ref, shown as "you"
+	repo   string        // the working copy's repository
 	effort string        // the working copy's effort; notes of others are marked with theirs
 }
 
@@ -248,7 +252,7 @@ func markBoardSeen(wc *workcopy.WorkingCopy, newest string) {
 // them. It marks the notes it returns as seen.
 func (a *App) boardFeedFor(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, paths []string, withClaims bool) boardFeed {
 	me := a.me(ctx, c)
-	f := boardFeed{me: me, effort: wc.Config.Effort}
+	f := boardFeed{me: me, repo: wc.Config.Repo, effort: wc.Config.Effort}
 	notes, newest, ok := a.newNotes(ctx, c, wc, me, paths)
 	if !ok {
 		return f
@@ -272,13 +276,15 @@ func (a *App) boardFeedFor(ctx context.Context, c *client.Client, wc *workcopy.W
 }
 
 // printBoardFeed prints the board section that ends vx sync and vx land:
-// new notes for the agent, then others' claims on its files. It prints
-// nothing when there is nothing new. The notes it prints in full count as
+// new notes for the agent, one line each, then others' claims on its
+// files. Questions to the agent and notes of its own person print in full;
+// the line after the list says how to read the rest (vx board ID). It
+// prints nothing when there is nothing new. Every note it prints counts as
 // read.
 func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed) {
 	me := f.me
-	var printed []*vxv1.Note
-	defer func() { a.markRead(ctx, c, printed...) }()
+	p := &notePrinter{a: a, repo: f.repo, effort: f.effort, full: func(n *vxv1.Note) bool { return fullInFeed(n, me) }}
+	defer func() { a.markRead(ctx, c, p.shown...) }()
 	if len(f.notes) > 0 {
 		a.printf("\nNew on the board since your last sync (%d). %s\n", len(f.notes), boardFraming)
 		if n := f.fromOthers(); n > 0 {
@@ -290,27 +296,25 @@ func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed)
 			if shown == feedShown {
 				break
 			}
-			a.printNote(n, noteOpts{me: me, indent: "  ", where: f.otherEffort(n)})
-			printed = append(printed, n)
+			p.print(n, noteOpts{me: me, indent: "  ", where: f.otherEffort(n)})
 			shown++
 			for _, r := range replies[n.Id] {
 				if shown == feedShown {
 					break
 				}
-				a.printNote(r, noteOpts{me: me, indent: "      "})
-				printed = append(printed, r)
+				p.print(r, noteOpts{me: me, indent: "    "})
 				shown++
 			}
 		}
 		if more := len(f.notes) - shown; more > 0 {
 			a.printf("  %d more: vx board\n", more)
 		}
-		a.printf("  Read these before you continue.\n")
+		p.readHint("  ")
 	}
 	if len(f.claims) > 0 {
 		a.printf("\nClaimed by others (%d): they are changing these now; coordinate before you land.\n", len(f.claims))
 		for _, cl := range f.claims {
-			a.printClaim(cl, "  ")
+			a.printf("  %s  id %s\n", claimLine(cl), noteID(cl.Id))
 		}
 	}
 }
@@ -357,7 +361,7 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 // claimLine is a claim on one line, for vx status.
 func claimLine(cl *vxv1.Claim) string {
 	trust := trustLabel(cl.Trust)
-	s := "[" + trust + "] " + cl.Owner.GetRef() + " on " + strings.Join(cl.Targets, ", ")
+	s := "[" + trust + "] " + cl.Owner.GetRef() + " on " + longTargets(cl.Targets)
 	if cl.WorkspaceId != "" {
 		s += " while its workspace is open"
 	} else if cl.ExpiresAt != "" {
@@ -527,4 +531,219 @@ func (a *App) statusFeed(ctx context.Context, c *client.Client, wc *workcopy.Wor
 	}
 	markBoardSeen(wc, newest)
 	return notes, true
+}
+
+// ---------- one line per note ----------
+
+// noteBodyShown is how much of a note's body its one-line form keeps.
+const noteBodyShown = 80
+
+// fullInFeed reports whether a feed prints n in full rather than on one
+// line: a note addressed to the caller (a question, a review comment or CI
+// result), or a note of the caller's own person (that person, or another
+// of their agents). Everything else is one line; vx board ID prints it in
+// full.
+func fullInFeed(n *vxv1.Note, me string) bool {
+	if me != "" && n.To == me {
+		return true
+	}
+	return trustOf(n) == "same person"
+}
+
+// shortAuthor is the author as a one-line note names it: "backend" for
+// the caller or another agent of the caller's person, "alice/backend" for someone
+// else's agent, "alice" for a person. System notes name no author: their
+// [vx] label says who wrote them.
+func shortAuthor(n *vxv1.Note) string {
+	if isSystem(n) {
+		return ""
+	}
+	ref := n.Author.GetRef()
+	kind, rest, ok := strings.Cut(ref, ":")
+	if !ok {
+		return ref
+	}
+	if t := trustOf(n); kind == "agent" && (t == "same person" || t == "self") {
+		if _, name, ok := strings.Cut(rest, "/"); ok {
+			return name
+		}
+	}
+	return rest
+}
+
+// shortTargets is a note's targets in a few words: the first one (a file
+// by its base name), and how many more: "cmd_land.go (+3 more)".
+func shortTargets(targets []string) string {
+	if len(targets) == 0 {
+		return ""
+	}
+	first := targets[0]
+	if !strings.HasSuffix(first, "/") {
+		if i := strings.LastIndex(first, "/"); i >= 0 && i < len(first)-1 {
+			first = first[i+1:]
+		}
+	}
+	if len(targets) > 1 {
+		first += fmt.Sprintf(" (+%d more)", len(targets)-1)
+	}
+	return oneLine(cleanBody(first))
+}
+
+// longTargets lists up to three targets and counts the rest: "a.go, b.go,
+// c.go and 8 more".
+func longTargets(targets []string) string {
+	const shown = 3
+	if len(targets) <= shown+1 {
+		return strings.Join(targets, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(targets[:shown], ", "), len(targets)-shown)
+}
+
+// shortAgo is agoRFC for one-line notes: "just now", "4m ago", "3h ago",
+// "2d ago".
+func shortAgo(s string) string {
+	t, ok := parseTime(s)
+	if !ok {
+		return s
+	}
+	switch d := time.Since(t); {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+	return t.Local().Format("2 Jan 2006")
+}
+
+// clipBody is a note body on one line, cut to noteBodyShown characters;
+// cut says something was left out.
+func clipBody(body string) (line string, cut bool) {
+	line = oneLine(cleanBody(body))
+	r := []rune(line)
+	if len(r) <= noteBodyShown {
+		return line, false
+	}
+	return strings.TrimRight(string(r[:noteBodyShown-1]), " ") + "…", true
+}
+
+// noteLine is a note on one line:
+//
+//	[same person] interface px-speed on cmd_land.go (+3 more) 2m ago  id 1a2b3c4d: first 80 characters…
+//
+// cut says the body was shortened, so vx board ID has more.
+func noteLine(n *vxv1.Note, o noteOpts) (line string, cut bool) {
+	var b strings.Builder
+	b.WriteString("[" + trustOf(n) + "] " + n.Kind)
+	if who := shortAuthor(n); who != "" {
+		b.WriteString(" " + who)
+	}
+	if n.Kind == "question" {
+		to := "anyone"
+		switch {
+		case n.To != "" && n.To == o.me:
+			to = "you"
+		case n.To != "":
+			to = n.To
+			if _, rest, ok := strings.Cut(to, ":"); ok {
+				to = rest
+			}
+		}
+		b.WriteString(" -> " + to)
+	}
+	if t := shortTargets(n.Targets); t != "" {
+		b.WriteString(" on " + t)
+	}
+	if o.where && n.Effort != "" {
+		b.WriteString(" in " + n.Effort)
+	}
+	b.WriteString(" " + shortAgo(n.CreatedAt))
+	if n.Kind == "question" && n.State != "" && n.State != "open" {
+		b.WriteString(" " + n.State)
+	}
+	if n.Kind == "answer" && n.ThreadId != "" {
+		b.WriteString(" re " + noteID(n.ThreadId))
+	}
+	if n.SupersededBy != "" {
+		b.WriteString(" replaced by " + noteID(n.SupersededBy))
+	}
+	b.WriteString("  id " + noteID(n.Id))
+	body, cut := clipBody(n.Body)
+	if body != "" {
+		b.WriteString(": " + body)
+	}
+	return b.String(), cut
+}
+
+// notePrinter prints notes the quiet way: in full the ones full says,
+// every other one on one line, and remembers the one-line notes whose body
+// it cut, for the "Read in full" hint.
+type notePrinter struct {
+	a            *App
+	full         func(*vxv1.Note) bool
+	repo, effort string       // where vx board looks without --repo and --effort
+	cut          []*vxv1.Note // one-line notes whose body was cut
+	shown        []*vxv1.Note // every note printed
+	inFull       []*vxv1.Note // the notes printed in full
+}
+
+func (p *notePrinter) print(n *vxv1.Note, o noteOpts) {
+	p.shown = append(p.shown, n)
+	if p.full != nil && p.full(n) {
+		p.inFull = append(p.inFull, n)
+		p.a.printNote(n, o)
+		return
+	}
+	line, cut := noteLine(n, o)
+	p.a.printf("%s%s\n", o.indent, line)
+	if cut {
+		p.cut = append(p.cut, n)
+	}
+}
+
+// readHint prints one line saying how to read the cut notes in full:
+// "Read in full: vx board 1a2b3c4d 5e6f7a8b", with --effort (and --repo)
+// for notes of other efforts. It prints nothing when no body was cut.
+func (p *notePrinter) readHint(indent string) {
+	if len(p.cut) == 0 {
+		return
+	}
+	type place struct{ repo, effort string }
+	var order []place
+	ids := map[place][]string{}
+	for _, n := range p.cut {
+		var pl place
+		if n.Repo != "" && n.Repo != p.repo {
+			pl = place{repo: n.Repo, effort: n.Effort}
+		} else if n.Effort != "" && n.Effort != p.effort {
+			pl.effort = n.Effort
+		}
+		if _, ok := ids[pl]; !ok {
+			order = append(order, pl)
+		}
+		if id := noteID(n.Id); !contains(ids[pl], id) {
+			ids[pl] = append(ids[pl], id)
+		}
+	}
+	var cmds []string
+	for _, pl := range order {
+		cmd := "vx board " + strings.Join(ids[pl], " ")
+		if pl.effort != "" {
+			cmd += " --effort " + pl.effort
+		}
+		if pl.repo != "" {
+			cmd += " --repo " + pl.repo
+		}
+		cmds = append(cmds, cmd)
+	}
+	p.a.printf("%sRead in full: %s\n", indent, oneLine(cleanBody(strings.Join(cmds, "; "))))
+}
+
+// isSystem reports whether vx itself posted n (overlaps, rebases, review
+// comments and CI results from the git host).
+func isSystem(n *vxv1.Note) bool {
+	return n.System || n.Trust == "vx"
 }

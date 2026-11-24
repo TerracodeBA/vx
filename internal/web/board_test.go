@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -128,5 +130,78 @@ func TestBoardTab(t *testing.T) {
 	agentEnv.signIn(agentToken)
 	if code, _ := agentEnv.post("/ui/board/answer", url.Values{"note": {q2.ID.String()}, "body": {"x"}}, map[string]string{"Origin": e.srv.URL}); code != http.StatusForbidden {
 		t.Errorf("agent answer in the web UI = %d, want 403", code)
+	}
+}
+
+// The Board tab keeps a note another note replaced, dimmed and marked
+// "replaced by" with a link to the newer one, and says which notes the
+// viewer was not shown yet.
+func TestBoardTabReplacedAndRead(t *testing.T) {
+	e := newWebEnv(t)
+	ctx := e.ctx
+	if _, err := e.svc.CreateRepo(ctx, e.alice, service.CreateRepoInput{Name: "acme/shop"}); err != nil {
+		t.Fatal(err)
+	}
+	eff, err := e.svc.CreateEffort(ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: "Rate limiting"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentP, _, err := e.svc.CreateAgent(ctx, e.alice, "backend", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := e.svc.ResolveActor(ctx, agentP)
+	post := func(body, supersedes string) service.Note {
+		t.Helper()
+		n, err := e.svc.PostNote(ctx, agent, service.PostNoteInput{Repo: "acme/shop", Effort: eff.Slug, Kind: service.NotePlan,
+			Targets: []string{"limit.go"}, Body: body, Supersedes: supersedes})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	old := post("Per IP", "")
+	newer := post("Per user id", old.ID.String())
+	if err := e.svc.MarkNotesRead(ctx, e.alice, []uuid.UUID{newer.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	token, _ := e.st.CreateToken(ctx, e.alice.ID, "web")
+	e.signIn(token)
+	resp, err := e.c.Get(e.srv.URL + "/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug + "&view=board")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	body := string(raw)
+	oldAt := strings.Index(body, `id="n-`+old.ID.String()+`"`)
+	if oldAt < 0 || !strings.Contains(body, "Per IP") {
+		t.Fatalf("the replaced note is not on the Board tab:\n%s", body)
+	}
+	oldItem := body[strings.LastIndex(body[:oldAt], "<li"):]
+	oldItem = oldItem[:strings.Index(oldItem, "</li>")]
+	for _, want := range []string{
+		"bn-superseded",
+		`replaced by <a class="mono" href="#n-` + newer.ID.String() + `">` + newer.ID.String()[:8] + `</a>`,
+		`>unread</span>`,
+	} {
+		if !strings.Contains(oldItem, want) {
+			t.Errorf("replaced note: missing %q in\n%s", want, oldItem)
+		}
+	}
+	newAt := strings.Index(body, `id="n-`+newer.ID.String()+`"`)
+	newItem := body[newAt:]
+	newItem = newItem[:strings.Index(newItem, "</li>")]
+	for _, want := range []string{`replaces <a class="mono" href="#n-` + old.ID.String() + `">`, `>read</span>`} {
+		if !strings.Contains(newItem, want) {
+			t.Errorf("newer note: missing %q in\n%s", want, newItem)
+		}
+	}
+	if strings.Contains(newItem, "unread") || strings.Contains(newItem, "bn-superseded") {
+		t.Errorf("newer note reads as unread or replaced:\n%s", newItem)
+	}
+	if !strings.Contains(body, `<span class="trust trust-vx">vx</span> vx itself posted it`) {
+		t.Error("the legend does not explain the vx label")
 	}
 }

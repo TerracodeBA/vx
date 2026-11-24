@@ -65,7 +65,7 @@ func TestClaimsCLI(t *testing.T) {
 	b.must("new", "Audit clientIP")
 	b.write("internal/httpx/ip.go", "package httpx\n")
 	out = b.must("land")
-	i := strings.Index(out, "Landed ")
+	i := strings.Index(out, "Files:\n")
 	w := strings.Index(out, "Warning: you landed over claims of others:")
 	if i < 0 || w < i || !strings.Contains(out[w:], "[teammate] claim  agent:alice/backend  on internal/httpx/") || !strings.Contains(out[w:], "Tell them what you changed") {
 		t.Fatalf("land over a claim:\n%s", out)

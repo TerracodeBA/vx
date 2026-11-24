@@ -64,8 +64,8 @@ func TestOtherEffortsCLI(t *testing.T) {
 	for _, want := range []string{
 		"New on the board since your last sync (1)",
 		"1 from other efforts on your files",
-		"  [teammate] interface  agent:alice/backend  on pkg.Func  in rate-limiting  ",
-		"    │ func Func() error\n",
+		"  [teammate] interface alice/backend on pkg.Func in rate-limiting just now  id ",
+		": func Func() error\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("sync: missing %q in\n%s", want, out)

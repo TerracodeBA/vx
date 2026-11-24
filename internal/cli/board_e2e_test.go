@@ -112,7 +112,8 @@ func TestBoardCLI(t *testing.T) {
 	a.write("internal/httpx/ip.go", "package httpx\n")
 	out = a.must("status")
 	board := out[strings.Index(out, "\nBoard:"):]
-	for _, want := range []string{"No unread notes by others on files you changed.", "1 open question(s) for you:", qid[:8] + " agent:bob/audit", "Does clientIP trust"} {
+	// A was shown the question by vx inbox: one line now.
+	for _, want := range []string{"No unread notes by others on files you changed.", "1 open question(s) for you:", "    [teammate] question bob/audit -> you on ip.go just now  id " + qid[:8] + ": Does clientIP trust X-Forwarded-For?\n"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("status: missing %q in\n%s", want, board)
 		}
@@ -140,13 +141,17 @@ func TestBoardCLI(t *testing.T) {
 		t.Fatal("vx wait did not return on the answer")
 	}
 
-	// The board shows the answer under its question.
+	// The board shows the answer under its question, on one line each:
+	// B wrote the question and was shown the answer and the plan.
 	out = b.must("board")
-	qi := strings.Index(out, "[self] question  agent:bob/audit -> agent:alice/backend")
-	ai := strings.Index(out, "\n    [teammate] answer  agent:alice/backend")
-	pi := strings.Index(out, "[teammate] plan  agent:alice/backend")
-	if qi < 0 || ai < qi || pi < ai || !strings.Contains(out, "answered") {
+	qi := strings.Index(out, "[self] question audit -> alice/backend on ip.go just now answered  id "+qid[:8]+": Does clientIP")
+	ai := strings.Index(out, "\n    [teammate] answer alice/backend on ip.go just now re "+qid[:8]+"  id ")
+	pi := strings.Index(out, "[teammate] plan alice/backend on internal/httpx/ just now  id ")
+	if qi < 0 || ai < qi || pi < ai || !strings.Contains(out, "3 note(s) you wrote or were already shown are on one line.") {
 		t.Fatalf("board = \n%s", out)
+	}
+	if full := b.must("board", "--full"); !strings.Contains(full, "[self] question  agent:bob/audit -> agent:alice/backend") || !strings.Contains(full, "│ No: only RemoteAddr.") {
+		t.Errorf("board --full = \n%s", full)
 	}
 	if out := b.must("board", "--kind", "plan"); strings.Contains(out, "question") || !strings.Contains(out, "Moving clientIP") {
 		t.Errorf("board --kind plan = \n%s", out)

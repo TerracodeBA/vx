@@ -299,7 +299,10 @@ func (a *App) rebaseOutcome(ctx context.Context, c *client.Client, wc *workcopy.
 // is (its resolution is in it); one without local changes just syncs.
 func (a *App) leaveRebase(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy) error {
 	if wc.Config.Rebase == nil {
-		_, err := a.syncWorkingCopy(ctx, c, wc)
+		res, err := a.syncWorkingCopy(ctx, c, wc)
+		if err == nil && !res.upToDate {
+			a.printf("%s\n", syncSummary(res))
+		}
 		return err
 	}
 	eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
