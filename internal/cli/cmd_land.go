@@ -61,6 +61,9 @@ them in the same workspace reuses them and says so; --fresh ignores them.`,
 			if err != nil {
 				return err
 			}
+			if wc.Config.Rebase != nil {
+				return errRebasing(wc)
+			}
 			ctx := ctxOf(cmd)
 			if wc.Config.Workspace == "" {
 				if intent == "" {
@@ -643,6 +646,9 @@ edit them away, then land. vx land refuses files that still have markers.`,
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
 				return err
+			}
+			if wc.Config.Rebase != nil {
+				return errRebasing(wc)
 			}
 			ctx := ctxOf(cmd)
 			res, err := a.syncWorkingCopy(ctx, c, wc)

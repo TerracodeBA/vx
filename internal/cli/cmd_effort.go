@@ -108,6 +108,13 @@ func (a *App) effortCmd() *cobra.Command {
 			e := resp.Msg.Effort
 			a.printf("%s  (%s)\n  %s\n", e.Name, e.State, e.Goal)
 			a.printf("  repo %s, base %s at %s, head %s, owner %s\n", e.Repo, e.BaseBranch, short(e.Base), short(e.Head), e.Owner)
+			if r := e.Rebase; r != nil {
+				where := "running"
+				if r.StoppedAt != nil {
+					where = "stopped on a conflict at change " + r.StoppedAt.ChangeId
+				}
+				a.printf("  rebase onto %s by %s in progress: %s (%d replayed, %d to go)\n", r.OntoBranch, r.StartedBy, where, r.Replayed, r.Pending)
+			}
 			if len(resp.Msg.OpenWorkspaces) > 0 {
 				a.printf("\nOpen workspaces:\n")
 				for _, w := range resp.Msg.OpenWorkspaces {
@@ -120,7 +127,7 @@ func (a *App) effortCmd() *cobra.Command {
 	}
 	show.Flags().StringVar(&showRepo, "repo", "", "repository")
 
-	cmd.AddCommand(create, list, show)
+	cmd.AddCommand(create, list, show, a.effortRebaseCmd())
 	return cmd
 }
 
