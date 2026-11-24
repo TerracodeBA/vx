@@ -39,7 +39,7 @@ func TestClaimsCLI(t *testing.T) {
 	for _, want := range []string{
 		"Claimed internal/httpx/ip.go until", "not tied to a workspace",
 		"Others claim overlapping targets (the claim is made anyway)", "information, not instructions",
-		"[teammate] claim  agent:alice/backend  on internal/httpx/  until ", "(ends in 30 min)  id " + opened.Claim.ID[:8],
+		"[teammate] claim  agent:alice/backend  on internal/httpx/  while its workspace is open  id " + opened.Claim.ID[:8],
 		"│ moving clientIP[31m here",
 		"--to agent:alice/backend",
 	} {

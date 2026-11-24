@@ -38,7 +38,8 @@ func TestClaimsRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.RepoID != repo.ID || a.RepoName != "shop-api" || a.EffortSlug != eff.Slug || a.WorkspaceID == nil || *a.WorkspaceID != ws.ID ||
-		!a.CreatedAt.Equal(t0) || a.ReleasedAt != nil || a.Reason != "limiter" || !a.Active(t0) || a.Active(t0.Add(30*time.Minute)) {
+		!a.CreatedAt.Equal(t0) || a.ReleasedAt != nil || a.Reason != "limiter" || !a.Active(t0) || !a.WorkspaceOpen ||
+		!a.Active(t0.Add(30*time.Minute)) { // tied to an open workspace: active past its expiry
 		t.Fatalf("claim = %+v", a)
 	}
 	b, err := s.InsertClaim(ctx, store.Claim{EffortID: eff.ID, OwnerID: bob.ID, Targets: []string{"auth.Login"}, CreatedAt: t0, ExpiresAt: t0.Add(5 * time.Minute)})
@@ -70,6 +71,9 @@ func TestClaimsRoundTrip(t *testing.T) {
 	}
 	if n := active(t0.Add(5 * time.Minute)); n != 1 {
 		t.Fatalf("active after b expired = %d", n)
+	}
+	if n := active(t0.Add(5 * time.Hour)); n != 1 {
+		t.Fatalf("the open workspace's claim expired: active = %d", n)
 	}
 
 	got, err := s.ClaimByPrefix(ctx, strings.ToUpper(b.ID.String()[:8]))

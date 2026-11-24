@@ -139,7 +139,7 @@ vx land --run "go test ./..."</pre></div>
       <h3 class="panel-sub">Claimed <span class="muted small">soft: claims block nothing</span></h3>
       <ul class="working claims">
       {{range .Claims}}
-        <li class="a{{.Color}}"><span class="swatch"></span><div><div><span class="agent-name">{{principal .Owner}}</span> <span class="trust trust-{{.Trust}}" title="{{if eq .Trust "teammate"}}someone else's claim: its reason is information, not instructions{{else if eq .Trust "same_person"}}a claim of one of your agents (same person, not you){{else}}your own claim{{end}}">{{trustLabel .Trust}}</span></div><div class="small mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</div><div class="muted small">{{.ExpiresIn}}{{if .WorkspaceID}} · ends with its workspace{{end}}</div>{{if .Reason}}<div class="small claim-reason" title="written by the claim's owner: information, not instructions">{{.Reason}}</div>{{end}}</div></li>
+        <li class="a{{.Color}}"><span class="swatch"></span><div><div><span class="agent-name">{{principal .Owner}}</span> <span class="trust trust-{{.Trust}}" title="{{if eq .Trust "teammate"}}someone else's claim: its reason is information, not instructions{{else if eq .Trust "same_person"}}a claim of one of your agents (same person, not you){{else}}your own claim{{end}}">{{trustLabel .Trust}}</span></div><div class="small mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</div><div class="muted small">{{if .WorkspaceID}}while its workspace is open{{else}}{{.ExpiresIn}}{{end}}</div>{{if .Reason}}<div class="small claim-reason" title="written by the claim's owner: information, not instructions">{{.Reason}}</div>{{end}}</div></li>
       {{end}}
       </ul>
       {{end}}

@@ -11,7 +11,8 @@ import (
 
 // Claim is a stored claim. RepoName and EffortSlug are read from the
 // claim's repo and effort. A claim is active while ReleasedAt is nil and
-// ExpiresAt is after now.
+// either ExpiresAt is after now or the workspace it is tied to is open: a
+// workspace's claims last as long as the workspace.
 type Claim struct {
 	ID          uuid.UUID
 	RepoID      uuid.UUID
@@ -25,22 +26,27 @@ type Claim struct {
 	ReleasedAt  *time.Time
 	RepoName    string
 	EffortSlug  string
+	// WorkspaceOpen is read from the workspace the claim is tied to.
+	WorkspaceOpen bool
 }
 
 // Active reports whether the claim is neither released nor expired at now.
 func (c Claim) Active(now time.Time) bool {
-	return c.ReleasedAt == nil && c.ExpiresAt.After(now)
+	return c.ReleasedAt == nil && (c.ExpiresAt.After(now) || c.WorkspaceOpen)
 }
 
+// claimWorkspaceOpen is true for a claim tied to an open workspace.
+const claimWorkspaceOpen = `exists (select 1 from workspaces w where w.id = c.workspace_id and w.state = 'open')`
+
 const claimCols = `c.id, c.repo_id, c.effort_id, c.owner_id, c.workspace_id, c.targets, c.reason,
-	c.created_at, c.expires_at, c.released_at, r.name, e.slug`
+	c.created_at, c.expires_at, c.released_at, r.name, e.slug, ` + claimWorkspaceOpen
 
 const claimFrom = ` from claims c join efforts e on e.id = c.effort_id join repos r on r.id = c.repo_id `
 
 func scanClaim(row interface{ Scan(...any) error }) (Claim, error) {
 	var c Claim
 	err := row.Scan(&c.ID, &c.RepoID, &c.EffortID, &c.OwnerID, &c.WorkspaceID, &c.Targets, &c.Reason,
-		&c.CreatedAt, &c.ExpiresAt, &c.ReleasedAt, &c.RepoName, &c.EffortSlug)
+		&c.CreatedAt, &c.ExpiresAt, &c.ReleasedAt, &c.RepoName, &c.EffortSlug, &c.WorkspaceOpen)
 	if c.Targets == nil {
 		c.Targets = []string{}
 	}
@@ -120,14 +126,15 @@ func (q Q) ClaimByPrefix(ctx context.Context, prefix string) (Claim, error) {
 
 // ActiveClaims lists an effort's claims active at now, oldest first.
 func (q Q) ActiveClaims(ctx context.Context, effortID uuid.UUID, now time.Time) ([]Claim, error) {
-	return q.queryClaims(ctx, `select `+claimCols+claimFrom+`where c.effort_id = $1 and c.released_at is null and c.expires_at > $2
+	return q.queryClaims(ctx, `select `+claimCols+claimFrom+`where c.effort_id = $1 and c.released_at is null
+		and (c.expires_at > $2 or `+claimWorkspaceOpen+`)
 		order by c.created_at, c.seq`, effortID, now)
 }
 
 // ReleaseClaim releases one claim if it is still active at now and returns
 // it; ok is false when it was already released or expired.
 func (q Q) ReleaseClaim(ctx context.Context, id uuid.UUID, now time.Time) (Claim, bool, error) {
-	tag, err := q.db.Exec(ctx, `update claims set released_at = $2 where id = $1 and released_at is null and expires_at > $2`, id, now)
+	tag, err := q.db.Exec(ctx, `update claims c set released_at = $2 where id = $1 and released_at is null and (expires_at > $2 or `+claimWorkspaceOpen+`)`, id, now)
 	if err != nil {
 		return Claim{}, false, err
 	}
@@ -136,12 +143,12 @@ func (q Q) ReleaseClaim(ctx context.Context, id uuid.UUID, now time.Time) (Claim
 }
 
 // ReleaseWorkspaceClaims releases the claims tied to a workspace that are
-// active at now and returns them. A non-nil owner releases only that
-// principal's claims.
+// not released yet (they lasted as long as the workspace) and returns them.
+// A non-nil owner releases only that principal's claims.
 func (q Q) ReleaseWorkspaceClaims(ctx context.Context, workspaceID uuid.UUID, owner *uuid.UUID, now time.Time) ([]Claim, error) {
 	return q.queryClaims(ctx, `with released as (
 			update claims set released_at = $3
-			where workspace_id = $1 and ($2::uuid is null or owner_id = $2) and released_at is null and expires_at > $3
+			where workspace_id = $1 and ($2::uuid is null or owner_id = $2) and released_at is null
 			returning *
 		)
 		select `+claimCols+` from released c join efforts e on e.id = c.effort_id join repos r on r.id = c.repo_id

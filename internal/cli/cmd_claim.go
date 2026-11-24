@@ -30,7 +30,7 @@ type claimOptions struct {
 
 func claimFlags(cmd *cobra.Command, o *claimOptions) {
 	cmd.Flags().StringVar(&o.reason, "reason", "", "why, in a few words (at most 300 characters); others see it as information")
-	cmd.Flags().DurationVar(&o.ttl, "for", 30*time.Minute, "how long the claim lasts (at most 4h); landing or abandoning the workspace ends it sooner")
+	cmd.Flags().DurationVar(&o.ttl, "for", 30*time.Minute, "how long a claim not tied to a workspace lasts (at most 4h); a workspace's claims last as long as the workspace")
 }
 
 // coordErr explains a server without claims instead of a bare error.
@@ -57,12 +57,13 @@ func (a *App) makeClaim(ctx context.Context, c *client.Client, repo, slug, works
 		return nil, a.coordErr(err)
 	}
 	m := resp.Msg
-	tie := "not tied to a workspace; release it with `vx release " + noteID(m.Claim.Id) + "`"
 	if m.Claim.WorkspaceId != "" {
-		tie = "ends when this workspace lands or is abandoned"
+		a.printf("Claimed %s while this workspace is open, id %s: it ends when the workspace lands or is abandoned, or with vx release.\n",
+			strings.Join(m.Claim.Targets, ", "), noteID(m.Claim.Id))
+	} else {
+		a.printf("Claimed %s until %s (%s), id %s; not tied to a workspace; release it with `vx release %s`.\n", strings.Join(m.Claim.Targets, ", "),
+			clock(m.Claim.ExpiresAt), expiresIn(m.Claim.ExpiresAt), noteID(m.Claim.Id), noteID(m.Claim.Id))
 	}
-	a.printf("Claimed %s until %s (%s), id %s; %s.\n", strings.Join(m.Claim.Targets, ", "), clock(m.Claim.ExpiresAt),
-		expiresIn(m.Claim.ExpiresAt), noteID(m.Claim.Id), tie)
 	if len(m.Overlapping) > 0 {
 		a.printf("Others claim overlapping targets (the claim is made anyway). %s\n", claimFraming)
 		for _, cl := range m.Overlapping {
@@ -87,9 +88,14 @@ vx context and the web UI before they edit the same code.
 
 Claims are soft: they never block anyone. You get the claim even when
 others already hold overlapping ones; vx claim lists those so you can talk
-first. A claim ends after --for, with vx release, or, when it is tied to
-the open workspace (the default), when that workspace lands or is
-abandoned.`,
+first. A claim tied to the open workspace (the default) lasts as long as
+the workspace: it ends when the workspace lands or is abandoned, or with
+vx release. A claim with --no-workspace ends after --for or vx release.
+
+A symbol claim (pkg.Func, pkg.Type.Method) only counts against a land
+that changes the lines of that symbol (Go: its declaration; other
+languages: the whole file named like pkg), so two agents can claim and
+change different functions of one file.`,
 		Example: `  vx claim internal/http/limit.go --reason "moving clientIP into httpx"
   vx claim auth.Login --for 1h --no-workspace`,
 		Args: cobra.MinimumNArgs(1),
