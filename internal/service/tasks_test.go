@@ -56,7 +56,7 @@ func TestTaskAddValidates(t *testing.T) {
 		task.RepoName != "shop-api" || task.EffortSlug != b.effort.Slug || !task.CreatedAt.Equal(b.now) {
 		t.Fatalf("task = %+v", task)
 	}
-	if service.TaskTrust(b.alice, task) != service.TrustYours || service.TaskTrust(b.bob, task) != service.TrustTeammate {
+	if service.TaskTrust(b.alice, task) != service.TrustSamePerson || service.TaskTrust(b.bob, task) != service.TrustTeammate {
 		t.Fatal("trust labels")
 	}
 	b.addTask(b.alice, strings.Repeat("é", service.MaxTaskTitle))

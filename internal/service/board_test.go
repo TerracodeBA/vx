@@ -247,7 +247,7 @@ func TestBoardListNotesIsOpenToEveryone(t *testing.T) {
 	for _, tc := range []struct {
 		actor service.Actor
 		want  string
-	}{{b.agent, service.TrustSelf}, {b.alice, service.TrustYours}, {b.tests, service.TrustYours}, {b.bob, service.TrustTeammate}, {b.bobBE, service.TrustTeammate}} {
+	}{{b.agent, service.TrustSelf}, {b.alice, service.TrustSamePerson}, {b.tests, service.TrustSamePerson}, {b.bob, service.TrustTeammate}, {b.bobBE, service.TrustTeammate}} {
 		if got := service.TrustOf(tc.actor, mine); got != tc.want {
 			t.Errorf("TrustOf(%s) = %s, want %s", tc.actor.Ref(), got, tc.want)
 		}

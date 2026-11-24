@@ -256,10 +256,7 @@ with --all). Blocked tasks say which tasks they wait for.
 }
 
 func taskTrust(t *vxv1.Task) string {
-	if t.Trust == "" {
-		return "teammate"
-	}
-	return t.Trust
+	return trustLabel(t.Trust)
 }
 
 // taskState says where a task is: "open", "blocked", "taken by you",

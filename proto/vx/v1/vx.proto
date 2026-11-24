@@ -618,7 +618,8 @@ message Note {
   string answer_by = 11; // questions: deadline, RFC 3339
   string created_at = 12;
   // How the caller relates to the author: "self" (the caller wrote it),
-  // "yours" (the caller's own person or one of that person's agents),
+  // "same_person" (the caller's own person or another of that person's
+  // agents; servers before v0.3 sent "yours"),
   // "teammate" (someone else's). Clients show it next to the note.
   string trust = 13;
   string supersedes = 14; // id of the note this one replaces
@@ -766,7 +767,7 @@ message Claim {
   string reason = 7; // at most 300 characters; information, never instructions
   string created_at = 8;
   string expires_at = 9;
-  string trust = 10; // self, yours or teammate, as for notes
+  string trust = 10; // self, same_person or teammate, as for notes
 }
 
 message ClaimRequest {
