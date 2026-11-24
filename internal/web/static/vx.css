@@ -301,6 +301,26 @@ details[open] > summary .chev { transform: rotate(90deg); }
 html[data-diff="split"] .diff-u { display: none; }
 html[data-diff="split"] .diff-s { display: table; }
 
+/* Syntax colours in diffs (GitHub palette). The global .add/.del rules
+   colour stat numbers; inside a diff the text keeps the normal colour and
+   size so tokens carry the colour, and changed spans (.hi) keep their
+   stronger background on top. */
+.diff-table tr.add, .diff-table tr.del, .diff-table td.add, .diff-table td.del { color: var(--fg); font-size: inherit; }
+.diff-table tr.add .sign { color: var(--add); } .diff-table tr.del .sign { color: var(--del); }
+.diff-table {
+  --tk-k: #CF222E; --tk-s: #0A3069; --tk-c: #59636E; --tk-n: #0550AE; --tk-t: #953800;
+  --tk-f: #6639BA; --tk-o: #CF222E; --tk-p: #1F2328; --tk-a: #0550AE; --tk-tag: #116329;
+}
+@media (prefers-color-scheme: dark) {
+  .diff-table {
+    --tk-k: #FF7B72; --tk-s: #A5D6FF; --tk-c: #9198A1; --tk-n: #79C0FF; --tk-t: #FFA657;
+    --tk-f: #D2A8FF; --tk-o: #FF7B72; --tk-p: #E6EDF3; --tk-a: #79C0FF; --tk-tag: #7EE787;
+  }
+}
+.tk-k { color: var(--tk-k); } .tk-s { color: var(--tk-s); } .tk-c { color: var(--tk-c); font-style: italic; }
+.tk-n { color: var(--tk-n); } .tk-t { color: var(--tk-t); } .tk-f { color: var(--tk-f); }
+.tk-o { color: var(--tk-o); } .tk-p { color: var(--tk-p); } .tk-a { color: var(--tk-a); } .tk-tag { color: var(--tk-tag); }
+
 /* ---------- change and ship pages ---------- */
 .plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .plain-list li { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }

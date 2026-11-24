@@ -49,3 +49,38 @@ func TestDiffBlocks(t *testing.T) {
 		}
 	}
 }
+
+func TestColorLinesUsesWholeFile(t *testing.T) {
+	// Line 4 only reads as a comment because of the "/*" two lines above it,
+	// which the diff shows as context.
+	a := []byte("package p\n\n/* one\ntwo */\nvar x = 1\n")
+	b := []byte("package p\n\n/* one\nthree */\nvar x = 2\n")
+	la, lb := merge.SplitLines(a), merge.SplitLines(b)
+	lines := renderHunks(merge.Diff(la, lb), la, lb, 3)
+	markWords(lines)
+	colorLines(lines, "p.go", a, b)
+	var del, add *diffLine
+	for i := range lines {
+		switch {
+		case lines[i].Kind == "del" && lines[i].Old == 4:
+			del = &lines[i]
+		case lines[i].Kind == "add" && lines[i].New == 4:
+			add = &lines[i]
+		}
+	}
+	if del == nil || add == nil {
+		t.Fatalf("lines = %+v", lines)
+	}
+	for _, l := range []*diffLine{del, add} {
+		hi := false
+		for _, s := range l.Segs {
+			if s.Class != "tk-c" {
+				t.Fatalf("line %q: span %+v is not a comment", l.Text, s)
+			}
+			hi = hi || s.Hi
+		}
+		if !hi {
+			t.Fatalf("line %q lost its word highlight: %+v", l.Text, l.Segs)
+		}
+	}
+}

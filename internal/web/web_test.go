@@ -47,6 +47,15 @@ func TestPages(t *testing.T) {
 	if err != nil || !res.Landed {
 		t.Fatal(err)
 	}
+	// A second land edits a line, for syntax colours under word highlights.
+	ws2, _ := svc.OpenWorkspace(ctx, agent, "acme/shop", eff.Slug, "Deny by default")
+	row2, _ := st.GetChangeset(ctx, repo.ID, ws2.Workspace.Base)
+	h2, _ := blobs.Put(ctx, hash.KindBlob, []byte("package limit\n\nfunc Allow() bool { return false }\n\n// Allow says <no>.\n"))
+	tree2, _ := object.ApplyChanges(ctx, blobs, row2.Tree, []object.Change{{Path: "limit/limit.go", Op: object.OpModify, Old: object.File{Hash: h, Mode: object.ModeFile}, New: object.File{Hash: h2, Mode: object.ModeFile}}})
+	res2, err := svc.Land(ctx, agent, service.LandInput{WorkspaceID: ws2.Workspace.ID, Tree: tree2, Model: "claude-opus-5-5"})
+	if err != nil || !res2.Landed {
+		t.Fatal("second land", err)
+	}
 	svc.OpenWorkspace(ctx, agent, "acme/shop", eff.Slug, "Wire limiter into login")
 
 	mux := http.NewServeMux()
@@ -88,7 +97,7 @@ func TestPages(t *testing.T) {
 		"/ui":                       {"Rate limiting", "Working now", "1 agent", "acme/shop"},
 		"/ui/repo?name=acme%2Fshop": {"Branches vx follows", "main"},
 		"/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug:              {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5"},
-		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", "func Allow() bool", "run by vx"},
+		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", `<span class="tk-k">func</span> <span class="tk-f">Allow</span>`, "run by vx"},
 		"/ui/ship?repo=acme%2Fshop&slug=" + eff.Slug:                {"has no git upstream"},
 	} {
 		code, body := get(path)
@@ -126,11 +135,22 @@ func TestPages(t *testing.T) {
 	}
 	// Diff fragments: one change, and the effort as a whole.
 	code, frag := get("/ui/diff?repo=acme%2Fshop&ref=" + res.Changeset.Hash.String() + "&path=limit/limit.go")
-	if code != 200 || !strings.Contains(frag, "diff-u") || !strings.Contains(frag, "diff-s") || !strings.Contains(frag, "func Allow() bool") {
+	if code != 200 || !strings.Contains(frag, "diff-u") || !strings.Contains(frag, "diff-s") || !strings.Contains(frag, `<span class="tk-t">bool</span>`) {
 		t.Fatalf("change diff = %d %s", code, frag)
 	}
-	if code, frag := get("/ui/diff?repo=acme%2Fshop&slug=" + eff.Slug + "&path=limit/limit.go"); code != 200 || !strings.Contains(frag, "func Allow() bool") {
+	if code, frag := get("/ui/diff?repo=acme%2Fshop&slug=" + eff.Slug + "&path=limit/limit.go"); code != 200 || !strings.Contains(frag, `<span class="tk-k">package</span>`) {
 		t.Fatalf("effort diff = %d %s", code, frag)
+	}
+	// Syntax colours in an edited line, with the changed part still marked,
+	// and token text escaped.
+	code, frag = get("/ui/diff?repo=acme%2Fshop&ref=" + res2.Changeset.Hash.String() + "&path=limit/limit.go")
+	for _, w := range []string{`<span class="tk-n hi">fals</span>`, `<span class="tk-n hi">tru</span>`, `<span class="tk-c">// Allow says &lt;no&gt;.</span>`} {
+		if code != 200 || strings.Count(frag, w) != 2 { // unified and split views
+			t.Errorf("edited diff: want %q twice\n%s", w, frag)
+		}
+	}
+	if strings.Contains(frag, "<no>") || strings.Contains(frag, "style=") {
+		t.Errorf("edited diff has unescaped text or inline styles\n%s", frag)
 	}
 	if code, _ := get("/ui/diff?repo=acme%2Fshop&slug=" + eff.Slug + "&path=nope.go"); code != 404 {
 		t.Fatalf("diff of an unchanged file = %d", code)
@@ -142,7 +162,7 @@ func TestPages(t *testing.T) {
 	if code, _ := get("/ui/repo?name=acme%252Fshop"); code != 200 {
 		t.Fatalf("double-encoded link = %d", code)
 	}
-	if code, body := get("/ui/effort/head?repo=acme%2Fshop&slug=" + eff.Slug); code != 200 || !strings.HasPrefix(body, res.Changeset.Hash.String()) {
+	if code, body := get("/ui/effort/head?repo=acme%2Fshop&slug=" + eff.Slug); code != 200 || !strings.HasPrefix(body, res2.Changeset.Hash.String()) {
 		t.Fatalf("head = %d %s", code, body)
 	}
 	if code, _ := get("/ui/effort?repo=acme%2Fshop&slug=nope"); code != 404 {

@@ -1,4 +1,4 @@
-{{define "linetext"}}{{if .Segs}}{{range .Segs}}{{if .Hi}}<span class="hi">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}{{else}}{{.Text}}{{end}}{{end}}
+{{define "linetext"}}{{if .Segs}}{{range .Segs}}{{with .Classes}}<span class="{{.}}">{{end}}{{.Text}}{{if .Classes}}</span>{{end}}{{end}}{{else}}{{.Text}}{{end}}{{end}}
 
 {{define "diffbody"}}
 {{if .Binary}}<p class="muted small pad">Binary file not shown.</p>
