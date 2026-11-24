@@ -726,8 +726,11 @@ type Changeset struct {
 	Effort    string                 `protobuf:"bytes,13,opt,name=effort,proto3" json:"effort,omitempty"` // slug, empty for upstream changesets
 	// Set when the server merged the author's snapshot onto newer work: the
 	// evidence was gathered on snapshot_tree, not on tree.
-	SnapshotTree  string `protobuf:"bytes,14,opt,name=snapshot_tree,json=snapshotTree,proto3" json:"snapshot_tree,omitempty"`
-	Merged        bool   `protobuf:"varint,15,opt,name=merged,proto3" json:"merged,omitempty"`
+	SnapshotTree string `protobuf:"bytes,14,opt,name=snapshot_tree,json=snapshotTree,proto3" json:"snapshot_tree,omitempty"`
+	Merged       bool   `protobuf:"varint,15,opt,name=merged,proto3" json:"merged,omitempty"`
+	// Problems the server found in the tree when this change landed, such as
+	// a Go function declared twice. Stored beside the changeset, not hashed.
+	Warnings      []*Warning `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -865,6 +868,13 @@ func (x *Changeset) GetMerged() bool {
 		return x.Merged
 	}
 	return false
+}
+
+func (x *Changeset) GetWarnings() []*Warning {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 type Workspace struct {
@@ -4292,7 +4302,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bnew_hash\x18\x04 \x01(\tR\anewHash\x12\x12\n" +
 	"\x04mode\x18\x05 \x01(\tR\x04mode\x12\x14\n" +
 	"\x05added\x18\x06 \x01(\x05R\x05added\x12\x18\n" +
-	"\adeleted\x18\a \x01(\x05R\adeleted\"\xc3\x03\n" +
+	"\adeleted\x18\a \x01(\x05R\adeleted\"\xef\x03\n" +
 	"\tChangeset\x12\x12\n" +
 	"\x04hash\x18\x01 \x01(\tR\x04hash\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x18\n" +
@@ -4311,7 +4321,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x05files\x18\f \x03(\v2\x11.vx.v1.FileChangeR\x05files\x12\x16\n" +
 	"\x06effort\x18\r \x01(\tR\x06effort\x12#\n" +
 	"\rsnapshot_tree\x18\x0e \x01(\tR\fsnapshotTree\x12\x16\n" +
-	"\x06merged\x18\x0f \x01(\bR\x06merged\"\xf8\x01\n" +
+	"\x06merged\x18\x0f \x01(\bR\x06merged\x12*\n" +
+	"\bwarnings\x18\x10 \x03(\v2\x0e.vx.v1.WarningR\bwarnings\"\xf8\x01\n" +
 	"\tWorkspace\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
@@ -4672,96 +4683,97 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	4,  // 2: vx.v1.Changeset.author:type_name -> vx.v1.Author
 	6,  // 3: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
 	7,  // 4: vx.v1.Changeset.files:type_name -> vx.v1.FileChange
-	0,  // 5: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
-	14, // 6: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
-	0,  // 7: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
-	13, // 8: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
-	13, // 9: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
-	0,  // 10: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
-	0,  // 11: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
-	12, // 12: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
-	12, // 13: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
-	2,  // 14: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
-	2,  // 15: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
-	2,  // 16: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
-	1,  // 17: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
-	3,  // 18: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
-	3,  // 19: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
-	9,  // 20: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
-	3,  // 21: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
-	8,  // 22: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
-	8,  // 23: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
-	9,  // 24: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,  // 25: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,  // 26: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
-	6,  // 27: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
-	8,  // 28: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
-	10, // 29: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
-	11, // 30: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
-	9,  // 31: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
-	8,  // 32: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
-	59, // 33: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
-	10, // 34: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
-	11, // 35: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
-	60, // 36: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	61, // 37: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
-	60, // 38: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	61, // 39: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
-	21, // 40: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	23, // 41: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	15, // 42: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	17, // 43: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	19, // 44: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	25, // 45: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	27, // 46: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	29, // 47: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	31, // 48: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	33, // 49: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	35, // 50: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	37, // 51: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	39, // 52: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	41, // 53: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	43, // 54: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	45, // 55: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	47, // 56: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	49, // 57: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	51, // 58: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	53, // 59: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	55, // 60: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	57, // 61: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	62, // 62: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	64, // 63: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	66, // 64: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	22, // 65: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	24, // 66: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	16, // 67: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	18, // 68: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	20, // 69: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	26, // 70: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	28, // 71: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	30, // 72: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	32, // 73: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	34, // 74: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	36, // 75: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	38, // 76: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	40, // 77: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	42, // 78: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	44, // 79: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	46, // 80: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	48, // 81: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	50, // 82: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	52, // 83: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	54, // 84: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	56, // 85: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	58, // 86: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	63, // 87: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	65, // 88: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	67, // 89: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	65, // [65:90] is the sub-list for method output_type
-	40, // [40:65] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	11, // 5: vx.v1.Changeset.warnings:type_name -> vx.v1.Warning
+	0,  // 6: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
+	14, // 7: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
+	0,  // 8: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
+	13, // 9: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
+	13, // 10: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
+	0,  // 11: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
+	0,  // 12: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
+	12, // 13: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
+	12, // 14: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
+	2,  // 15: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
+	2,  // 16: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
+	2,  // 17: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
+	1,  // 18: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
+	3,  // 19: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
+	3,  // 20: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
+	9,  // 21: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
+	3,  // 22: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
+	8,  // 23: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
+	8,  // 24: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
+	9,  // 25: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,  // 26: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,  // 27: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
+	6,  // 28: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
+	8,  // 29: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
+	10, // 30: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
+	11, // 31: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
+	9,  // 32: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
+	8,  // 33: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
+	59, // 34: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
+	10, // 35: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
+	11, // 36: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
+	60, // 37: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	61, // 38: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
+	60, // 39: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	61, // 40: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
+	21, // 41: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	23, // 42: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	15, // 43: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	17, // 44: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	19, // 45: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	25, // 46: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	27, // 47: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	29, // 48: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	31, // 49: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	33, // 50: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	35, // 51: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	37, // 52: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	39, // 53: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	41, // 54: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	43, // 55: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	45, // 56: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	47, // 57: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	49, // 58: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	51, // 59: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	53, // 60: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	55, // 61: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	57, // 62: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	62, // 63: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	64, // 64: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	66, // 65: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	22, // 66: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	24, // 67: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	16, // 68: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	18, // 69: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	20, // 70: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	26, // 71: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	28, // 72: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	30, // 73: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	32, // 74: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	34, // 75: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	36, // 76: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	38, // 77: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	40, // 78: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	42, // 79: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	44, // 80: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	46, // 81: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	48, // 82: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	50, // 83: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	52, // 84: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	54, // 85: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	56, // 86: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	58, // 87: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	63, // 88: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	65, // 89: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	67, // 90: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	66, // [66:91] is the sub-list for method output_type
+	41, // [41:66] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }

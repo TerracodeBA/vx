@@ -99,6 +99,9 @@ message Changeset {
   // evidence was gathered on snapshot_tree, not on tree.
   string snapshot_tree = 14;
   bool merged = 15;
+  // Problems the server found in the tree when this change landed, such as
+  // a Go function declared twice. Stored beside the changeset, not hashed.
+  repeated Warning warnings = 16;
 }
 
 message Workspace {
