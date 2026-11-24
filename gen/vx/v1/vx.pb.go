@@ -481,6 +481,7 @@ type Check struct {
 	Failed        int32                  `protobuf:"varint,4,opt,name=failed,proto3" json:"failed,omitempty"`
 	RanByVx       bool                   `protobuf:"varint,5,opt,name=ran_by_vx,json=ranByVx,proto3" json:"ran_by_vx,omitempty"` // vx ran the command; false: reported by the author
 	DurationMs    int64                  `protobuf:"varint,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	Notes         string                 `protobuf:"bytes,7,opt,name=notes,proto3" json:"notes,omitempty"` // e.g. "12 of 14 packages from the Go test cache"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -555,6 +556,13 @@ func (x *Check) GetDurationMs() int64 {
 		return x.DurationMs
 	}
 	return 0
+}
+
+func (x *Check) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
 }
 
 type Evidence struct {
@@ -4263,7 +4271,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\fon_behalf_of\x18\x04 \x01(\tR\n" +
 	"onBehalfOf\x12\x14\n" +
 	"\x05model\x18\x05 \x01(\tR\x05model\x12\x18\n" +
-	"\asession\x18\x06 \x01(\tR\asession\"\xa0\x01\n" +
+	"\asession\x18\x06 \x01(\tR\asession\"\xb6\x01\n" +
 	"\x05Check\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\tR\x06result\x12\x16\n" +
@@ -4271,7 +4279,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06failed\x18\x04 \x01(\x05R\x06failed\x12\x1a\n" +
 	"\tran_by_vx\x18\x05 \x01(\bR\aranByVx\x12\x1f\n" +
 	"\vduration_ms\x18\x06 \x01(\x03R\n" +
-	"durationMs\"M\n" +
+	"durationMs\x12\x14\n" +
+	"\x05notes\x18\a \x01(\tR\x05notes\"M\n" +
 	"\bEvidence\x12$\n" +
 	"\x06checks\x18\x01 \x03(\v2\f.vx.v1.CheckR\x06checks\x12\x1b\n" +
 	"\tnew_tests\x18\x02 \x03(\tR\bnewTests\"\xaa\x01\n" +

@@ -39,6 +39,9 @@ type Check struct {
 	// false when the author reported the result (vx land --check).
 	RanByVX    bool  `json:"ran_by_vx,omitempty"`
 	DurationMs int64 `json:"duration_ms,omitempty"`
+	// Notes qualify the result, e.g. how many Go test packages came from
+	// the test cache instead of running.
+	Notes string `json:"notes,omitempty"`
 }
 
 // Evidence is what an author offers as proof that a change works.
