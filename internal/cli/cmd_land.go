@@ -137,6 +137,7 @@ them in the same workspace reuses them and says so; --fresh ignores them.`,
 						a.emit(res.json())
 						return errConflict
 					}
+					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
 				}
 				ran, failed := a.runChecks(wc.Root, runs)
 				if failed && !allowFailing {
@@ -175,6 +176,9 @@ type landOptions struct {
 	ran                    []*vxv1.Check
 	allowMarkers           bool
 	requireUpToDate        bool
+	// keptBoth are files a sync before this land merged by keeping both
+	// sides' insertions; shown with the server's list.
+	keptBoth []string
 }
 
 var errEffortMoved = errors.New("effort moved")
@@ -318,6 +322,10 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 			a.printf("  Your evidence was gathered before that merge and is marked so. Use --run to check the merged result instead.\n")
 		}
 	}
+	r.KeptBoth = unionSorted(r.KeptBoth, o.keptBoth)
+	if len(r.KeptBoth) > 0 {
+		a.printf("  Kept both insertions (check the order): %s\n", strings.Join(r.KeptBoth, ", "))
+	}
 	if len(incoming) > 0 {
 		a.printf("  Updated %d file(s) here with others' changes.\n", len(incoming))
 	}
@@ -400,6 +408,9 @@ type syncResult struct {
 	// merged are files both you and the effort changed that merged without
 	// conflicts: their contents on disk are now a mix of both.
 	merged []string
+	// keptBoth are the merged files where both sides inserted different
+	// lines at the same place and the merge kept both, effort side first.
+	keptBoth []string
 }
 
 func (r syncResult) json() map[string]any {
@@ -411,7 +422,11 @@ func (r syncResult) json() map[string]any {
 	if merged == nil {
 		merged = []string{}
 	}
-	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged}
+	keptBoth := r.keptBoth
+	if keptBoth == nil {
+		keptBoth = []string{}
+	}
+	return map[string]any{"up_to_date": r.upToDate, "base": r.head, "updated": r.updated, "local_changes": r.local, "conflicts": cj, "merged": merged, "kept_both": keptBoth}
 }
 
 // syncWorkingCopy brings the working copy to the effort head, merging local
@@ -442,6 +457,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	}
 	result := theirs
 	var conflicts []engine.Conflict
+	var keptBoth []string
 	if len(local) > 0 {
 		mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, wc.Config.BaseTreeHash(), ours, theirs, merge.Labels{
 			Base: "base " + short(wc.Config.Base), Ours: "local", Theirs: "effort " + short(head),
@@ -449,7 +465,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 		if err != nil {
 			return syncResult{}, err
 		}
-		result, conflicts = mr.Tree, mr.Conflicts
+		result, conflicts, keptBoth = mr.Tree, mr.Conflicts, mr.KeptBoth
 	}
 	incoming, err := object.DiffTrees(ctx, wc.Objects, ours, result)
 	if err != nil {
@@ -468,22 +484,53 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 		return syncResult{}, err
 	}
 	merged := mergedFiles(local, incoming, conflicts)
+	sort.Strings(keptBoth)
 	a.printf("Synced to %s: %d file(s) updated", short(head), len(incoming))
 	if len(local) > 0 {
 		a.printf(", your %d local change(s) kept", len(local))
 	}
 	a.printf(".\n")
-	switch len(merged) {
+	a.printPaths("Merged with your edits", merged)
+	a.printKeptBoth(keptBoth)
+	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth}, nil
+}
+
+// printPaths prints "LABEL: PATH" for one path, or LABEL and an indented
+// list for several; nothing for none.
+func (a *App) printPaths(label string, paths []string) {
+	switch len(paths) {
 	case 0:
 	case 1:
-		a.printf("Merged with your edits: %s\n", merged[0])
+		a.printf("%s: %s\n", label, paths[0])
 	default:
-		a.printf("Merged with your edits:\n")
-		for _, p := range merged {
+		a.printf("%s:\n", label)
+		for _, p := range paths {
 			a.printf("  %s\n", p)
 		}
 	}
-	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged}, nil
+}
+
+// printKeptBoth lists files where both sides inserted different lines at
+// the same place and the merge kept both (the effort's lines first). The
+// text is all there; whether the order is right needs a look.
+func (a *App) printKeptBoth(paths []string) {
+	a.printPaths("Kept both insertions (check the order)", paths)
+}
+
+// unionSorted returns the sorted union of path lists.
+func unionSorted(lists ...[]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, l := range lists {
+		for _, p := range l {
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // mergedFiles returns, sorted, the files you had changed that the sync
