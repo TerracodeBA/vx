@@ -122,6 +122,14 @@ message Conflict {
   string theirs = 6;
 }
 
+// Warning is a problem vx noticed in a merged tree that does not stop a land,
+// such as two changes that each declare the same Go function in one package.
+message Warning {
+  string path = 1; // the file or directory concerned, e.g. a Go package directory
+  string kind = 2; // duplicate, parse
+  string detail = 3; // human-readable, e.g. "duplicate func clientIP in internal/httpapi (audit.go, limit.go)"
+}
+
 message Object {
   string kind = 1; // blob or tree
   bytes data = 2;
@@ -351,6 +359,7 @@ message LandResponse {
   repeated Conflict conflicts = 5; // set when landed is false
   string effort_head = 6;
   bool effort_moved = 7; // require_up_to_date was set and the effort had moved
+  repeated Warning warnings = 8; // problems found in the landed tree; they never block a land
 }
 
 message AbandonRequest {
@@ -387,6 +396,7 @@ message ShipmentPlan {
   repeated ShipStep steps = 6;
   repeated Conflict conflicts = 7;
   string conflicted_change = 8; // change id where the replay stopped
+  repeated Warning warnings = 9; // problems found in the shipped tree
 }
 
 message Shipment {
