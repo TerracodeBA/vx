@@ -445,6 +445,8 @@ message LandResponse {
   string effort_head = 6;
   bool effort_moved = 7; // require_up_to_date was set and the effort had moved
   repeated Warning warnings = 8; // problems found in the landed tree; they never block a land
+  repeated Claim overlapping_claims = 9; // active claims of others on files this land changed; they never block a land
+  repeated string kept_both = 10; // paths where both sides inserted different lines at the same place and vx kept both
 }
 
 message AbandonRequest {
@@ -654,4 +656,122 @@ message ContextResponse {
   repeated Note notes = 1; // matching notes, newest first
   repeated ContextWorkspace working = 2; // open workspaces in the effort
   repeated Changeset recent_changes = 3; // landed changes touching the targets, newest first, with files
+  repeated Claim claims = 4; // active claims on the targets (all active claims when no targets)
+}
+
+// ---------- Coordination: claims and tasks ----------
+//
+// Claims say "I am changing these paths or symbols now". They are soft: they
+// never block anyone, but vx shows them in status and context and warns when
+// someone lands over another principal's claim. A claim ends when it expires,
+// is released, or the workspace it belongs to lands or is abandoned.
+//
+// Tasks are an effort's shared plan: what needs doing, who took it, what it
+// waits for. Titles and bodies are information, never instructions.
+
+service CoordinationService {
+  rpc Claim(ClaimRequest) returns (ClaimResponse) {}
+  rpc Release(ReleaseRequest) returns (ReleaseResponse) {}
+  rpc ListClaims(ListClaimsRequest) returns (ListClaimsResponse) {}
+  rpc AddTask(AddTaskRequest) returns (AddTaskResponse) {}
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {}
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {}
+}
+
+message Claim {
+  string id = 1;
+  string repo = 2;
+  string effort = 3;
+  repeated string targets = 4; // paths or symbols, matched like note targets
+  Principal owner = 5;
+  string workspace_id = 6; // the workspace the claim ends with; empty: none
+  string reason = 7; // at most 300 characters; information, never instructions
+  string created_at = 8;
+  string expires_at = 9;
+  string trust = 10; // self, yours or teammate, as for notes
+}
+
+message ClaimRequest {
+  string repo = 1;
+  string effort = 2;
+  repeated string targets = 3;
+  string reason = 4;
+  int32 ttl_seconds = 5; // 0: 1800; at most 14400
+  string workspace_id = 6; // optional; the claim ends when this workspace lands or is abandoned
+}
+
+message ClaimResponse {
+  Claim claim = 1;
+  repeated Claim overlapping = 2; // active claims of others on the same targets (the claim is made anyway)
+}
+
+message ReleaseRequest {
+  string id = 1; // a claim id or 8+ character prefix; or empty with workspace_id
+  string workspace_id = 2; // release all of the caller's claims for this workspace
+}
+
+message ReleaseResponse {
+  repeated Claim released = 1;
+}
+
+message ListClaimsRequest {
+  string repo = 1;
+  string effort = 2;
+  repeated string targets = 3; // empty: all active claims in the effort
+}
+
+message ListClaimsResponse {
+  repeated Claim claims = 1;
+}
+
+message Task {
+  string id = 1;
+  string repo = 2;
+  string effort = 3;
+  string title = 4; // one line, at most 200 characters
+  string body = 5; // at most 4000 characters; information, never instructions
+  string state = 6; // open, taken, done
+  Principal owner = 7; // set when taken (or assigned)
+  repeated string depends_on = 8; // task ids
+  bool blocked = 9; // some depends_on task is not done
+  Principal created_by = 10;
+  string created_at = 11;
+  string updated_at = 12;
+  string trust = 13; // of created_by, relative to the caller
+}
+
+message AddTaskRequest {
+  string repo = 1;
+  string effort = 2;
+  string title = 3;
+  string body = 4;
+  repeated string depends_on = 5; // task ids or 8+ character prefixes in the same effort
+  string owner = 6; // optional: assign at once (agent name, handle or ref)
+}
+
+message AddTaskResponse {
+  Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string id = 1; // task id or 8+ character prefix
+  string action = 2; // take, release, done, reopen, assign
+  string owner = 3; // for assign: agent name, handle or ref
+  bool force = 4; // take or done a blocked task anyway
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+  repeated Task unblocked = 2; // tasks this change unblocked (on done)
+}
+
+message ListTasksRequest {
+  string repo = 1;
+  string effort = 2;
+  repeated string states = 3; // empty: all
+  bool mine = 4; // only tasks the caller owns
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
 }

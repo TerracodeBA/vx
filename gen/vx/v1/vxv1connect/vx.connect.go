@@ -35,6 +35,8 @@ const (
 	ShipServiceName = "vx.v1.ShipService"
 	// BoardServiceName is the fully-qualified name of the BoardService service.
 	BoardServiceName = "vx.v1.BoardService"
+	// CoordinationServiceName is the fully-qualified name of the CoordinationService service.
+	CoordinationServiceName = "vx.v1.CoordinationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -125,6 +127,24 @@ const (
 	BoardServiceInboxProcedure = "/vx.v1.BoardService/Inbox"
 	// BoardServiceContextProcedure is the fully-qualified name of the BoardService's Context RPC.
 	BoardServiceContextProcedure = "/vx.v1.BoardService/Context"
+	// CoordinationServiceClaimProcedure is the fully-qualified name of the CoordinationService's Claim
+	// RPC.
+	CoordinationServiceClaimProcedure = "/vx.v1.CoordinationService/Claim"
+	// CoordinationServiceReleaseProcedure is the fully-qualified name of the CoordinationService's
+	// Release RPC.
+	CoordinationServiceReleaseProcedure = "/vx.v1.CoordinationService/Release"
+	// CoordinationServiceListClaimsProcedure is the fully-qualified name of the CoordinationService's
+	// ListClaims RPC.
+	CoordinationServiceListClaimsProcedure = "/vx.v1.CoordinationService/ListClaims"
+	// CoordinationServiceAddTaskProcedure is the fully-qualified name of the CoordinationService's
+	// AddTask RPC.
+	CoordinationServiceAddTaskProcedure = "/vx.v1.CoordinationService/AddTask"
+	// CoordinationServiceUpdateTaskProcedure is the fully-qualified name of the CoordinationService's
+	// UpdateTask RPC.
+	CoordinationServiceUpdateTaskProcedure = "/vx.v1.CoordinationService/UpdateTask"
+	// CoordinationServiceListTasksProcedure is the fully-qualified name of the CoordinationService's
+	// ListTasks RPC.
+	CoordinationServiceListTasksProcedure = "/vx.v1.CoordinationService/ListTasks"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -1345,4 +1365,204 @@ func (UnimplementedBoardServiceHandler) Inbox(context.Context, *connect.Request[
 
 func (UnimplementedBoardServiceHandler) Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Context is not implemented"))
+}
+
+// CoordinationServiceClient is a client for the vx.v1.CoordinationService service.
+type CoordinationServiceClient interface {
+	Claim(context.Context, *connect.Request[v1.ClaimRequest]) (*connect.Response[v1.ClaimResponse], error)
+	Release(context.Context, *connect.Request[v1.ReleaseRequest]) (*connect.Response[v1.ReleaseResponse], error)
+	ListClaims(context.Context, *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error)
+	AddTask(context.Context, *connect.Request[v1.AddTaskRequest]) (*connect.Response[v1.AddTaskResponse], error)
+	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
+	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
+}
+
+// NewCoordinationServiceClient constructs a client for the vx.v1.CoordinationService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewCoordinationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CoordinationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	coordinationServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CoordinationService").Methods()
+	return &coordinationServiceClient{
+		claim: connect.NewClient[v1.ClaimRequest, v1.ClaimResponse](
+			httpClient,
+			baseURL+CoordinationServiceClaimProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("Claim")),
+			connect.WithClientOptions(opts...),
+		),
+		release: connect.NewClient[v1.ReleaseRequest, v1.ReleaseResponse](
+			httpClient,
+			baseURL+CoordinationServiceReleaseProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("Release")),
+			connect.WithClientOptions(opts...),
+		),
+		listClaims: connect.NewClient[v1.ListClaimsRequest, v1.ListClaimsResponse](
+			httpClient,
+			baseURL+CoordinationServiceListClaimsProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("ListClaims")),
+			connect.WithClientOptions(opts...),
+		),
+		addTask: connect.NewClient[v1.AddTaskRequest, v1.AddTaskResponse](
+			httpClient,
+			baseURL+CoordinationServiceAddTaskProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("AddTask")),
+			connect.WithClientOptions(opts...),
+		),
+		updateTask: connect.NewClient[v1.UpdateTaskRequest, v1.UpdateTaskResponse](
+			httpClient,
+			baseURL+CoordinationServiceUpdateTaskProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("UpdateTask")),
+			connect.WithClientOptions(opts...),
+		),
+		listTasks: connect.NewClient[v1.ListTasksRequest, v1.ListTasksResponse](
+			httpClient,
+			baseURL+CoordinationServiceListTasksProcedure,
+			connect.WithSchema(coordinationServiceMethods.ByName("ListTasks")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// coordinationServiceClient implements CoordinationServiceClient.
+type coordinationServiceClient struct {
+	claim      *connect.Client[v1.ClaimRequest, v1.ClaimResponse]
+	release    *connect.Client[v1.ReleaseRequest, v1.ReleaseResponse]
+	listClaims *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
+	addTask    *connect.Client[v1.AddTaskRequest, v1.AddTaskResponse]
+	updateTask *connect.Client[v1.UpdateTaskRequest, v1.UpdateTaskResponse]
+	listTasks  *connect.Client[v1.ListTasksRequest, v1.ListTasksResponse]
+}
+
+// Claim calls vx.v1.CoordinationService.Claim.
+func (c *coordinationServiceClient) Claim(ctx context.Context, req *connect.Request[v1.ClaimRequest]) (*connect.Response[v1.ClaimResponse], error) {
+	return c.claim.CallUnary(ctx, req)
+}
+
+// Release calls vx.v1.CoordinationService.Release.
+func (c *coordinationServiceClient) Release(ctx context.Context, req *connect.Request[v1.ReleaseRequest]) (*connect.Response[v1.ReleaseResponse], error) {
+	return c.release.CallUnary(ctx, req)
+}
+
+// ListClaims calls vx.v1.CoordinationService.ListClaims.
+func (c *coordinationServiceClient) ListClaims(ctx context.Context, req *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error) {
+	return c.listClaims.CallUnary(ctx, req)
+}
+
+// AddTask calls vx.v1.CoordinationService.AddTask.
+func (c *coordinationServiceClient) AddTask(ctx context.Context, req *connect.Request[v1.AddTaskRequest]) (*connect.Response[v1.AddTaskResponse], error) {
+	return c.addTask.CallUnary(ctx, req)
+}
+
+// UpdateTask calls vx.v1.CoordinationService.UpdateTask.
+func (c *coordinationServiceClient) UpdateTask(ctx context.Context, req *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error) {
+	return c.updateTask.CallUnary(ctx, req)
+}
+
+// ListTasks calls vx.v1.CoordinationService.ListTasks.
+func (c *coordinationServiceClient) ListTasks(ctx context.Context, req *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error) {
+	return c.listTasks.CallUnary(ctx, req)
+}
+
+// CoordinationServiceHandler is an implementation of the vx.v1.CoordinationService service.
+type CoordinationServiceHandler interface {
+	Claim(context.Context, *connect.Request[v1.ClaimRequest]) (*connect.Response[v1.ClaimResponse], error)
+	Release(context.Context, *connect.Request[v1.ReleaseRequest]) (*connect.Response[v1.ReleaseResponse], error)
+	ListClaims(context.Context, *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error)
+	AddTask(context.Context, *connect.Request[v1.AddTaskRequest]) (*connect.Response[v1.AddTaskResponse], error)
+	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
+	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
+}
+
+// NewCoordinationServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewCoordinationServiceHandler(svc CoordinationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	coordinationServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CoordinationService").Methods()
+	coordinationServiceClaimHandler := connect.NewUnaryHandler(
+		CoordinationServiceClaimProcedure,
+		svc.Claim,
+		connect.WithSchema(coordinationServiceMethods.ByName("Claim")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coordinationServiceReleaseHandler := connect.NewUnaryHandler(
+		CoordinationServiceReleaseProcedure,
+		svc.Release,
+		connect.WithSchema(coordinationServiceMethods.ByName("Release")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coordinationServiceListClaimsHandler := connect.NewUnaryHandler(
+		CoordinationServiceListClaimsProcedure,
+		svc.ListClaims,
+		connect.WithSchema(coordinationServiceMethods.ByName("ListClaims")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coordinationServiceAddTaskHandler := connect.NewUnaryHandler(
+		CoordinationServiceAddTaskProcedure,
+		svc.AddTask,
+		connect.WithSchema(coordinationServiceMethods.ByName("AddTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coordinationServiceUpdateTaskHandler := connect.NewUnaryHandler(
+		CoordinationServiceUpdateTaskProcedure,
+		svc.UpdateTask,
+		connect.WithSchema(coordinationServiceMethods.ByName("UpdateTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coordinationServiceListTasksHandler := connect.NewUnaryHandler(
+		CoordinationServiceListTasksProcedure,
+		svc.ListTasks,
+		connect.WithSchema(coordinationServiceMethods.ByName("ListTasks")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.CoordinationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case CoordinationServiceClaimProcedure:
+			coordinationServiceClaimHandler.ServeHTTP(w, r)
+		case CoordinationServiceReleaseProcedure:
+			coordinationServiceReleaseHandler.ServeHTTP(w, r)
+		case CoordinationServiceListClaimsProcedure:
+			coordinationServiceListClaimsHandler.ServeHTTP(w, r)
+		case CoordinationServiceAddTaskProcedure:
+			coordinationServiceAddTaskHandler.ServeHTTP(w, r)
+		case CoordinationServiceUpdateTaskProcedure:
+			coordinationServiceUpdateTaskHandler.ServeHTTP(w, r)
+		case CoordinationServiceListTasksProcedure:
+			coordinationServiceListTasksHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedCoordinationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedCoordinationServiceHandler struct{}
+
+func (UnimplementedCoordinationServiceHandler) Claim(context.Context, *connect.Request[v1.ClaimRequest]) (*connect.Response[v1.ClaimResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.Claim is not implemented"))
+}
+
+func (UnimplementedCoordinationServiceHandler) Release(context.Context, *connect.Request[v1.ReleaseRequest]) (*connect.Response[v1.ReleaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.Release is not implemented"))
+}
+
+func (UnimplementedCoordinationServiceHandler) ListClaims(context.Context, *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.ListClaims is not implemented"))
+}
+
+func (UnimplementedCoordinationServiceHandler) AddTask(context.Context, *connect.Request[v1.AddTaskRequest]) (*connect.Response[v1.AddTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.AddTask is not implemented"))
+}
+
+func (UnimplementedCoordinationServiceHandler) UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.UpdateTask is not implemented"))
+}
+
+func (UnimplementedCoordinationServiceHandler) ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.ListTasks is not implemented"))
 }
