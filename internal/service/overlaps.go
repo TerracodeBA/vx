@@ -115,17 +115,21 @@ func (s *Service) forecastLoop(repoID uuid.UUID) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		run := s.newForecastRun()
+		start, failed := time.Now(), false
 		for branch := range q.all {
 			if err := run.branch(ctx, q.repo, branch); err != nil {
+				failed = true
 				slog.Warn("overlap forecast", "repo", q.repo.Name, "branch", branch, "err", err)
 			}
 		}
 		for id := range q.efforts {
 			if err := run.effort(ctx, q.repo, id); err != nil {
+				failed = true
 				slog.Warn("overlap forecast", "repo", q.repo.Name, "effort", id, "err", err)
 			}
 		}
 		cancel()
+		recordForecast(time.Since(start), failed)
 	}
 }
 

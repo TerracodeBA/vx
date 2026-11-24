@@ -1,0 +1,16 @@
+vx is starting. It applies database migrations on start, which can take a
+while on an upgrade (the startup probe allows it).
+
+{{- if .Values.ingress.enabled }}
+Open: {{ if .Values.ingress.tls }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+Reach it with:
+  kubectl port-forward svc/{{ include "vx.fullname" . }} 7070:{{ .Values.service.port }}
+{{- end }}
+
+Create the first person (a superadmin) and print their token:
+  kubectl exec deploy/{{ include "vx.fullname" . }} -- vx-server user-add HANDLE --admin --name "Full Name" --email you@example.com
+{{- if not .Values.publicURL }}
+
+Set publicURL to the address people use, for vx login and the GitHub App.
+{{- end }}

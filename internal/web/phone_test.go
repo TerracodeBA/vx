@@ -129,7 +129,7 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 		ef, ef + "&view=board", ef + "&view=tasks", ef + "&view=changes",
 		"/ui/change?repo=acme%2Fshop&review=" + e.review,
 		"/ui/reviews", "/ui/ship?repo=acme%2Fshop&slug=" + eff.Slug, "/ui/settings",
-		"/ui/orgs", "/ui/orgs/acme", "/ui/admin/people", "/ui/admin/github",
+		"/ui/orgs", "/ui/orgs/acme", "/ui/admin/people", "/ui/admin/github", "/ui/admin/audit",
 	}
 	// A landed change's page, found the way a person finds it.
 	_, page := e.get(ef)

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/TerracodeBA/vx/internal/hash"
+	"github.com/TerracodeBA/vx/internal/metrics"
 	"github.com/TerracodeBA/vx/internal/object"
 )
 
@@ -321,6 +322,9 @@ func (q Q) LogOp(ctx context.Context, repoID, actorID *uuid.UUID, op, target str
 	}
 	_, err = q.db.Exec(ctx, `insert into op_log (repo_id, actor_id, op, target, before, after) values ($1, $2, $3, $4, $5, $6)`,
 		repoID, actorID, op, target, b, a)
+	if err == nil {
+		metrics.RecordOp(op)
+	}
 	return err
 }
 

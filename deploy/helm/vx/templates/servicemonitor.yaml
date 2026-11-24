@@ -1,0 +1,27 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- if not .Values.secrets.existingSecret }}
+{{- fail "metrics.serviceMonitor needs secrets.existingSecret with the metrics token (secrets.metricsTokenKey)" }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "vx.fullname" . }}
+  labels:
+    {{- include "vx.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "vx.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.secrets.existingSecret }}
+          key: {{ .Values.secrets.metricsTokenKey }}
+{{- end }}

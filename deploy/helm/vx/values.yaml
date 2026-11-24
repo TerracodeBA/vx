@@ -1,0 +1,162 @@
+# vx server. Postgres is external: give its URL in a Secret
+# (database.existingSecret). See docs/deploy.md, section "Kubernetes (Helm)".
+
+image:
+  repository: ghcr.io/terracodeba/vx
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# vx keeps rate limits, overlap forecasts and git mirrors per process: run
+# one replica unless your blob store and version support more (docs/deploy.md).
+replicaCount: 1
+
+# Public address of the server (VX_PUBLIC_URL), like https://vx.example.com.
+# Needed for the GitHub App, single sign-on and vx login.
+publicURL: ""
+
+# Who may create an account by signing in: invite, open or closed (VX_SIGNUP).
+signup: invite
+
+database:
+  # A Secret with the Postgres URL, like
+  # postgres://vx:PASSWORD@postgres.example.com:5432/vx?sslmode=require
+  existingSecret: ""
+  urlKey: database-url
+  # Only for trying the chart out: the URL in plain values. Prefer existingSecret.
+  url: ""
+
+# Secrets of the server, read from one existing Secret. Leave a key out of
+# the Secret to leave the setting off.
+secrets:
+  existingSecret: ""
+  # VX_SECRET_KEY: seals the GitHub App's credentials and host tokens.
+  # 64 hex characters (openssl rand -hex 32), set once, never changed.
+  secretKeyKey: secret-key
+  # VX_GITHUB_TOKEN: GitHub API and HTTPS git access without the GitHub App.
+  githubTokenKey: github-token
+  # VX_METRICS_TOKEN: turns /metrics on, for callers with this bearer token.
+  metricsTokenKey: metrics-token
+
+# Object storage (VX_BLOB_URL). Empty: objects live on the data volume.
+# Example: s3://my-bucket/vx?region=auto&endpoint=https://ACCOUNT.r2.cloudflarestorage.com
+blobStore:
+  url: ""
+  # A Secret whose keys become environment variables, for the store's
+  # credentials (for S3: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY).
+  existingSecret: ""
+
+# Rate limits (token buckets, per process). Each is "N/s", "N/m" or "N/h",
+# optionally ",burst=B", or "off". Empty: the server's default.
+rateLimits:
+  enabled: true
+  apiToken: ""   # VX_RATE_API_TOKEN, default 30/s,burst=300
+  apiIP: ""      # VX_RATE_API_IP, default 100/s,burst=1000
+  signin: ""     # VX_RATE_SIGNIN, default 30/m
+  signup: ""     # VX_RATE_SIGNUP, default 10/h,burst=5
+  cliLogin: ""   # VX_RATE_CLI_LOGIN, default 10/m
+  webhook: ""    # VX_RATE_WEBHOOK, default 20/s,burst=200
+
+# Default quotas of every organization; superadmins override them per
+# organization. Counts, or sizes like 500MB and 20GB; empty or 0: no limit.
+quotas:
+  repos: ""        # VX_QUOTA_REPOS
+  stored: ""       # VX_QUOTA_STORED
+  import: ""       # VX_QUOTA_IMPORT
+  push: ""         # VX_QUOTA_PUSH
+  openEfforts: ""  # VX_QUOTA_OPEN_EFFORTS
+  # Warn on the admin pages below this share of free disk (VX_DISK_WARN_PERCENT).
+  diskWarnPercent: ""
+
+# How long the operation log is kept (VX_AUDIT_RETENTION), like 365d; empty: forever.
+auditRetention: ""
+
+# More environment variables, like VX_GITLAB_URL.
+extraEnv: []
+#  - name: VX_GITLAB_URL
+#    value: https://gitlab.example.com
+extraEnvFrom: []
+
+# The data directory: git mirrors, and objects without object storage.
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  existingClaim: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # The CLI and agents speak HTTP/2 (connect protocol) through the same
+  # host; most ingress controllers pass it through. Large lands upload up
+  # to 64 MiB per request: raise body size limits, for ingress-nginx with
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "70m"
+  hosts:
+    - host: vx.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: vx-tls
+  #    hosts: [vx.example.com]
+
+metrics:
+  # A ServiceMonitor for the Prometheus Operator. Needs secrets.metricsTokenKey
+  # in secrets.existingSecret.
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+probes:
+  # Migrations run when the server starts; give a big upgrade time.
+  startup:
+    periodSeconds: 5
+    failureThreshold: 120
+  liveness:
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 4
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3

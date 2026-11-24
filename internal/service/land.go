@@ -81,7 +81,8 @@ var errLostRace = errors.New("effort head moved")
 // head with a three-way merge, and only real conflicts are sent back. The
 // head moves with a compare-and-swap, so concurrent lands never lose work:
 // the loser merges again on the new head and retries.
-func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResult, error) {
+func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (res LandResult, err error) {
+	defer func() { recordLand(res, err) }()
 	v, err := s.ownWorkspace(ctx, actor, in.WorkspaceID)
 	if err != nil {
 		return LandResult{}, err

@@ -129,6 +129,7 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 | **An organization** (`/ui/orgs/ORG`) | Its members, and superadmins (read-only, without the repositories they cannot read) | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners and admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
 | **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Support access: the superadmins who have it, their role, until when, the reason and who granted it, with End now, and a form to give a superadmin read or write for 4 hours to 30 days. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, `operator (support access) until DATE`, ...). People who can read the repository get 403; everyone else gets 404. |
 | **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Superadmins | Everyone on the server: their agents, whether they are a superadmin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a superadmin. After an upgrade from a version with site admins, a review banner says that site admins no longer have access to repositories, until a superadmin clicks Mark as reviewed (see [deploy.md](deploy.md#upgrading-to-v05-superadmins)). With GitHub sign-in, "Invite by GitHub login" lets a GitHub user create their account by signing in, and the open invites are listed with a Withdraw button. To anyone else the page does not exist (404). |
+| **Admin, Audit** (`/ui/admin/audit`, linked from People and from organization pages) | Superadmins (the whole server, metadata of repository entries) and owners and admins of an organization (their organization) | The newest 200 entries of the operation log for the filters (organization, repository, actor, time), and downloads of every match as JSONL or CSV. Superadmins also see the data disk's free space here, and a warning on every page when it runs low. See [Audit log](#audit-log). |
 | **Admin, GitHub** (`/ui/admin/github`, linked from People) | Superadmins | The server's GitHub App: name, App and client id, and the link to install it on GitHub organizations and accounts. "Create the GitHub App" posts vx's App manifest to GitHub (under your account or an organization you own), and "Finish setting up GitHub" on the page GitHub sends you back to stores its credentials encrypted with `VX_SECRET_KEY`. Agents see the page but cannot create the App. To anyone else the page does not exist (404). |
 
 Adding a person shows their first token on the next page, once: vx stores only a hash, never puts the token in a URL, and cannot show it again. Give it to them privately, not in a shared channel. They run
@@ -162,6 +163,50 @@ v0.1 had no access control: everyone saw everything. The upgrade (migrations 009
 - every person gets a personal organization; an organization from the step above that is named like a person becomes theirs.
 
 Prune afterwards, as a superadmin: see [deploy.md](deploy.md#upgrading-to-v02).
+
+## Quotas
+
+On a shared server one organization must not be able to exhaust it. Each organization has quotas; the server's configuration sets the defaults for all (`VX_QUOTA_*`, see [deploy.md](deploy.md#rate-limits-and-quotas)) and superadmins override them for one organization.
+
+| Quota | Counts | Refused |
+|---|---|---|
+| Repositories | the organization's repositories | `vx repo create` |
+| Stored data | bytes the organization's objects take in the object store, each object once | uploads (`vx land`, `vx sync`) and imports that would go over it |
+| One import | the size of a repository on its git host, asked before anything is downloaded (GitHub, GitLab, Gitea, Forgejo and Bitbucket report it; plain git remotes cannot be asked) | `vx repo create` with a remote |
+| One upload | the bytes of one upload of objects (the CLI sends a land's new files in uploads of up to 64 MiB) | `vx land`, `vx sync` |
+| Open efforts | efforts that are open or shipping | `vx effort new` |
+
+A refusal says what is used, what the limit is and what to do, for example `organization acme has 10 of its 10 repositories (quota): remove one first, or ask a superadmin to raise the quota (vx-server quota acme, or Admin > Organizations > acme)`. The API answers `ResourceExhausted`.
+
+Members see the quotas and what is used on the organization's page (Quotas). Superadmins change them there, or on the server:
+
+```sh
+vx-server quota acme                                  # what acme uses, and its limits
+vx-server quota acme --repos 50 --stored 20GB         # override two defaults
+vx-server quota acme --push default --open-efforts 0  # back to the default; 0 means no limit
+```
+
+Changes are in the audit log as `org.quota`. Stored data shows "not measured yet" until the server counts object sizes (object storage, v0.5).
+
+## Audit log
+
+Every change in vx writes an entry to the operation log: who (person or agent), what (`effort.create`, `ship`, `org.member`, `token.revoke`, ...), when, in which organization and repository, and on what. Export it for your SIEM or for a review:
+
+```sh
+vx admin audit --org acme --since 30d > acme.jsonl                         # one JSON object per line
+vx admin audit --org acme --actor agent:alice/claude --format csv -o a.csv
+vx admin audit --since 2026-11-01 --until 2026-11-30                     # superadmins: the whole server
+```
+
+Filters: `--org`, `--repo`, `--actor`, `--since`, `--until` (dates, RFC 3339 times or ages like `7d`). The web UI has the same as **Admin > Audit** (`/ui/admin/audit`), with the newest 200 entries and JSONL and CSV downloads; the organization page links to it for its owners and admins. Columns: `id, at, op, org, repo, actor, target, before, after`.
+
+Who sees what:
+
+- **Owners and admins of an organization** export that organization: its organization-level entries (members, teams, quotas) and the entries of its repositories, with `before` and `after` (what changed) for the repositories they administer.
+- **Superadmins** export the whole server, but only the metadata of repository entries: `before` and `after`, which can hold intents, titles and paths, stay in the database. They see the full server-level entries (people, invites, tokens).
+- Members, and anyone else, cannot export.
+
+Entries are kept forever unless the server sets a retention (`VX_AUDIT_RETENTION`, for example `365d`; at least 7 days); older entries are deleted once an hour.
 
 ## Limits today
 
@@ -198,8 +243,9 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 
 - Object storage backends (S3, R2, GCS, MinIO), so `vx-server` is stateless and runs as several replicas.
 - A cache tier for objects close to agents and CI.
-- Helm chart and Terraform examples.
-- Prometheus metrics, structured audit log export (SIEM), retention policies.
+- Helm chart: done in v0.5 (`deploy/helm/vx`, see [deploy.md](deploy.md#kubernetes-helm)). Terraform examples: later.
+- Prometheus metrics, audit log export (JSONL, CSV) and retention: done in v0.5 (see [Audit log](#audit-log) and [deploy.md](deploy.md#metrics)).
+- Rate limits and quotas per organization: done in v0.5 (see [Quotas](#quotas)).
 - Backup and restore tooling, and documented disaster recovery.
 
 ### 5. Collaboration between agents
@@ -260,6 +306,10 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Run the server: people, invites and sign-up, the GitHub App, server settings, operation log metadata, the upgrade review | `vx-server`, Admin pages, `CreatePerson`, `ListPeople`, `vx org list --all` | superadmin (no repository role) |
 
 A superadmin has none of the repository roles in this table from being one: every repository operation reports "not found" to them until they have a role or support access (tested in `TestAuthzMatrix` and `TestAuthzMatrixGitHub`).
+| See an organization's quotas and usage (no repository role: members of the organization and superadmins) | the organization page, `vx-server quota ORG` | member or superadmin |
+| Change an organization's quotas (never an agent) | the organization page, `vx-server quota ORG --repos N ...` | superadmin |
+| Export an organization's audit log (with what changed for repositories you administer) | `vx admin audit --org ORG`, Admin > Audit | organization owner or admin |
+| Export the whole server's audit log (metadata only for repository entries) | `vx admin audit`, Admin > Audit | superadmin |
 
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).
 

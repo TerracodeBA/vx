@@ -142,6 +142,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		"pct":        func(a, b int) int { return pct(a, b) },
 		"color":      func(m map[string]int, k string) int { return m[k] },
 		"blocks":     diffBlocks,
+		"bytes":      service.FormatBytes,
 		"maxLines": func(as []*agentStat) int {
 			m := 0
 			for _, a := range as {
@@ -193,6 +194,9 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	mux.HandleFunc("POST /ui/settings/scope", u.auth(u.scopePost))
 	u.mountAdmin(mux)
+	if err := u.mountOps(mux, funcs); err != nil {
+		return err
+	}
 	u.mountGitHub(mux)
 	if err := u.mountPhone(mux, funcs); err != nil {
 		return err
@@ -242,6 +246,9 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 	if _, signedIn := data["Actor"]; signedIn {
 		if a, ok := data["Actor"].(service.Actor); ok {
 			data["NavAdmin"] = u.svc.IsSuperadmin(r.Context(), a)
+			if d, ok := u.svc.DataDisk(); ok && d.Low && data["NavAdmin"] == true {
+				data["DiskLow"] = d
+			}
 			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
 		}
 		if _, ok := data["Section"]; !ok {
