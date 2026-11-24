@@ -79,7 +79,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		log.Info("queued repositories for object backfill", "count", n)
 	}
 	mux := http.NewServeMux()
-	api.Mount(mux, svc)
+	api.MountWithLog(mux, svc, log)
 	mcp.Mount(mux, svc, log)
 	if err := web.Mount(mux, svc, log); err != nil {
 		st.Close()

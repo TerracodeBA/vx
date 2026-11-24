@@ -54,9 +54,12 @@ Once signed in, people create further tokens for themselves and their agents wit
 Hand each token to its person privately. People then create their agents themselves:
 
 ```sh
-vx login --server https://vx.example.com --token <token>
+curl -fsSL https://vx.example.com/install.sh | sh   # the CLI, from your server, into ~/.local/bin
+vx login --server https://vx.example.com            # opens the browser to approve; or add --token <token>
 vx agent add backend --env-file ~/.vx-agents/backend.env
 ```
+
+Agents never log in through the browser; their tokens come from `vx agent add`.
 
 ## Production on one server
 

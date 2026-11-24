@@ -42,9 +42,9 @@ func (a *App) boardEffort(repoFlag, effortFlag string) (string, string, error) {
 }
 
 // boardErr explains a server without the board instead of "404 Not Found".
-func boardErr(err error) error {
+func (a *App) boardErr(err error) error {
 	if client.Code(err) == connect.CodeUnimplemented {
-		return fmt.Errorf("this vx server has no board yet (%s): it runs an older vx-server; upgrade it, then try again", client.Message(err))
+		return a.featureErr("board", "the board", err)
 	}
 	return err
 }
@@ -99,7 +99,7 @@ Targets are paths ("internal/http/limit.go", "internal/http/") or symbols
 				Repo: repo, Effort: slug, Kind: kind, Targets: targets, Body: args[1],
 			}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			a.printf("Posted %s %s on the board of %s.\n", kind, noteID(resp.Msg.Note.Id), slug)
 			a.emit(resp.Msg)
@@ -144,7 +144,7 @@ answer is printed) or escalates without an answer (exit 3).`,
 				AnswerWithinSeconds: int32(within / time.Second),
 			}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			q := resp.Msg.Question
 			who := "anyone in " + slug
@@ -230,7 +230,7 @@ func (a *App) answerCmd() *cobra.Command {
 			}
 			resp, err := c.Board.Answer(ctxOf(cmd), connect.NewRequest(&vxv1.AnswerRequest{NoteId: args[0], Body: args[1]}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			q := resp.Msg.Question
 			a.printf("Answered question %s from %s.\n", noteID(q.Id), q.Author.GetRef())
@@ -263,7 +263,7 @@ func (a *App) boardCmd() *cobra.Command {
 				Repo: repo, Effort: slug, Targets: targets, Kinds: kinds, Limit: int32(limit),
 			}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			notes := resp.Msg.Notes
 			if len(notes) == 0 {
@@ -343,7 +343,7 @@ func (a *App) inboxCmd() *cobra.Command {
 			ctx := ctxOf(cmd)
 			resp, err := c.Board.Inbox(ctx, connect.NewRequest(&vxv1.InboxRequest{}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			in := resp.Msg
 			if len(in.Questions)+len(in.Answers)+len(in.Escalated) == 0 {
@@ -397,7 +397,7 @@ effort and the changes that landed on it recently.`,
 			ctx := ctxOf(cmd)
 			resp, err := c.Board.Context(ctx, connect.NewRequest(&vxv1.ContextRequest{Repo: repo, Effort: slug, Targets: args}))
 			if err != nil {
-				return boardErr(err)
+				return a.boardErr(err)
 			}
 			m := resp.Msg
 			a.printf("Context for %s in %s\n", strings.Join(args, ", "), slug)

@@ -16,6 +16,16 @@ Work through the steps in order. Run each check yourself and show the user the r
 - Do not open ports to the internet. Everything here binds to 127.0.0.1. For a shared server, use the `deploy` skill instead.
 - If a command fails twice, stop and show the error instead of trying variations.
 
+## Joining a server that already runs
+
+If the user's team already has a vx server, skip the server steps: install the CLI from it and log in in the browser.
+
+```sh
+curl -fsSL https://SERVER/install.sh | sh      # vx into ~/.local/bin; it says if that is not on PATH
+```
+
+Then ask the user to run `! vx login --server https://SERVER` themselves: it opens the browser, they sign in (with GitHub, for example), compare the code with the terminal and click Approve. Check with `vx whoami`. If `~/.local/bin` is not on PATH, see step 5.
+
 ## 1. Check prerequisites
 
 ```sh
@@ -33,19 +43,7 @@ Pick a directory the user agrees to (default `~/vx`):
 git clone https://github.com/TerracodeBA/vx ~/vx
 ```
 
-Install the CLI. Prefer a release binary; fall back to Go:
-
-```sh
-# Release binary (Linux/macOS, amd64 or arm64)
-OS=$(uname -s | tr A-Z a-z); ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
-gh release download --repo TerracodeBA/vx --pattern "vx_*_${OS}_${ARCH}.tar.gz" --dir /tmp/vx-release \
-  && tar -xzf /tmp/vx-release/vx_*_${OS}_${ARCH}.tar.gz -C /tmp/vx-release \
-  && install -m 755 /tmp/vx-release/vx ~/.local/bin/vx
-# or, with Go 1.26+:
-go install github.com/TerracodeBA/vx/cmd/vx@latest
-```
-
-Check: `vx version`. If `~/.local/bin` or `~/go/bin` is not on PATH, tell the user which line to add to their shell profile; do not edit it yourself without asking.
+The CLI comes later, from the running server (step 5).
 
 ## 3. Decide how vx reaches GitHub
 
@@ -76,11 +74,29 @@ docker compose exec vx vx-server user-add HANDLE --admin --name "Display Name" -
 
 `--admin` makes the first person a site admin (admin on every repository). Every person also gets a personal organization named like them, where repositories they create go by default. Add `--org ORG` to also create a shared organization they own.
 
-The command prints a token once. Do not repeat it in chat. Ask the user to run the printed `vx login --server http://127.0.0.1:7070 --token ...` line themselves (they can type `! vx login ...` in Claude Code), or have it written straight into the config without echoing it. Then:
+The command prints a token once. Do not repeat it in chat.
+
+Install the CLI from the server. The installer downloads the release for this OS and CPU, verifies its checksum and puts `vx` in `~/.local/bin` (`VX_INSTALL_DIR` picks another directory):
+
+```sh
+curl -fsSL http://127.0.0.1:7070/install.sh | sh
+vx version
+```
+
+If the installer says `~/.local/bin` is not on PATH, tell the user the exact line it printed (for bash: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`, then a new terminal) and ask before editing their shell profile yourself. Until then, call it as `~/.local/bin/vx`. Without curl or a release for this platform: `go install github.com/TerracodeBA/vx/cmd/vx@latest` (Go 1.26+).
+
+Then the user logs in. vx login waits for the user, so ask them to run it themselves (they can type `!` in Claude Code), one of:
+
+- `! vx login --server http://127.0.0.1:7070 --token TOKEN` with the token user-add printed (simplest on a fresh local server), or
+- `! vx login --server http://127.0.0.1:7070`, which opens the browser: they sign in there (with that token, or with GitHub once the server has it), check the code matches the terminal, and click Approve.
+
+Then:
 
 ```sh
 vx whoami
 ```
+
+Agents never log in through the browser: they get tokens from `vx agent add NAME --env-file FILE` (see the `team` skill).
 
 ### With GitHub sign-in
 
@@ -113,7 +129,7 @@ vx clone OWNER/NAME SLUG ~/work/SLUG
 
 ## 7. Show the user what they have
 
-- Web UI: http://127.0.0.1:7070, sign in with the same token.
+- Web UI: `vx ui` opens http://127.0.0.1:7070 already signed in.
 - Next steps: to work in the effort themselves or with one agent, use the `work` skill; to run several agents at once, use the `team` skill.
 
 ## Without Docker
@@ -131,7 +147,9 @@ Run `vx-server serve` in the background (a terminal, tmux, or a systemd user ser
 
 ## Troubleshooting
 
-- `vx: not logged in`: run `vx login`, or set `VX_SERVER` and `VX_TOKEN`.
+- `vx: not logged in`: run `vx login --server URL`, or set `VX_SERVER` and `VX_TOKEN`.
+- `vx: command not found` after installing: `~/.local/bin` is not on PATH; add the line the installer printed, or run `~/.local/bin/vx`.
+- `this vx ... is too old for this server` or a `vx: notice:` about a newer server: run the installer again, `curl -fsSL SERVER/install.sh | sh`.
 - `connect to database`: Postgres is not up; `docker compose ps` and `docker compose logs postgres`.
 - Repo create fails with an SSH error: `ssh -T git@github.com` must succeed for the user running the server, and github.com must be in `known_hosts`.
 - `repo X: not found` for a repository that exists: the user has no role on it. An owner or admin of its organization grants one: `vx repo grant X USER --role write`.

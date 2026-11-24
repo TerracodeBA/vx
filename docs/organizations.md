@@ -83,11 +83,12 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 Adding a person shows their first token on the next page, once: vx stores only a hash, never puts the token in a URL, and cannot show it again. Give it to them privately, not in a shared channel. They run
 
 ```sh
+curl -fsSL https://vx.example.com/install.sh | sh   # installs vx into ~/.local/bin
 vx login --server https://vx.example.com --token TOKEN
 vx ui
 ```
 
-and can then create more tokens and their own agents from Settings, and revoke the first token.
+(or `vx login --server https://vx.example.com` without a token: it opens the browser, where they sign in with that token once and approve), and can then create more tokens and their own agents from Settings, and revoke the first token.
 
 ## Upgrading from v0.1
 
@@ -114,7 +115,7 @@ The order below follows what blocks adoption first. Each item is a GitHub issue;
 ### 1. Single sign-on
 
 - OIDC login for the web UI (Okta, Microsoft Entra ID, Google Workspace, GitHub).
-- CLI login through the browser (`vx login` opens a device flow) instead of pasted tokens.
+- CLI login through the browser: done. `vx login --server URL` shows a code and opens an approval page; see [getting-started.md](getting-started.md#3-install-the-cli-and-log-in).
 - Short-lived tokens for agents, issued from the person's session, with expiry and revocation.
 - SCIM provisioning so people and teams follow the identity provider.
 

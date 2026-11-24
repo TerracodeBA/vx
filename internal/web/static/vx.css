@@ -424,6 +424,8 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .panel-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .inline-form { display: inline; margin: 0; }
 .token-secret { white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 14px; }
+.user-code { margin: 4px 0; text-align: center; font: 700 34px var(--mono); letter-spacing: .12em; padding: 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface-2); user-select: all; }
+.user-code-input { font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; }
 
 /* ---------- board ---------- */
 .kpi-note.kpi-warn { color: var(--warn); }

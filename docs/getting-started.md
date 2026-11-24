@@ -28,13 +28,34 @@ The command prints a token once. The name and email are used as the git author o
 
 ## 3. Install the CLI and log in
 
-From the [latest release](https://github.com/TerracodeBA/vx/releases), or with Go 1.26+:
+Every vx server serves an installer for the CLI:
 
 ```sh
-go install github.com/TerracodeBA/vx/cmd/vx@latest
-vx login --server http://127.0.0.1:7070 --token <your token>
+curl -fsSL http://127.0.0.1:7070/install.sh | sh
+```
+
+It downloads `vx` for your OS and CPU from the [latest release](https://github.com/TerracodeBA/vx/releases), checks it against the release's `checksums.txt`, installs it into `~/.local/bin` and tells you whether that directory is on your `PATH`. If it is not, add it, for example for bash:
+
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc   # then open a new terminal
+```
+
+`VX_VERSION=v0.3.0` picks a release, `VX_INSTALL_DIR=/somewhere/bin` another directory. With Go 1.26+ you can also `go install github.com/TerracodeBA/vx/cmd/vx@latest`.
+
+Then log in:
+
+```sh
+vx login --server http://127.0.0.1:7070
 vx whoami                                     # user:alice
 ```
+
+`vx login` opens the server's approval page in your browser and prints a code such as `WDJB-MJHT`. Sign in on that page (with GitHub when the server has it set up, or with the token from step 2), check that it shows the same code, and click **Approve**. vx saves a new token named "vx on HOST (browser login)" in `~/.config/vx/config.json`; you can revoke it on the web UI's Settings page. The code works once, for ten minutes.
+
+- On a machine without a browser, `vx login --server URL --no-browser` only prints the link: open it on any device.
+- `vx login --server URL --token TOKEN` (or `VX_TOKEN`) logs in with a token instead, for example the one from step 2.
+- Agents never log in through a browser: they get their own token from `vx agent add` (step 6).
+
+vx checks the server's version when you log in and about once a day after that. When the server is newer it prints a one-line notice with the update command; a server that no longer works with your vx refuses it with the same command. Updating is running the installer again.
 
 ## 4. Connect a repository
 
@@ -79,7 +100,7 @@ The env file holds the agent's token (mode 600). Point a coding agent at that di
 
 ## 7. Watch and ship
 
-Open http://127.0.0.1:7070 and sign in with your token. The effort page updates live as agents land.
+Run `vx ui` to open http://127.0.0.1:7070 already signed in (or sign in there yourself). The effort page updates live as agents land.
 
 When the work is ready:
 

@@ -45,7 +45,11 @@ Use --print to print the link instead, for example on a remote machine.`,
 			link := strings.TrimRight(a.settings().Server, "/") + "/ui/login/code?c=" + url.QueryEscape(resp.Msg.Code) + "&next=" + url.QueryEscape(next)
 			opened := false
 			if !printOnly && !a.jsonOut {
-				opened = openBrowser(link) == nil
+				open := a.OpenBrowser
+				if open == nil {
+					open = openBrowser
+				}
+				opened = open(link) == nil
 			}
 			if opened {
 				a.printf("Opened the vx web UI in your browser. Click Continue to sign in (the link works once, for two minutes).\n")

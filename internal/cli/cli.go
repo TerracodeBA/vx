@@ -35,8 +35,12 @@ type App struct {
 	Err    io.Writer
 	Getenv func(string) string
 	Dir    string // working directory
+	// OpenBrowser opens a URL for vx login and vx ui; nil uses the
+	// system's browser. Tests set it to act as the browser.
+	OpenBrowser func(url string) error
 
 	jsonOut  bool
+	checked  bool // the server's version was checked in this run
 	chdir    string
 	exitCode int
 }
@@ -76,7 +80,7 @@ func (a *App) rootCmd() *cobra.Command {
 and ship the result to GitHub or any git host as clean pull requests.
 
 Start here:
-  vx login --server URL --token TOKEN
+  vx login --server URL
   vx repo create acme/shop-api --github acme/shop-api
   vx effort new "Rate limiting" --repo acme/shop-api
   vx clone acme/shop-api rate-limiting
@@ -122,6 +126,9 @@ func (a *App) dir() string {
 type Settings struct {
 	Server string `json:"server"`
 	Token  string `json:"token"`
+	// ServerInfo is the server's last ServerInfo answer, asked at most
+	// once a day.
+	ServerInfo *serverInfo `json:"server_info,omitempty"`
 }
 
 func (a *App) settingsPath() string {
@@ -155,8 +162,9 @@ func (a *App) settings() Settings {
 func (a *App) client() (*client.Client, error) {
 	s := a.settings()
 	if s.Server == "" || s.Token == "" {
-		return nil, errors.New("not logged in: run `vx login --server URL --token TOKEN` or set VX_SERVER and VX_TOKEN")
+		return nil, errors.New("not logged in: run `vx login --server URL` (it opens your browser), or set VX_SERVER and VX_TOKEN")
 	}
+	a.checkServer(s.Server)
 	return client.New(s.Server, s.Token), nil
 }
 

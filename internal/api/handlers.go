@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -26,23 +28,35 @@ type Handlers struct {
 	svc *service.Service
 }
 
-// Mount registers all services on mux behind token authentication.
+// Mount registers all services on mux: PublicService without a token,
+// every other service behind token authentication. CLIs older than
+// version.MinCLIVersion are refused everywhere.
 func Mount(mux *http.ServeMux, svc *service.Service) {
+	MountWithLog(mux, svc, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+// MountWithLog is Mount with the server's logger.
+func MountWithLog(mux *http.ServeMux, svc *service.Service, log *slog.Logger) {
 	h := &Handlers{svc: svc}
-	opts := []connect.HandlerOption{
-		connect.WithInterceptors(authInterceptor(svc)),
+	limits := []connect.HandlerOption{
 		connect.WithReadMaxBytes(MaxMessageBytes),
 		connect.WithSendMaxBytes(MaxMessageBytes),
 	}
-	mux.Handle(vxv1connect.NewAuthServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewObjectServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewRepoServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewEffortServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewWorkspaceServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewShipServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewBoardServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewCoordinationServiceHandler(h, opts...))
-	mux.Handle(vxv1connect.NewOrgServiceHandler(h, opts...))
+	versions := versionInterceptor(svc, log)
+	opts := append([]connect.HandlerOption{connect.WithInterceptors(versions, authInterceptor(svc))}, limits...)
+	handle := func(path string, hd http.Handler) { mux.Handle(path, withRequestInfo(hd)) }
+	handle(vxv1connect.NewAuthServiceHandler(h, opts...))
+	handle(vxv1connect.NewObjectServiceHandler(h, opts...))
+	handle(vxv1connect.NewRepoServiceHandler(h, opts...))
+	handle(vxv1connect.NewEffortServiceHandler(h, opts...))
+	handle(vxv1connect.NewWorkspaceServiceHandler(h, opts...))
+	handle(vxv1connect.NewShipServiceHandler(h, opts...))
+	handle(vxv1connect.NewBoardServiceHandler(h, opts...))
+	handle(vxv1connect.NewCoordinationServiceHandler(h, opts...))
+	handle(vxv1connect.NewOrgServiceHandler(h, opts...))
+	// The only service without authInterceptor.
+	public := append([]connect.HandlerOption{connect.WithInterceptors(versions)}, limits...)
+	handle(vxv1connect.NewPublicServiceHandler(h, public...))
 }
 
 func invalid(err error) error { return connect.NewError(connect.CodeInvalidArgument, err) }
