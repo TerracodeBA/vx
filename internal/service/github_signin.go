@@ -190,6 +190,11 @@ func (s *Service) GitHubSignInFinish(ctx context.Context, code, verifier string)
 		// still works.
 		slog.Default().Warn("github sign-in: syncing organizations", "person", p.Ref(), "err", err)
 	}
+	// An installation on the person's own GitHub account waits for them to
+	// exist; bring its repositories in now.
+	if err := s.SyncGitHubAccount(ctx, u.ID); err != nil {
+		slog.Default().Warn("github sign-in: syncing personal installations", "person", p.Ref(), "err", err)
+	}
 	return p, token, isNew, nil
 }
 
@@ -490,6 +495,9 @@ func (s *Service) GitHubLinkFinish(ctx context.Context, actor Actor, code, verif
 	}
 	if err := s.SyncGitHubOrgs(ctx, actor.Principal); err != nil {
 		slog.Default().Warn("github link: syncing organizations", "person", actor.Ref(), "err", err)
+	}
+	if err := s.SyncGitHubAccount(ctx, u.ID); err != nil {
+		slog.Default().Warn("github link: syncing personal installations", "person", actor.Ref(), "err", err)
 	}
 	return u, nil
 }

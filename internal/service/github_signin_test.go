@@ -356,3 +356,36 @@ func TestInviteGitHubUserPermissions(t *testing.T) {
 		t.Fatal("withdrawing twice must say there is no invite")
 	}
 }
+
+// Someone installs the App on their own GitHub account before they have a
+// vx account. Their first sign-in brings the installation's repositories
+// into their personal organization, with their GitHub role.
+func TestGitHubSignInBringsInPersonalInstallation(t *testing.T) {
+	svc, gh, ctx := signinEnv(t, service.SignupOpen)
+	gh.AddUser("Erin")
+	gh.AddRepo("Erin/notes", true)
+	gh.SetPermission("Erin/notes", "Erin", "admin")
+	id := gh.Install("Erin", "Erin/notes")
+	if err := svc.SyncInstallation(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	p, _, isNew, err := signIn(t, svc, gh, "Erin")
+	if err != nil || !isNew {
+		t.Fatalf("sign in: %v new=%v", err, isNew)
+	}
+	actor, err := svc.ResolveActor(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repos, roles, err := svc.ReadableRepos(ctx, actor, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for i, r := range repos {
+		got = append(got, r.Name+"="+string(roles[i]))
+	}
+	if strings.Join(got, ",") != "erin/notes=admin" {
+		t.Fatalf("repos after first sign-in = %v", got)
+	}
+}
