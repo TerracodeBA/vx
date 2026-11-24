@@ -6,6 +6,8 @@
 #   VX_SIGNUP=invite|open|closed (optional, default invite)
 #   VX_GITHUB_TOKEN=<optional>
 #   VX_GITHUB_URL, VX_GITHUB_API_URL=<optional, GitHub Enterprise only>
+#   VX_BLOB_URL, VX_BLOB_ACCESS_KEY_ID, VX_BLOB_SECRET_ACCESS_KEY=<optional: objects in a bucket, docs/deploy.md>
+#   VX_BACKUP_URL, VX_BACKUP_ACCESS_KEY_ID, VX_BACKUP_SECRET_ACCESS_KEY, VX_BACKUP_KEEP_DAYS=<optional: off-site backups>
 services:
   postgres:
     image: postgres:17-alpine
@@ -41,6 +43,12 @@ services:
       VX_SIGNUP: ${VX_SIGNUP:-invite}
       VX_GITHUB_URL: ${VX_GITHUB_URL:-}
       VX_GITHUB_API_URL: ${VX_GITHUB_API_URL:-}
+      VX_BLOB_URL: ${VX_BLOB_URL:-}
+      VX_BLOB_ACCESS_KEY_ID: ${VX_BLOB_ACCESS_KEY_ID:-}
+      VX_BLOB_SECRET_ACCESS_KEY: ${VX_BLOB_SECRET_ACCESS_KEY:-}
+      VX_BACKUP_URL: ${VX_BACKUP_URL:-}
+      VX_BACKUP_ACCESS_KEY_ID: ${VX_BACKUP_ACCESS_KEY_ID:-}
+      VX_BACKUP_SECRET_ACCESS_KEY: ${VX_BACKUP_SECRET_ACCESS_KEY:-}
     volumes:
       - data:/data
     # Not published: only Caddy reaches it.

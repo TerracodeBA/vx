@@ -128,8 +128,8 @@ type Service struct {
 
 	gh        githubState // the GitHub App loaded from the database
 	forecasts forecaster  // background overlap forecasts
-	logins    loginCodes  // one-time web sign-in codes (vx ui)
 	objects   objectIndex // repositories whose objects need no backfill
+	sizes     objectSizer // records how many bytes new objects take
 }
 
 // New returns a Service with defaults filled in.

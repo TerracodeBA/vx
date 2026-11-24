@@ -59,6 +59,20 @@ Requests without a repository come from clients older than v0.2 and are refused 
 
 Repositories from before `repo_objects` are indexed once, from their changesets (`internal/service/objects_backfill.go`). Migration 009 queues every existing repository, and each server start also queues any repository that has changesets but no recorded objects. The server then walks the queued repositories one at a time in the background, recording for each changeset what differs from its parent's tree, and logs its progress. An object request for a repository that is still queued backfills that repository first, so it waits for its own walk only. The walk is idempotent and resumable; `vx-server backfill-objects [--repo OWNER/NAME]` runs it by hand.
 
+## Blob store
+
+`blob.Store` (`internal/blob`) has three operations, `Put`, `Get` and `Has`, over immutable objects named by their hash; every read is checked against the hash. `VX_BLOB_URL` picks the backend (`blob.Open`):
+
+- Disk (default): `DATA/objects/9f/1c/9f1c...`, each file `vx1` + a kind byte + zstd data, written to a temporary file and renamed.
+- S3-compatible bucket (`s3://`, `gs://`): the same keys under a prefix and the same bytes, so a disk store copied into a bucket is a valid bucket store. `blob.S3Client` is a small SigV4 client (no SDK): put, get, head, list (ListObjects v1, which every service has), delete and multipart uploads, retried with exponential backoff and jitter on network errors, 5xx and 429; a download cut short resumes with a ranged request pinned to the object's ETag. `Put` first asks `HEAD`, so an object the bucket has is not uploaded again; `Has` is a `HEAD`, nothing is downloaded. Bucket stores sit behind `blob.Cached`, a size-bounded LRU of object data in memory; it caches presence, never absence, so objects another server just wrote are found.
+- Memory (`blob.NewMem`), for tests.
+
+Optional interfaces: `Lister` (every object, for `vx-server blobs copy`) and `Sizer` (stored bytes without reading: a stat or a `HEAD`). `blob.Copy` copies between any two stores with a pool of workers, reads each copy back, and skips what the destination has, which makes it resumable. The service records each object's stored size in `object_sizes` (`internal/service/objectsizes.go`): uploads and merges queue their new objects for a background sizer, and a full pass at start and every 10 minutes catches imports and older objects. `Store.RepoStoredBytes` and `Store.OrgStoredBytes` sum them for quotas, an object once per organization.
+
+Objects are whole byte slices in memory, bounded by the API's message sizes; streaming with bounded memory is for backup files (`S3Client.PutStream`, `Open`).
+
+`internal/blob/s3test` is an in-process fake of the S3 API that checks every signature (`blob.VerifySigV4`), for tests; `make test-minio` runs the store against MinIO.
+
 ## Landing
 
 ```mermaid
@@ -131,7 +145,8 @@ Every step that changes the rebase row is a compare-and-swap on its version. A c
 
 ## Git bridge
 
-- One bare git mirror per repository under the data directory (go-git, no git binary needed).
+- One bare git mirror per repository under the data directory (go-git, no git binary needed). Mirrors are a cache of the upstream: everything vx needs lives in Postgres and the blob store, so a server without a mirror creates one and fetches, and a mirror that no longer opens is set aside and fetched again (`Bridge.mirror`). Exports reuse git objects only when the mirror has them and write the rest from vx objects.
+- Several servers may import one branch at once: `SyncBranch` moves the branch only from the commit it read at the start (`Store.SetBranchIfUnchanged`) and starts over when another server moved it first, so a slower import never moves a branch back.
 - Only branches in use are fetched; the first import is shallow.
 - Git objects are mapped to vx objects in Postgres (`git_objects`), so later imports skip unchanged subtrees and exports reuse git objects.
 - Repositories of a GitHub App installation use its installation token (HTTPS as `x-access-token`, cached until shortly before it expires). Others: without a GitHub token the bridge uses SSH with the server user's agent and `known_hosts`; with a token it uses HTTPS and the REST API.
@@ -181,7 +196,7 @@ Limits:
 | Package | Responsibility |
 |---|---|
 | `internal/hash` | BLAKE3 object hashes |
-| `internal/blob` | Content-addressed store (disk, memory) with verification on read |
+| `internal/blob` | Content-addressed store (disk, S3-compatible buckets, memory cache, memory) with verification on read; copies between stores |
 | `internal/object` | Trees, manifests, changesets, tree diff and in-place edits |
 | `internal/merge` | Line diff, unified diff output, three-way text merge |
 | `internal/engine` | Tree-level three-way merge |

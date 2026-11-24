@@ -29,6 +29,54 @@ type Store interface {
 	Has(ctx context.Context, h hash.Hash) (bool, error)
 }
 
+// Lister is a Store that can list every object it holds, in no particular
+// order. Copies between stores (vx-server blobs copy) need it.
+type Lister interface {
+	List(ctx context.Context, fn func(hash.Hash) error) error
+}
+
+// Sizer is a Store that tells how many bytes an object takes in it
+// (compressed, as stored), without reading the object.
+type Sizer interface {
+	Size(ctx context.Context, h hash.Hash) (int64, error)
+}
+
+// Unwrapper is a Store that wraps another (metrics, caches); AsLister and
+// AsSizer look through it for the optional interfaces.
+type Unwrapper interface {
+	Unwrap() Store
+}
+
+// AsSizer returns s, or the first store it wraps, as a Sizer.
+func AsSizer(s Store) (Sizer, bool) {
+	for s != nil {
+		if z, ok := s.(Sizer); ok {
+			return z, true
+		}
+		u, ok := s.(Unwrapper)
+		if !ok {
+			return nil, false
+		}
+		s = u.Unwrap()
+	}
+	return nil, false
+}
+
+// AsLister returns s, or the first store it wraps, as a Lister.
+func AsLister(s Store) (Lister, bool) {
+	for s != nil {
+		if l, ok := s.(Lister); ok {
+			return l, true
+		}
+		u, ok := s.(Unwrapper)
+		if !ok {
+			return nil, false
+		}
+		s = u.Unwrap()
+	}
+	return nil, false
+}
+
 // GetKind is Get that also checks the object has the expected kind.
 func GetKind(ctx context.Context, s Store, want hash.Kind, h hash.Hash) ([]byte, error) {
 	kind, data, err := s.Get(ctx, h)

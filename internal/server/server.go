@@ -29,8 +29,14 @@ import (
 type Config struct {
 	Addr        string // listen address, e.g. ":7070"
 	DatabaseURL string
-	DataDir     string // blob store and git mirrors live here
-	Logger      *slog.Logger
+	DataDir     string // git mirrors, and the blob store unless BlobURL is set
+	// BlobURL names the blob store (blob.Open): empty for the disk store in
+	// DataDir/objects, or s3://BUCKET/PREFIX?... for object storage, with
+	// credentials in VX_BLOB_ACCESS_KEY_ID and VX_BLOB_SECRET_ACCESS_KEY.
+	BlobURL string
+	// Blobs, when set, is used instead of opening BlobURL (tests).
+	Blobs  blob.Store
+	Logger *slog.Logger
 	// Upstream imports branches from git providers; nil disables it.
 	Upstream func(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error)
 	// GitHub configures the GitHub App (VX_PUBLIC_URL, VX_SECRET_KEY,
@@ -74,12 +80,17 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		st.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	disk, err := blob.NewDisk(filepath.Join(cfg.DataDir, "objects"))
-	if err != nil {
-		st.Close()
-		return nil, err
+	blobs := cfg.Blobs
+	if blobs == nil {
+		if blobs, err = blob.Open(cfg.BlobURL, blob.OpenOptions{DiskDir: filepath.Join(cfg.DataDir, "objects")}); err != nil {
+			st.Close()
+			return nil, fmt.Errorf("blob store: %w", err)
+		}
 	}
-	blobs := countBlobs(disk) // vx_blob_* metrics
+	if d, ok := blobs.(fmt.Stringer); ok {
+		log.Info("blob store", "store", d.String())
+	}
+	blobs = countBlobs(blobs) // vx_blob_* metrics
 	var up service.UpstreamSyncer
 	if cfg.Upstream != nil {
 		if up, err = cfg.Upstream(st, blobs, cfg.DataDir); err != nil {
@@ -173,6 +184,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		go s.backfillObjects(ctx)
 		go s.Service.RunPushNotifier(ctx, s.log)
 		go s.Service.PruneAuditLoop(ctx, s.log)
+		go s.Service.RunObjectSizer(ctx, s.log)
 	}
 	s.log.Info("vx server listening", "addr", addr)
 	select {

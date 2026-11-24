@@ -11,4 +11,7 @@ cd $SRC/deploy/production
 export VX_COMMIT=$(git -C $SRC rev-parse --short=12 HEAD) VX_VERSION=$(git -C $SRC describe --tags --always)
 docker compose up -d --build
 docker image prune -f >/dev/null
+# The backup and restore scripts of this version.
+install -m 755 $SRC/deploy/production/backup.sh /usr/local/sbin/vx-backup
+install -m 755 $SRC/deploy/production/restore.sh /usr/local/sbin/vx-restore
 echo "vx is now $VX_VERSION ($VX_COMMIT)"

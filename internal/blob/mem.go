@@ -61,3 +61,33 @@ func (m *Mem) Len() int {
 	defer m.mu.RUnlock()
 	return len(m.objs)
 }
+
+// List implements Lister.
+func (m *Mem) List(ctx context.Context, fn func(hash.Hash) error) error {
+	m.mu.RLock()
+	hs := make([]hash.Hash, 0, len(m.objs))
+	for h := range m.objs {
+		hs = append(hs, h)
+	}
+	m.mu.RUnlock()
+	for _, h := range hs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := fn(h); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Size implements Sizer with the object's uncompressed length.
+func (m *Mem) Size(_ context.Context, h hash.Hash) (int64, error) {
+	m.mu.RLock()
+	o, ok := m.objs[h]
+	m.mu.RUnlock()
+	if !ok {
+		return 0, fmt.Errorf("%w: %s", ErrNotFound, h.Short())
+	}
+	return int64(len(o.data)), nil
+}

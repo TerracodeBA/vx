@@ -15,5 +15,16 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  # S3-compatible bucket for the object storage tests: make test-minio.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    profiles: [minio]
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: vxdev
+      MINIO_ROOT_PASSWORD: vxdevsecret
+    ports:
+      - "127.0.0.1:59000:9000"
+    tmpfs: ["/data:mode=1777,size=1g"]
 volumes:
   vx-pg:

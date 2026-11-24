@@ -119,7 +119,7 @@ Agents never log in through the browser; their tokens come from `vx agent add`.
 3. Create the first person: `cd /opt/vx/src/deploy/production && docker compose exec vx vx-server user-add HANDLE --name "Full Name" --email you@example.com`
 4. Update later with `bash /opt/vx/src/deploy/production/update.sh [GIT_REF]` (it backs up first).
 
-Backups land in `/var/backups/vx` every night at 03:15 and are kept for 14 days. To also copy them off the server, configure an rclone remote named `offsite` (for example a Cloudflare R2 bucket: `rclone config`); `vx-backup` then copies new backups there.
+Backups land in `/var/backups/vx` every night at 03:15 and are kept for 14 days. Set up off-site copies too (see [Backups](#backups)): a backup on the same disk does not survive losing the server.
 
 ### Google Cloud
 
@@ -143,14 +143,96 @@ A CAX21 (4 ARM cores, 8 GB) with Ubuntu 24.04 and your SSH key; then step 2 abov
 
 ## Backups
 
-Back up Postgres and the data volume together:
+`deploy/production` installs `vx-backup` (`backup.sh`), run every night at 03:15 and before every update. It writes to `/var/backups/vx`, kept 14 days (at most 20 of each kind):
+
+- `vx-db-STAMP.dump`: the Postgres database (`pg_dump --format=custom`).
+- `vx-data-STAMP.tgz`: the data volume, while objects live on it (no `VX_BLOB_URL`). With objects in a bucket the volume only holds git mirrors, which vx fetches again, so it is skipped.
+
+Files are written as `.part` and renamed when complete, so a failed run never leaves a backup that looks whole.
+
+### Off-site copies
+
+Put a bucket in `/opt/vx/.env`, then run `docker compose up -d` once in `/opt/vx/src/deploy/production` so the vx container sees it:
 
 ```sh
-docker compose exec -T postgres pg_dump -U vx vx | gzip > /backup/vx-$(date +%F).sql.gz
-docker run --rm -v deploy_data:/data -v /backup:/backup alpine tar -czf /backup/vx-data-$(date +%F).tgz -C /data .
+VX_BACKUP_URL=s3://vx-backups/app.example.com?region=auto&endpoint=https://ACCOUNT.r2.cloudflarestorage.com
+VX_BACKUP_ACCESS_KEY_ID=...
+VX_BACKUP_SECRET_ACCESS_KEY=...
+VX_BACKUP_KEEP_DAYS=30        # optional; 0 leaves deleting to a lifecycle rule
 ```
 
-Run it daily and test a restore.
+Every backup is then also uploaded there (large files in 16 MB parts, retried on errors) with a `.sha256` next to it, and backups older than `VX_BACKUP_KEEP_DAYS` are deleted from the bucket (the newest of each kind always stays). The URL takes the same forms as `VX_BLOB_URL` (AWS S3, R2, MinIO, Google Cloud Storage with HMAC keys; see [Object storage](#object-storage)). A run whose upload fails exits with an error after keeping the local copy; `/var/log/vx-backup.log` shows it.
+
+Safer still: give the backup key permission to write but not delete, protect the bucket with versioning or object lock, set `VX_BACKUP_KEEP_DAYS=0` and let a lifecycle rule expire old backups. Keep `VX_SECRET_KEY` somewhere else than the backups (a password manager): a restore needs it, and anyone with both can open the stored GitHub App and host credentials.
+
+`vx-server backup list|get|put|prune` work on the same bucket by hand. An rclone remote named `offsite` (the v0.4 way) still gets a copy as well.
+
+### Restore
+
+`vx-restore` (`restore.sh`) brings a backup back, on the same server or on a fresh one:
+
+1. Set up the new server with `install.sh` (step 2 of [Production on one server](#production-on-one-server)).
+2. Put the old server's `VX_SECRET_KEY` into `/opt/vx/.env`, and its `VX_BACKUP_*` and `VX_BLOB_*` settings if it had them, then `cd /opt/vx/src/deploy/production && docker compose up -d`.
+3. `vx-restore` lists the backups, local and off-site; `vx-restore latest` (or `vx-restore 2026-11-24-0315`) restores one. Backups not on the server are downloaded and checked against their `.sha256`. It saves the current database as `vx-before-restore-*.dump`, stops vx, replaces the database (and the data volume when the backup has an archive of it), starts vx and prints what it restored.
+4. Point DNS at the new server. Git mirrors fill again on first use.
+
+A backup with objects on disk restored onto a server that reads them from a bucket needs one more step, which `vx-restore` prints: `docker compose exec vx vx-server blobs copy --from file:///data/objects --to "$VX_BLOB_URL"`.
+
+### Test the restore
+
+Restore into a scratch server now and then, not only on the day you need it: a second VM, steps 1 to 3 above with `VX_RESTORE_YES=1`, then sign in and open a repository. `deploy/production/backup_test.sh` (`make test-backup`) does exactly that on one machine with Docker: it starts Postgres, MinIO and vx-server from the source tree, lands a file, runs `backup.sh`, deletes the database, the data volume and the local backups, restores from MinIO with `restore.sh` on a fresh database and reads the file back.
+
+## Object storage
+
+By default objects (file contents and trees) live on the data volume, in `/data/objects`. With `VX_BLOB_URL` they live in an S3-compatible bucket instead, so the server keeps nothing it cannot rebuild, and several servers can share one bucket.
+
+| Service | `VX_BLOB_URL` |
+|---|---|
+| AWS S3 | `s3://BUCKET/PREFIX?region=eu-central-1` |
+| Cloudflare R2 | `s3://BUCKET/PREFIX?region=auto&endpoint=https://ACCOUNT.r2.cloudflarestorage.com` |
+| MinIO | `s3://BUCKET/PREFIX?endpoint=http://minio:9000` |
+| Google Cloud Storage | `gs://BUCKET/PREFIX` (S3 interoperability with HMAC keys: Cloud Storage > Settings > Interoperability) |
+
+- Credentials: `VX_BLOB_ACCESS_KEY_ID` and `VX_BLOB_SECRET_ACCESS_KEY` (and `VX_BLOB_SESSION_TOKEN` for temporary ones), each also as `..._FILE`, a file holding the value (Docker or Kubernetes secrets); `AWS_ACCESS_KEY_ID` and friends are the fallback. Never in the URL: vx refuses URLs with credentials, and keys never appear in logs or errors.
+- Parameters: `region` (signs requests; default `us-east-1`), `endpoint` (any S3-compatible service), `style=path|virtual` (default: virtual-host style on AWS, path style with an `endpoint`), `cache=64MB` (memory for hot objects in front of the bucket, least recently used out, objects over an eighth of it are not cached; `cache=0` turns it off).
+- The key needs `GetObject`, `PutObject` and `ListBucket` on the bucket (without `ListBucket`, AWS answers 403 instead of 404 for missing objects). vx never deletes objects.
+- Every request is signed (SigV4) and retried with backoff on network errors, 5xx and 429; existence checks are `HEAD` requests; every object read is checked against its hash.
+- The layout is the disk store's (`PREFIX/9f/1c/9f1c...`, same bytes), so a copy of `/data/objects` made with any tool is a valid bucket, and the other way round.
+- Native Google Cloud authentication (service accounts, workload identity) and AWS instance roles are not supported yet: use HMAC or access keys.
+
+### Moving to object storage
+
+`vx-server blobs copy --to URL` copies every object of the current store into the bucket. It checks each object's hash on read, reads every copy back from the bucket, skips objects the bucket already has (so an interrupted copy resumes: run it again) and prints what to set. Destination credentials come from `VX_BLOB_TO_ACCESS_KEY_ID` and `VX_BLOB_TO_SECRET_ACCESS_KEY`, else `VX_BLOB_*`.
+
+1. Create the bucket and a key for it. Add `VX_BLOB_ACCESS_KEY_ID` and `VX_BLOB_SECRET_ACCESS_KEY` (not `VX_BLOB_URL` yet) to `/opt/vx/.env` and run `docker compose up -d` in `/opt/vx/src/deploy/production`, so the container has the key.
+2. Copy while vx runs (this takes the longest):
+   ```sh
+   cd /opt/vx/src/deploy/production
+   URL='s3://vx-objects/prod?region=auto&endpoint=https://ACCOUNT.r2.cloudflarestorage.com'
+   docker compose exec vx vx-server blobs copy --to "$URL"
+   ```
+3. Stop vx and copy again; only what was written meanwhile is copied:
+   ```sh
+   docker compose stop vx
+   docker compose run --rm --no-deps vx blobs copy --to "$URL"
+   ```
+4. Add `VX_BLOB_URL=$URL` to `/opt/vx/.env` and `docker compose up -d vx`. The log line `blob store store=s3://...` confirms it.
+
+The second copy with vx stopped is what makes switching safe: no object can be written to the old store after it. Keep `/data/objects` until the server has run on the bucket for a while; `--verify-existing` reads back every object already in the bucket too. Moving back works the same way, with `--to file:///data/objects`.
+
+Objects in a bucket are immutable and never deleted by vx, so nightly backups skip them: protect the bucket at the provider (versioning, replication), or copy it to a second bucket now and then with `vx-server blobs copy --from s3://... --to s3://...`.
+
+Storage used per repository and organization (for quotas) is recorded in Postgres (`object_sizes`): new uploads and merges within seconds, imports and older objects by a background pass at start and every 10 minutes.
+
+## Several servers
+
+With objects in a bucket, vx-server processes can share one Postgres and one bucket behind a load balancer, with no sticky sessions:
+
+- Shared: everything in Postgres (efforts, changes, notes, tokens, web sign-in codes, CLI logins) and the objects in the bucket. Lands are compare-and-swap on the effort, branch imports only move a branch from the commit they started at, migrations take a lock, overlap notes take a lock per pair.
+- Local and rebuildable: git mirrors in `VX_DATA_DIR/git`, one bare repository per repository. A server without them (a new replica, an emptied volume) fetches on first use, and a mirror that no longer opens is set aside and fetched again. Give each server its own directory; do not share it over NFS. The first fetch on a new server takes as long as an import did.
+- Local and harmless: the memory cache of objects, cached GitHub installation tokens, and per-process locks that keep one server from fetching one repository twice at once.
+
+Not done yet: a background job (an object backfill or an overlap forecast) may run on two servers at once; both are idempotent, so this costs time, not correctness.
 
 ## Upgrades
 
@@ -296,7 +378,12 @@ Empty or `0` means no limit, which is the default. Sizes take `KB`, `MB`, `GB` a
 | Variable | Default | Meaning |
 |---|---|---|
 | `VX_DATABASE_URL` | set by compose | Postgres connection URL |
-| `VX_DATA_DIR` | `/data` in the image | Objects and git mirrors |
+| `VX_DATA_DIR` | `/data` in the image | Git mirrors, and objects unless `VX_BLOB_URL` is set |
+| `VX_BLOB_URL` | empty (objects in `VX_DATA_DIR/objects`) | Object storage: `s3://BUCKET/PREFIX?region=&endpoint=&style=&cache=` or `gs://BUCKET/PREFIX` ([Object storage](#object-storage)) |
+| `VX_BLOB_ACCESS_KEY_ID`, `VX_BLOB_SECRET_ACCESS_KEY`, `VX_BLOB_SESSION_TOKEN` | empty | Bucket credentials; each also as `..._FILE`; `AWS_*` is the fallback |
+| `VX_BACKUP_URL` | empty | Bucket for off-site backups (`backup.sh`, `restore.sh`, `vx-server backup`) |
+| `VX_BACKUP_ACCESS_KEY_ID`, `VX_BACKUP_SECRET_ACCESS_KEY` | empty | Its credentials; each also as `..._FILE` |
+| `VX_BACKUP_KEEP_DAYS` | `30` | Days `backup.sh` keeps backups in the bucket; `0`: never delete (a lifecycle rule does) |
 | `VX_ADDR` | `0.0.0.0:7070` in the image | Listen address |
 | `VX_GITHUB_TOKEN` | empty | GitHub API and HTTPS git access |
 | `VX_PUBLIC_URL` | empty | This server's public address, like `https://vx.example.com`; needed for the GitHub App (callbacks, webhooks) and the CLI login |

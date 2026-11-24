@@ -87,8 +87,10 @@ func TestOrgQuotas(t *testing.T) {
 	if r := rows["push"]; r.Limit != "1000 B" || !r.Default || r.Used != "" {
 		t.Errorf("push row = %+v", r)
 	}
-	if r := rows["stored"]; r.Used != "not measured yet" {
-		t.Errorf("stored row = %+v (no size bookkeeping in this store yet)", r)
+	// Stored bytes come from object_sizes (r3-storage); these repositories
+	// have no objects yet.
+	if r := rows["stored"]; r.Used != "0 B" || r.Over {
+		t.Errorf("stored row = %+v", r)
 	}
 	if _, err := svc.OrgQuota(ctx, e.person("mallory"), "acme"); code(err) != service.CodeNotFound {
 		t.Errorf("outsider sees quotas: %v", err)

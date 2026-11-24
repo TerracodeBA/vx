@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
@@ -149,22 +150,42 @@ func (b *Bridge) auth(ctx context.Context, repo store.Repo) transport.AuthMethod
 	return nil
 }
 
-// mirror opens the repo's bare mirror, creating it on first use.
+// mirror opens the repo's bare mirror, creating it on first use. Mirrors
+// are a cache of the upstream: vx keeps everything it needs in Postgres and
+// the blob store, so a server without a mirror (a new replica, a lost or
+// wiped volume) makes one and fetches into it, and a mirror that no longer
+// opens is set aside and made again.
 func (b *Bridge) mirror(ctx context.Context, repo store.Repo) (*git.Repository, error) {
 	url, err := b.remoteURL(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
 	path := filepath.Join(b.Dir, repo.ID.String()+".git")
+	r, err := openMirror(path, url)
+	if err != nil {
+		b.Log.Warn("git mirror is unreadable; making it again from the upstream", "repo", repo.Name, "path", path, "err", err)
+		broken := fmt.Sprintf("%s.broken-%d", path, time.Now().UnixNano())
+		if rerr := os.Rename(path, broken); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
+			return nil, fmt.Errorf("git mirror %s is unreadable (%v) and cannot be moved aside: %w", path, err, rerr)
+		}
+		_ = os.RemoveAll(broken) // best effort: the name is unique
+		if r, err = openMirror(path, url); err != nil {
+			return nil, fmt.Errorf("git mirror: %w", err)
+		}
+	}
+	return r, nil
+}
+
+func openMirror(path, url string) (*git.Repository, error) {
 	r, err := git.PlainOpen(path)
 	if errors.Is(err, git.ErrRepositoryNotExists) {
-		if err := os.MkdirAll(b.Dir, 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, err
 		}
 		r, err = git.PlainInit(path, true)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("git mirror: %w", err)
+		return nil, err
 	}
 	cfg, err := r.Config()
 	if err != nil {
@@ -244,8 +265,40 @@ func (b *Bridge) fetch(ctx context.Context, r *git.Repository, repo store.Repo, 
 }
 
 // SyncBranch fetches branch and imports its new first-parent commits.
+// Several servers may sync one branch at once: the branch moves only from
+// the commit this sync started at, and a sync that lost that race starts
+// over from where the other server left the branch.
 func (b *Bridge) SyncBranch(ctx context.Context, repo store.Repo, branch string) (store.Branch, int, error) {
 	defer b.lock(repo.ID)()
+	for attempt := 0; ; attempt++ {
+		nb, n, err := b.syncBranch(ctx, repo, branch)
+		if !errors.Is(err, errBranchMoved) {
+			return nb, n, err
+		}
+		if attempt == 2 {
+			cur, err := b.Store.GetBranch(ctx, repo.ID, branch)
+			return cur, 0, err
+		}
+	}
+}
+
+// errBranchMoved: another server moved the branch during this sync.
+var errBranchMoved = errors.New("branch moved by another server")
+
+// setBranch records the import, unless another server moved the branch
+// since prev was read.
+func (b *Bridge) setBranch(ctx context.Context, nb store.Branch, prev store.Branch, known bool) error {
+	moved, err := b.Store.SetBranchIfUnchanged(ctx, nb, prev.GitSHA, known)
+	if err != nil {
+		return err
+	}
+	if !moved {
+		return errBranchMoved
+	}
+	return nil
+}
+
+func (b *Bridge) syncBranch(ctx context.Context, repo store.Repo, branch string) (store.Branch, int, error) {
 	prev, err := b.Store.GetBranch(ctx, repo.ID, branch)
 	known := err == nil
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -299,7 +352,7 @@ func (b *Bridge) SyncBranch(ctx context.Context, repo store.Repo, branch string)
 			return store.Branch{}, 0, err
 		}
 		nb := store.Branch{RepoID: repo.ID, Name: branch, Head: row.Hash, GitSHA: tip.String()}
-		return nb, 0, b.Store.UpsertBranch(ctx, nb)
+		return nb, 0, b.setBranch(ctx, nb, prev, known)
 	}
 
 	conv := newConverter(b, r, repo.ID)
@@ -348,7 +401,7 @@ func (b *Bridge) SyncBranch(ctx context.Context, repo store.Repo, branch string)
 		parent, parentTree = h, tree
 	}
 	nb := store.Branch{RepoID: repo.ID, Name: branch, Head: parent, GitSHA: tip.String()}
-	if err := b.Store.UpsertBranch(ctx, nb); err != nil {
+	if err := b.setBranch(ctx, nb, prev, known); err != nil {
 		return store.Branch{}, 0, err
 	}
 	b.Log.Info("imported branch", "repo", repo.Name, "branch", branch, "commits", len(todo), "head", parent.Short())
