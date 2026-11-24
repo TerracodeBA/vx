@@ -47,6 +47,9 @@ type App struct {
 	// landResult is the one line vx land ends with: what landed, or why
 	// nothing did.
 	landResult string
+	// noGenerate (--no-generate) stops vx from running [[generated]]
+	// commands after a merge kept generated files from one side.
+	noGenerate bool
 }
 
 // exitError is an error that makes Run exit with code instead of

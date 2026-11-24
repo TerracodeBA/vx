@@ -166,7 +166,7 @@ func TestTwoAgentsCollaborate(t *testing.T) {
 
 	// Agent B started before that land, adds a different file, and lands.
 	// The server merges it onto A's change and B's copy picks up auth.go.
-	b.must("new", "Add audit log")
+	b.must("new", "Add audit log", "--no-sync")
 	b.write("audit.go", "package audit\n")
 	if out := b.must("status"); !strings.Contains(out, "The effort moved on") {
 		t.Fatalf("B should see the effort moved: %q", out)
@@ -269,7 +269,7 @@ func TestVerifiedLandAndHonestEvidence(t *testing.T) {
 	a.must("land")
 
 	// B's plain land is merged by the server: the evidence is marked.
-	b.must("new", "Add two")
+	b.must("new", "Add two", "--no-sync")
 	b.write("two.txt", "2\n")
 	out := b.must("land", "--check", "unit=pass:3")
 	if !strings.Contains(out, "evidence was gathered before that merge") {

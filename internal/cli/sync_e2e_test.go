@@ -42,7 +42,7 @@ func TestSyncListsMergedFiles(t *testing.T) {
 	a.write("static/vx.js", "one(1)\n\ntwo()\n")
 	a.write("static/new.txt", "new\n")
 	a.must("land", "--check", "lint=pass")
-	b.must("new", "Bottom")
+	b.must("new", "Bottom", "--no-sync")
 	b.write("static/vx.css", "a {}\n\nb {}\n\nc { color: blue }\n")
 	b.write("static/vx.js", "one()\n\ntwo(2)\n")
 	b.write("README", "b\n")

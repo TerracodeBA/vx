@@ -83,6 +83,7 @@ func (a *App) cloneCmd() *cobra.Command {
 
 func (a *App) newCmd() *cobra.Command {
 	var taskID string
+	var noSync bool
 	var claim claimOptions
 	cmd := &cobra.Command{
 		Use:   "new INTENT [--task ID] [--claim TARGET...]",
@@ -93,6 +94,9 @@ becomes the change's description and, when shipped, its commit message.
 
 Keep tasks small and land often: vx land closes the workspace, so run
 vx new again for the next task.
+
+vx new first syncs to the effort head (like vx sync), so the work starts
+from what others landed; it says so in one line. --no-sync skips that.
 
 With --task ID, vx new takes that task of the effort's plan (vx tasks
 --open lists them) and uses its title as the intent when none is given.
@@ -121,6 +125,22 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 			if wc.Config.Workspace != "" {
 				return fmt.Errorf("workspace %q is still open: land it with `vx land` or close it with `vx abandon`", wc.Config.Intent)
 			}
+			if taskID == "" && len(args) == 0 {
+				return fmt.Errorf("say what this workspace is for: vx new \"INTENT\", or start on a task with vx new --task ID")
+			}
+			// Start from the effort head, so the work begins on what
+			// others landed instead of meeting it at land time.
+			var synced *syncResult
+			if !noSync {
+				res, err := a.syncWorkingCopy(ctx, c, wc)
+				if err != nil {
+					return err
+				}
+				if res.upToDate {
+					a.printf("Up to date at %s.\n", short(res.head))
+				}
+				synced = &res
+			}
 			task, intent, err := a.taskOnNew(ctx, c, taskID, args)
 			if err != nil {
 				return err
@@ -131,6 +151,9 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 			}
 			a.printf("Opened workspace %s: %s\n", w.ChangeId, w.Intent)
 			out := map[string]any{"workspace": w}
+			if synced != nil {
+				out["sync"] = synced.json()
+			}
 			if task != nil {
 				a.printf("You took task %s; when it has landed: vx task done %s\n", noteID(task.Id), noteID(task.Id))
 				out["task"] = task
@@ -142,6 +165,11 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 				}
 				out["claim"], out["overlapping"] = m.Claim, m.Overlapping
 			}
+			if synced != nil && len(synced.conflicts) > 0 {
+				a.printConflicts(wc, synced.conflicts)
+				a.emit(out)
+				return errConflict
+			}
 			a.printf("Edit files, then run `vx land`.\n")
 			if len(out) == 1 {
 				a.emit(w)
@@ -151,6 +179,7 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&noSync, "no-sync", false, "open the workspace on the files as they are, without syncing to the effort head first")
 	cmd.Flags().StringVar(&taskID, "task", "", "take this task of the effort's plan and work on it here")
 	cmd.Flags().StringSliceVar(&claim.targets, "claim", nil, "path or symbol to claim for this workspace (repeatable)")
 	claimFlags(cmd, &claim)
@@ -233,6 +262,8 @@ func (a *App) statusCmd() *cobra.Command {
 					a.printWaiting(mine)
 					out["review"] = mine
 				}
+			} else if wc.Config.Rebase == nil && len(changes) > 0 {
+				a.printf("%s\n", noWorkspaceHint(len(changes)))
 			} else if wc.Config.Rebase == nil {
 				a.printf("No workspace open. Start one with: vx new \"INTENT\"\n")
 			}
@@ -321,6 +352,8 @@ func (a *App) statusCmd() *cobra.Command {
 				a.printf("\nUnresolved conflict markers in: %s\nvx land will refuse these files until the markers are gone.\n", strings.Join(marked, ", "))
 			case wc.Config.Rebase != nil:
 				a.printf("\nNo conflict markers; continue with: vx effort rebase --continue\n")
+			case len(changes) > 0 && wc.Config.Workspace == "":
+				a.printf("\nNo conflict markers; open a workspace to land them: vx new \"INTENT\" (or vx land -m \"INTENT\").\n")
 			case len(changes) > 0:
 				a.printf("\nNo conflict markers; ready to land.\n")
 			}
