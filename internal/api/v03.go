@@ -44,6 +44,9 @@ func rulesPB(r service.Rules) *vxv1.RepoRules {
 	for _, g := range r.Generated {
 		out.Generated = append(out.Generated, &vxv1.GeneratedRule{Glob: g.Glob, Command: g.Command})
 	}
+	for _, p := range r.Policies {
+		out.Policies = append(out.Policies, &vxv1.LandingPolicy{Paths: p.Paths, Mode: string(p.Mode), Require: p.Require, Approvers: p.Approvers, Line: int32(p.Line)})
+	}
 	return out
 }
 

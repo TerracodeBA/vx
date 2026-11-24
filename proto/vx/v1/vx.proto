@@ -79,6 +79,16 @@ message Evidence {
   // Commands vx.toml [checks] required that vx did not run for this change
   // (no vx land --run with exactly that command). Filled by the server.
   repeated string not_verified = 3;
+  // People who approved the change under a "human" landing policy of
+  // vx.toml before it landed. Filled by the server.
+  repeated Approval approvals = 4;
+}
+
+message Approval {
+  string by = 1; // e.g. "user:alice"
+  string at = 2; // RFC 3339
+  string review = 3; // the review's id
+  repeated string paths = 4; // the files under the policy
 }
 
 message FileChange {
@@ -563,6 +573,13 @@ message LandResponse {
   repeated string kept_both = 10; // paths where both sides inserted different lines at the same place and vx kept both
   repeated Overlap overlaps = 11; // this effort's forecast collisions after the land
   repeated string merged_by_decl = 12; // .go paths whose lines conflicted but whose top-level declarations did not; merged declaration by declaration
+  // Set when a "human" landing policy of vx.toml applies: the change waits
+  // for a person as this pending review; landed is false and the effort
+  // head did not move.
+  Review review = 13;
+  // landed, pending_review, conflicts or effort_moved. Servers before v0.3
+  // leave it empty.
+  string status = 14;
 }
 
 message AbandonRequest {
@@ -1272,6 +1289,16 @@ message RepoRules {
   repeated GeneratedRule generated = 2;
   repeated string required_checks = 3;
   string source = 4; // where they came from, e.g. "vx.toml at 3f2a1c9d0e7b"; empty: no vx.toml
+  repeated LandingPolicy policies = 5;
+}
+
+// LandingPolicy is a [[policy]] of vx.toml: how changes to its paths land.
+message LandingPolicy {
+  repeated string paths = 1; // globs
+  string mode = 2; // fast, gated or human
+  repeated string require = 3; // checks a gated or human land needs, run by vx and passing
+  repeated string approvers = 4; // human: "user:HANDLE" or "team:ORG/TEAM"; empty: anyone with write
+  int32 line = 5; // line in vx.toml
 }
 
 message GetRulesRequest {
@@ -1319,4 +1346,91 @@ message CloseEffortRequest {
 
 message CloseEffortResponse {
   Effort effort = 1;
+}
+
+// ---------- Reviews (landing policies) ----------
+//
+// A land that changes a file under a "human" [[policy]] of vx.toml waits
+// for a person: it is stored as a pending review and the effort head does
+// not move. People with write on the repository (and in the policy's
+// approvers, when it names them) approve it, which lands it with the
+// normal merge, or reject it with a reason. Agents never decide reviews.
+
+service ReviewService {
+  rpc ListReviews(ListReviewsRequest) returns (ListReviewsResponse) {}
+  rpc GetReview(GetReviewRequest) returns (GetReviewResponse) {}
+  // ApproveReview lands the change onto the current effort head. When it
+  // conflicts, the review stays pending and goes back to the author.
+  rpc ApproveReview(ApproveReviewRequest) returns (ApproveReviewResponse) {}
+  rpc RejectReview(RejectReviewRequest) returns (RejectReviewResponse) {}
+}
+
+message ApproverList {
+  repeated string approvers = 1; // "user:HANDLE" or "team:ORG/TEAM"
+}
+
+message Review {
+  string id = 1;
+  string repo = 2;
+  string effort = 3; // slug
+  string workspace_id = 4;
+  string change_id = 5;
+  string intent = 6;
+  Principal author = 7;
+  string base = 8; // changeset the snapshot was made on
+  string tree = 9; // the author's snapshot
+  Evidence evidence = 10;
+  repeated string paths = 11; // changed files under the human policy
+  repeated string policies = 12; // the matching [[policy]] tables, e.g. [[policy]] paths = ["db/**"] (vx.toml line 9)
+  repeated ApproverList approvers = 13; // a person must be in every list; empty: anyone with write
+  string state = 14; // pending, approved, rejected, withdrawn
+  repeated string conflicts = 15; // pending: paths that conflicted when it was last approved
+  Principal decided_by = 16;
+  string decided_at = 17;
+  string reason = 18; // why it was rejected
+  string landed = 19; // the changeset an approval landed
+  string created_at = 20;
+  string updated_at = 21;
+  repeated FileChange files = 22; // GetReview only
+  bool can_decide = 23; // the caller may approve or reject it
+  string cannot_decide = 24; // why not, when can_decide is false and it is pending
+  string waiting = 25; // "Waiting for a person to review: PATHS (policy in vx.toml)"
+}
+
+message ListReviewsRequest {
+  string repo = 1; // empty: every repository the caller can read
+  string effort = 2; // needs repo
+  repeated string states = 3; // empty: pending
+  int32 limit = 4;
+}
+
+message ListReviewsResponse {
+  repeated Review reviews = 1;
+}
+
+message GetReviewRequest {
+  string id = 1; // id or a prefix of at least 8 characters
+}
+
+message GetReviewResponse {
+  Review review = 1;
+}
+
+message ApproveReviewRequest {
+  string id = 1;
+}
+
+message ApproveReviewResponse {
+  Review review = 1;
+  LandResponse land = 2; // set when the approval landed the change
+  repeated Conflict conflicts = 3; // set when it conflicts: the review stays pending
+}
+
+message RejectReviewRequest {
+  string id = 1;
+  string reason = 2; // required; the author reads it
+}
+
+message RejectReviewResponse {
+  Review review = 1;
 }

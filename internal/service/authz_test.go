@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -33,6 +34,42 @@ type authzEnv struct {
 	aliceWS       uuid.UUID // a workspace of alice's agent in the effort
 	question      service.Note
 	n             int
+	rules         bool // acme/shop has a vx.toml with a human policy on db/**
+}
+
+// pendingReview lands a file under a human landing policy as alice's agent
+// and returns the pending review's id.
+func (e *authzEnv) pendingReview() string {
+	e.t.Helper()
+	eff, err := e.svc.Store.EffortByID(e.ctx, e.eff.ID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if !e.rules {
+		e.rules = true
+		e.land(e.repo, eff, "Policy", map[string]*string{"vx.toml": s("[[policy]]\npaths = [\"db/**\"]\nmode = \"human\"\n")}, nil)
+		eff, _ = e.svc.Store.EffortByID(e.ctx, e.eff.ID)
+	}
+	ws, err := e.svc.OpenWorkspace(e.ctx, e.agent, "acme/shop", eff.Slug, "Migration")
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	e.n++
+	tree := e.snapshot(e.repo, ws.Workspace.Base, map[string]*string{fmt.Sprintf("db/%03d.sql", e.n): s("x\n")})
+	res, err := e.svc.Land(e.ctx, e.agent, service.LandInput{WorkspaceID: ws.Workspace.ID, Tree: tree})
+	if err != nil || res.Review == nil {
+		e.t.Fatalf("pending review: %+v %v", res, err)
+	}
+	return res.Review.ID.String()
+}
+
+// pastAccess turns the refusal of an agent's decision into success: the
+// call got past the access check (agents never decide reviews).
+func pastAccess(a service.Actor, err error) error {
+	if a.Kind == store.KindAgent && isCode(err, service.CodePermission) && strings.Contains(err.Error(), "only people approve") {
+		return nil
+	}
+	return err
 }
 
 func newAuthzEnv(t *testing.T) *authzEnv {
@@ -261,6 +298,22 @@ var authzOps = []authzOp{
 			return nil // past the access check: acme/shop has no git upstream to ship to
 		}
 		return err
+	}},
+	{"ListReviews", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListReviews(e.ctx, a, service.ReviewQuery{Repo: "acme/shop", Effort: e.eff.Slug})
+		return err
+	}},
+	{"GetReview", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.GetReview(e.ctx, a, e.pendingReview())
+		return err
+	}},
+	{"ApproveReview", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ApproveReview(e.ctx, a, e.pendingReview())
+		return pastAccess(a, err)
+	}},
+	{"RejectReview", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.RejectReview(e.ctx, a, e.pendingReview(), "not now")
+		return pastAccess(a, err)
 	}},
 	{"OpenShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.OpenShipment(e.ctx, a, service.ShipInput{Repo: "acme/shop", Effort: e.eff.Slug})

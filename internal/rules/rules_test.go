@@ -106,7 +106,7 @@ func TestParseRulesErrors(t *testing.T) {
 		want      string
 	}{
 		{"syntax", "[[unique]]\nname = \"m\nglob = \"x\"\n", 2, "vx.toml line 2:"},
-		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks])`},
+		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks], [[policy]])`},
 		{"unknown table", "\n[merge]\nstrategy = \"ours\"\n", 2, `unknown table or key "merge"`},
 		{"unknown key in unique", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"n\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\npattern = \"x\"\n", 10, `unknown key "pattern" in [[unique]] (known: name, glob, key)`},
 		{"unknown key in generated", "[[generated]]\nglob = \"gen/**\"\ncmd = \"make\"\n", 3, `unknown key "cmd" in [[generated]] (known: glob, command)`},

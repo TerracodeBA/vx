@@ -14,6 +14,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/rules"
 	"github.com/TerracodeBA/vx/internal/store"
 )
 
@@ -62,6 +63,10 @@ type LandResult struct {
 	// The forecast for this land runs after it, in the background, so they
 	// may still describe the effort before this land.
 	Overlaps []Overlap
+	// Review is set when a "human" landing policy of vx.toml applies: the
+	// change waits for a person as this pending review, Landed is false and
+	// the effort head did not move.
+	Review *Review
 }
 
 // ErrNothingToLand is returned when a snapshot has no changes.
@@ -106,14 +111,25 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 	if intent == "" {
 		intent = v.Workspace.Intent
 	}
+	decision, err := s.landPolicy(ctx, v, base, in)
+	if err != nil {
+		return LandResult{}, err
+	}
 	in.Evidence = s.withRequiredChecks(ctx, in.Tree, in.Evidence)
+	switch decision.Mode {
+	case rules.ModeHuman:
+		return s.submitReview(ctx, actor, v, base, in, intent, decision)
+	case rules.ModeGated:
+		// The checks ran on the snapshot: land exactly that, never a merge.
+		in.RequireUpToDate = true
+	}
 
 	attempts := s.MaxLandAttempts
 	if attempts <= 0 {
 		attempts = 25
 	}
 	for attempt := 0; attempt < attempts; attempt++ {
-		res, err := s.landOnce(ctx, actor, v, base, in, intent)
+		res, err := s.landOnce(ctx, actor, v, base, in, intent, nil)
 		if errors.Is(err, errLostRace) {
 			continue
 		}
@@ -131,7 +147,14 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 	return LandResult{}, errf(CodeUnavailable, "effort %s is too busy: gave up after %d attempts, try again", v.Effort.Slug, attempts)
 }
 
-func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, base store.ChangesetRow, in LandInput, intent string) (LandResult, error) {
+// landExtra is what an approved review adds to a land.
+type landExtra struct {
+	// inTx runs in the land's transaction once the changeset is stored as
+	// landed: it marks the review approved.
+	inTx func(tx *store.Tx, landed hash.Hash) error
+}
+
+func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, base store.ChangesetRow, in LandInput, intent string, extra *landExtra) (LandResult, error) {
 	eff, err := s.Store.EffortByID(ctx, v.Effort.ID)
 	if err != nil {
 		return LandResult{}, classify(err)
@@ -228,8 +251,12 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		if ws.State != store.WorkspaceOpen {
 			return errf(CodeFailedPrecondition, "workspace is already %s", ws.State)
 		}
-		if err := s.recheckLandsToday(ctx, tx, actor); err != nil {
-			return err
+		// An approved review (extra) skips the agent's daily budget: it was
+		// checked when the review was submitted, and a person decided.
+		if extra == nil {
+			if err := s.recheckLandsToday(ctx, tx, actor); err != nil {
+				return err
+			}
 		}
 		h, err := tx.InsertChangeset(ctx, v.Repo.ID, &eff.ID, cs, files)
 		if err != nil {
@@ -249,6 +276,13 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		}
 		if err := tx.FinishWorkspace(ctx, ws.ID, store.WorkspaceLanded, h); err != nil {
 			return err
+		}
+		if extra != nil && extra.inTx != nil {
+			if err := extra.inTx(tx, h); err != nil {
+				return err
+			}
+		} else if err := tx.WithdrawReviews(ctx, ws.ID); err != nil {
+			return err // landed without review: a pending one is moot
 		}
 		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, ws.ID, nil, s.Now()); err != nil {
 			return err

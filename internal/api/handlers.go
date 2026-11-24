@@ -55,6 +55,7 @@ func MountWithLog(mux *http.ServeMux, svc *service.Service, log *slog.Logger) {
 	handle(vxv1connect.NewCoordinationServiceHandler(h, opts...))
 	handle(vxv1connect.NewRulesServiceHandler(h, opts...))
 	handle(vxv1connect.NewOrgServiceHandler(h, opts...))
+	handle(vxv1connect.NewReviewServiceHandler(h, opts...))
 	// The only service without authInterceptor.
 	public := append([]connect.HandlerOption{connect.WithInterceptors(versions)}, limits...)
 	handle(vxv1connect.NewPublicServiceHandler(h, public...))
@@ -456,21 +457,11 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &vxv1.LandResponse{
-		Landed: res.Landed, Rebased: res.Rebased, AutoMerged: res.AutoMerged,
-		Conflicts: conflictsPB(res.Conflicts), EffortHead: res.EffortHead.String(), EffortMoved: res.EffortMoved,
-		Warnings: warningsPB(res.Warnings), KeptBoth: res.KeptBoth, MergedByDecl: res.MergedByDecl, Overlaps: overlapsPB(res.Overlaps),
+	effort := ""
+	if v, err := h.svc.GetWorkspace(ctx, actorFrom(ctx), id); err == nil {
+		effort = v.Effort.Slug
 	}
-	for _, c := range res.OverlappingClaims {
-		out.OverlappingClaims = append(out.OverlappingClaims, claimPB(actorFrom(ctx), c))
-	}
-	if res.Landed {
-		effort := ""
-		if v, err := h.svc.GetWorkspace(ctx, actorFrom(ctx), id); err == nil {
-			effort = v.Effort.Slug
-		}
-		out.Changeset = changesetRowPB(res.Changeset, effort, res.Files)
-	}
+	out := landResponsePB(actorFrom(ctx), res, effort)
 	return connect.NewResponse(out), nil
 }
 

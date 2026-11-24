@@ -127,6 +127,17 @@ vx land --run "go test ./..."</pre></div>
   </section>
 
   <aside class="rail">
+    {{if .Reviews}}
+    <div class="panel" id="reviews">
+      <div class="panel-head"><h2>Waiting for a person</h2><span class="muted small">{{len .Reviews}}</span></div>
+      <p class="panel-note muted small">Landed under a human policy of vx.toml: not in the effort, the pull request or the overlap forecast until someone approves them.</p>
+      <ul class="plain-list">
+      {{range .Reviews}}
+        <li><a href="/ui/change?repo={{.RepoName}}&amp;review={{.ID}}">{{first .Intent}}</a>{{if .Conflicts}} <span class="pill warn">conflicts</span>{{end}}<div class="muted small">{{principal .Author.Ref}} · <span class="mono">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</span> · {{ago .CreatedAt}}{{if .CanDecide}} · you can approve{{end}}</div></li>
+      {{end}}
+      </ul>
+    </div>
+    {{end}}
     <div class="panel">
       <div class="panel-head"><h2>Working now</h2>{{if .Working}}<span class="live-text small"><span class="pulse"></span>{{len .Working}}</span>{{end}}</div>
       {{if not .Working}}<p class="panel-note muted small">No open workspaces. Everything started has landed.</p>{{end}}

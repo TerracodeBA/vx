@@ -1,4 +1,4 @@
-{{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a>{{if .Effort}}<span class="sep">/</span><a href="/ui/effort?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{.Effort.Name}}</a>{{end}}<span class="sep">/</span><span class="mono">{{.C.ChangeID}}</span>{{end}}
+{{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a>{{if .Effort}}<span class="sep">/</span><a href="/ui/effort?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{.Effort.Name}}</a>{{end}}<span class="sep">/</span>{{if .Review}}<a href="/ui/reviews">Reviews</a><span class="sep">/</span>{{end}}<span class="mono">{{.C.ChangeID}}</span>{{end}}
 {{define "content"}}
 {{$repo := .Repo.Name}}
 <div class="page-head"><div class="page-title">
@@ -25,16 +25,51 @@
     {{end}}
   </section>
   <aside class="rail">
+    {{with .Review}}
+    <section class="panel panel-pad review-panel" id="review">
+      <h2 class="sec">Review</h2>
+      {{if eq .State "pending"}}
+      <p class="note warn small">{{.WaitingText}}. Not in the effort yet: approving lands it onto the current effort head with the normal merge.</p>
+      {{if .Conflicts}}<p class="note bad small">{{if .DecidedBy}}{{principal .DecidedBy.Ref}} approved it, but it{{else}}It{{end}} conflicts with the effort in <span class="mono">{{range $i, $p := .Conflicts}}{{if $i}}, {{end}}{{$p}}{{end}}</span>. vx told the author to resolve and land again; approve the new snapshot then.</p>{{end}}
+      {{else if eq .State "approved"}}
+      <p class="note ok small">Approved by {{if .DecidedBy}}{{principal .DecidedBy.Ref}}{{end}}{{if .DecidedAt}} {{ago .DecidedAt}}{{end}}; landed as <a class="mono" href="/ui/change?repo={{.RepoName}}&amp;ref={{.Landed}}">{{short .Landed.String}}</a>.</p>
+      {{else if eq .State "rejected"}}
+      <p class="note bad small">Rejected by {{if .DecidedBy}}{{principal .DecidedBy.Ref}}{{end}}{{if .DecidedAt}} {{ago .DecidedAt}}{{end}}: <span class="pre">{{.Reason}}</span></p>
+      {{else}}
+      <p class="note small">Withdrawn: the author abandoned or landed the workspace another way.</p>
+      {{end}}
+      <dl class="kv">
+        <dt>Files under the policy</dt><dd class="mono small">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</dd>
+        {{range .Policies}}<dt>Policy</dt><dd class="mono small">{{.}}</dd>{{end}}
+        {{range .Approvers}}<dt>Approvers</dt><dd class="mono small">{{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}</dd>{{end}}
+        <dt>Review id</dt><dd class="mono small">{{.ID}}</dd>
+      </dl>
+      {{if eq .State "pending"}}{{if .CanDecide}}
+      <form class="stack" method="post" action="/ui/review">
+        <input type="hidden" name="review" value="{{.ID}}">
+        <input type="hidden" name="decision" value="approve">
+        <button class="btn primary block" type="submit">Approve and land</button>
+      </form>
+      <form class="stack" method="post" action="/ui/review">
+        <input type="hidden" name="review" value="{{.ID}}">
+        <input type="hidden" name="decision" value="reject">
+        <label for="reason">Or reject it; the author reads why:</label>
+        <textarea id="reason" name="reason" rows="3" maxlength="1000" required></textarea>
+        <button class="btn ghost block" type="submit">Reject</button>
+      </form>
+      {{else}}<p class="muted small">You cannot decide this review: {{.CannotDecide}}</p>{{end}}{{end}}
+    </section>
+    {{end}}
     <section class="panel panel-pad">
       <h2 class="sec">Change</h2>
       <dl class="kv">
         <dt>Change id</dt><dd class="mono">{{.C.ChangeID}}</dd>
-        <dt>Hash</dt><dd class="mono" title="{{.C.Hash}}">{{short .C.Hash}}</dd>
+        {{if not .Review}}<dt>Hash</dt><dd class="mono" title="{{.C.Hash}}">{{short .C.Hash}}</dd>{{end}}
         <dt>Agent</dt><dd>{{principal .C.Author.Principal}}</dd>
         {{if .C.Author.OnBehalfOf}}<dt>For</dt><dd>{{principal .C.Author.OnBehalfOf}}</dd>{{end}}
         {{if .C.Author.Model}}<dt>Model</dt><dd>{{.C.Author.Model}}</dd>{{end}}
         {{if .C.Author.Session}}<dt>Session</dt><dd class="mono">{{.C.Author.Session}}</dd>{{end}}
-        <dt>Landed</dt><dd>{{ago .C.CreatedAt}}</dd>
+        <dt>{{if .Review}}Submitted{{else}}Landed{{end}}</dt><dd>{{ago .C.CreatedAt}}</dd>
         <dt>Origin</dt><dd>{{.C.Origin}}{{if .C.GitSHA}} · <span class="mono">{{short .C.GitSHA}}</span>{{end}}</dd>
         {{range .C.Parents}}<dt>Parent</dt><dd><a class="mono" href="/ui/change?repo={{$repo}}&amp;ref={{.}}">{{short .}}</a></dd>{{end}}
         {{with .C.Rebase}}<dt>Rebased onto</dt><dd>{{.Branch}} · <span class="mono">{{if .OntoGitSHA}}{{short .OntoGitSHA}}{{else}}{{short .Onto.String}}{{end}}</span>{{if .By}} by {{principal .By}}{{end}}</dd>
@@ -57,6 +92,7 @@
       <ul class="plain-list evidence">
         {{range .C.Evidence.Checks}}<li><span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}">{{.Result}}</span><span class="mono small">{{.Name}}</span><span class="muted small">{{if .RanByVX}}run by vx{{else}}reported by the agent{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}{{if .Failed}} · {{.Failed}} failed{{end}}{{if .Notes}} · {{.Notes}}{{end}}</span></li>{{end}}
         {{range .C.Evidence.NewTests}}<li><span class="pill neutral">new test</span><span class="mono small">{{.}}</span></li>{{end}}
+        {{range .C.Evidence.Approvals}}<li><span class="pill ok">approved</span><span class="small">by {{principal .By}}</span><span class="muted small">{{ago .At}} · landing policy for <span class="mono">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</span></span></li>{{end}}
         {{range .C.Evidence.NotVerified}}<li><span class="pill warn">not verified</span><span class="mono small">{{.}}</span><span class="muted small">required in vx.toml [checks], not run by vx</span></li>{{end}}
       </ul>
       {{else}}<p class="muted small">No evidence recorded.</p>{{end}}

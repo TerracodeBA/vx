@@ -474,6 +474,11 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .ico-start::after { content: ""; position: absolute; left: 5px; top: 3.5px; border-left: 5px solid var(--muted); border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; }
 .side-link.on .ico-start { border-color: var(--accent); }
 .side-link.on .ico-start::after { border-left-color: var(--accent); }
+.ico-review { border: 1.5px solid var(--muted); border-radius: 3px; width: 14px; height: 16px; }
+.ico-review::after { content: ""; position: absolute; left: 3px; top: 6px; width: 5px; height: 2.5px; border-left: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
+.side-link.on .ico-review { border-color: var(--accent); }
+.side-link.on .ico-review::after { border-color: var(--accent); }
+.review-panel form + form { margin-top: 10px; }
 .side-link.on .ico-org, .side-link.on .ico-admin { border-color: var(--accent); }
 .side-link.on .ico-org::after, .side-link.on .ico-admin::after { background: var(--accent); }
 .admin { display: grid; gap: 16px; min-width: 0; }
