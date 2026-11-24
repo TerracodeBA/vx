@@ -13,6 +13,7 @@ import (
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/internal/client"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/workcopy"
 )
 
 // ExitEscalated is vx ask --wait's exit code when the question passed its
@@ -280,6 +281,19 @@ func (a *App) boardCmd() *cobra.Command {
 					a.printNote(r, noteOpts{me: o.me, indent: "    "})
 				}
 			}
+			// The whole board was shown, back to the last time this working
+			// copy saw it: sync, land and status need not show it again.
+			if len(targets) == 0 && len(kinds) == 0 {
+				if wc, err := a.workingCopy(); err == nil && wc.Config.Repo == repo && wc.Config.Effort == slug {
+					max := limit
+					if max <= 0 {
+						max = 100
+					}
+					if len(notes) < max || !after(notes[len(notes)-1].CreatedAt, wc.Config.BoardSeenAt) {
+						markBoardSeen(wc, notes[0].CreatedAt)
+					}
+				}
+			}
 			a.emit(resp.Msg)
 			return nil
 		},
@@ -462,44 +476,56 @@ func targetsMatch(a, b string) bool {
 // ---------- status and wait ----------
 
 // boardStatus prints the Board section of vx status: notes on the files
-// changed here and open questions for the caller. It returns nil, printing
+// changed here, others' claims on them, notes new since the board was last
+// seen, and open questions for the caller. It returns nil, printing
 // nothing, when the server has no board.
-func (a *App) boardStatus(ctx context.Context, c *client.Client, repo, slug string, changes []object.Change) map[string]any {
-	paths := make([]string, 0, len(changes))
-	for _, ch := range changes {
-		paths = append(paths, ch.Path)
-	}
-	notes := map[string]bool{}
-	contextOK := true
-	for start := 0; start < len(paths); start += 20 { // a request takes at most 20 targets
-		end := min(start+20, len(paths))
-		resp, err := c.Board.Context(ctx, connect.NewRequest(&vxv1.ContextRequest{Repo: repo, Effort: slug, Targets: paths[start:end]}))
-		if err != nil {
-			contextOK = false
-			break
-		}
-		for _, n := range resp.Msg.Notes {
-			notes[n.Id] = true
-		}
-	}
+func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.WorkingCopy, changes []object.Change) map[string]any {
+	repo, slug := wc.Config.Repo, wc.Config.Effort
+	paths := changedPaths(changes)
+	me := a.me(ctx, c)
+	claims, onFiles, contextOK := a.othersClaims(ctx, c, repo, slug, me, paths)
+	fresh, freshOK := a.statusFeed(ctx, c, wc, me, paths)
 	inbox, err := c.Board.Inbox(ctx, connect.NewRequest(&vxv1.InboxRequest{}))
-	if err != nil && (!contextOK || len(paths) == 0) {
+	if err != nil && !freshOK && (!contextOK || len(paths) == 0) {
 		return nil
 	}
-	out := map[string]any{"notes_on_changed_files": len(notes)}
+	f := boardFeed{notes: fresh, claims: claims}
+	out := f.json()
+	out["notes_on_changed_files"] = len(onFiles)
 	a.printf("\nBoard:\n")
 	switch {
 	case !contextOK:
 		a.printf("  Could not read notes on your changed files.\n")
-	case len(notes) > 0:
+	case len(onFiles) > 0:
 		shown := paths
 		more := ""
 		if len(shown) > 4 {
 			shown, more = shown[:4], " ..."
 		}
-		a.printf("  %d note(s) on files you changed. Read them: vx context %s%s\n", len(notes), strings.Join(shown, " "), more)
+		a.printf("  %d note(s) on files you changed. Read them: vx context %s%s\n", len(onFiles), strings.Join(shown, " "), more)
 	case len(paths) > 0:
 		a.printf("  No notes on files you changed.\n")
+	}
+	if len(claims) > 0 {
+		a.printf("  Claimed by others (%d), coordinate before you land:\n", len(claims))
+		for i, cl := range claims {
+			if i == 3 {
+				a.printf("    and %d more: vx context %s\n", len(claims)-3, strings.Join(paths[:min(len(paths), 4)], " "))
+				break
+			}
+			a.printf("    %s\n", claimLine(cl))
+		}
+	}
+	if len(fresh) > 0 {
+		a.printf("  %d new note(s) since you last looked. %s\n", len(fresh), boardFraming)
+		for i, n := range fresh {
+			if i == 3 {
+				a.printf("    and %d more: vx board\n", len(fresh)-3)
+				break
+			}
+			a.printf("    [%s] %s %s%s  %s: %s\n", trustOf(n), n.Kind, n.Author.GetRef(), onTargets(n), noteID(n.Id), clip(oneLine(cleanBody(n.Body)), 70))
+		}
+		a.printf("    Full text: vx board\n")
 	}
 	if err != nil {
 		a.printf("  Could not read your inbox: %s\n", client.Message(err))
@@ -521,6 +547,14 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, repo, slug stri
 	}
 	a.printf("  Answer with: vx answer ID \"TEXT\"\n")
 	return out
+}
+
+// onTargets is " on T1, T2" for a note with targets, or "".
+func onTargets(n *vxv1.Note) string {
+	if len(n.Targets) == 0 {
+		return ""
+	}
+	return " on " + strings.Join(n.Targets, ", ")
 }
 
 // inboxSeen is what was in the inbox when vx wait started.
