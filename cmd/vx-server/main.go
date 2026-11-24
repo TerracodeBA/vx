@@ -269,7 +269,7 @@ again even when already indexed). It is safe to run while the server runs.`,
 		Short: "Print the vx-server version",
 		Run:   func(*cobra.Command, []string) { fmt.Println("vx-server " + version.String()) },
 	}
-	cmd.AddCommand(serve, migrate, userAdd, invite, tokenCreate, backfill, versionCmd)
+	cmd.AddCommand(serve, migrate, userAdd, invite, tokenCreate, backfill, superadminCmd(&dbURL), versionCmd)
 	return cmd
 }
 

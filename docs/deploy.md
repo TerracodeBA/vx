@@ -88,6 +88,7 @@ docker compose exec vx vx-server token-create alice      # another token for an 
 `user-add` creates the person, their personal organization (named like them) and a first token.
 
 - `--admin` makes them a site admin: admin on every repository, and allowed to manage people and every organization. Make the first person one.
+- Later, without SQL: `vx-server superadmin grant HANDLE`, `vx-server superadmin revoke HANDLE` and `vx-server superadmin list` (each change goes to the operation log as `person.superadmin_grant` or `person.superadmin_revoke`, from the console).
 - `--org ORG` adds them to an organization as a member. When the organization does not exist yet, it is created with them as its owner, which is how the first person sets up the team's organization.
 
 Members get the organization's default role (`read` unless changed) on its repositories. Owners and admins manage the rest with `vx org`, `vx team` and `vx repo grant`; see [organizations.md](organizations.md).
