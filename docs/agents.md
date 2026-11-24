@@ -61,6 +61,33 @@ When an agent lands without `--run` and others landed first, the server merges t
 - A land that stops (conflicts or failing checks) keeps its `--run`, `--check`, `--new-test` and `--depends-on` flags. After fixing, a plain `vx land` in the same workspace runs them again and says so; `--fresh` lands without them.
 - Semantic conflicts (both sides add the same function in different files) merge as text but break the build. For Go, `vx sync` (also the one inside `vx land --run`) and `vx land` warn when a package now declares a function, method, type, var or const twice, including in `_test.go` files: `Warning: duplicate method App.printClaim in internal/cli (cmd_claim.go, feed.go)`, and `warnings` in `vx sync --json`. Other breakage vx cannot see; `--run` catches it.
 
+## Rebasing an effort
+
+An effort starts from its base branch (usually `main`) at some commit. When `main` moves on (another effort shipped, someone merged a pull request), `vx ship plan` may stop with `Change 42nv-gptt conflicts with main: ...`. Bring the effort up to date inside vx:
+
+```sh
+vx effort rebase            # in a clean working copy of the effort; or: vx effort rebase SLUG --repo REPO
+```
+
+- The server imports the branch's new commits (like `vx repo sync`), then replays the effort's changes, oldest first, onto the branch head, with the same merge rules as a land (keep-both included). `--onto BRANCH` rebases onto another branch and makes it the effort's base branch.
+- Each replayed change keeps its change id, intent, author, agent, model, session, dependencies and evidence, gets a new parent, and is marked **rebased onto `main` at SHA**. Its evidence is shown everywhere as gathered before the rebase: `vx show`, `vx log`, the web UI, the `Vx-Evidence` trailers (`..., before rebase`), the `Vx-Rebased-Onto` trailer and the pull request body.
+- The effort head moves only when every change replayed, with a compare-and-swap. Lands made while a rebase runs or waits on a conflict land on the old head as usual; the rebase replays them too before it finishes, so nothing is lost.
+- Only one rebase per effort runs at a time. `vx status` and `vx effort show` say who is rebasing and where it stopped; the effort page shows it too.
+- Open workspaces keep working: their next `vx sync` (or `vx land`) merges their local edits onto the rebased head. Their old base is still a valid merge base.
+
+When a change conflicts, the rebase stops there (exit code 2), and vx writes that change, replayed onto the branch, into the working copy with diff3 markers (`<<<<<<< change ID ... >>>>>>> main SHA (rebased)`). The working copy is now **rebasing**: `vx land`, `vx sync` and `vx new` refuse until you finish.
+
+```sh
+# edit the files, run the tests
+vx effort rebase --continue   # refuses files that still have markers; may stop again on a later change
+vx effort rebase --abort      # drop the whole rebase; the effort and this working copy go back to where they were
+```
+
+- The resolved change is recorded as "resolved during the rebase by" you (`Vx-Resolved-By` in the commit).
+- A conflicted file that starts with `// Code generated ... DO NOT EDIT.` gets no markers: vx writes the effort's version and says `generated file: regenerate it (for example buf generate) instead of editing the markers`. Resolve its sources (the `.proto`), regenerate, then `--continue`.
+- `vx effort rebase --continue` in another clean working copy of the effort writes the stopped change's conflicts there, so the lead or another agent can take over.
+- Rebase before shipping when `main` moved. After a rebase, `vx ship plan` replays cleanly.
+
 ## Waiting for each other
 
 ```sh

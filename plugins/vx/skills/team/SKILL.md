@@ -72,6 +72,18 @@ vx clone REPO SLUG /tmp/verify-SLUG && cd /tmp/verify-SLUG
 vx ship plan --repo REPO SLUG
 ```
 
+If `vx ship plan` says `Change ID conflicts with main` (main moved on since the effort started, for example another effort shipped), rebase the effort before shipping, in that clean working copy:
+
+```sh
+vx effort rebase              # replays every change onto the latest main; exit 2 means it stopped on a conflict
+# resolve the marked files (regenerate generated files instead of editing their markers), run the tests
+vx effort rebase --continue   # repeat until it says "Rebased effort"; or vx effort rebase --abort
+<build and full test command>
+vx ship plan --repo REPO SLUG # now replays cleanly
+```
+
+Agents can keep landing during a rebase; their changes are replayed before it finishes and their open workspaces sync onto the new head. When you are done, tell them on the board, on the files that conflicted: `vx post decision "Rebased onto main at SHA; run vx sync" --on PATH`.
+
 Show the user the plan (commits, pull request text) and the test result. Ship only when they agree:
 
 ```sh
