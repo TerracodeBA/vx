@@ -13,6 +13,7 @@
   {{end}}
 </table>
 <table class="diff-table diff-s">
+  <colgroup><col class="c-ln"><col><col class="c-ln"><col></colgroup>
   {{range .Rows}}
   {{if eq .Kind "hunk"}}<tr class="hunk"><td class="ln hunk-ln"></td><td colspan="3">{{.Text}}</td></tr>
   {{else}}<tr>
