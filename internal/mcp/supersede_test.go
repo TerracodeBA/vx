@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -43,5 +44,9 @@ func TestMCPSupersedeAndRead(t *testing.T) {
 	}
 	if cx := call[contextOutput](t, bobAgent, "vx_context", with("targets", []string{"a.go"})); len(cx.Notes) != 1 || cx.Notes[0].ID != newer.ID {
 		t.Fatalf("context after superseding = %+v", cx.Notes)
+	}
+	// Permission errors start with a stable phrase.
+	if msg := callErr(t, bobAgent, "vx_post_note", with("kind", "plan", "targets", []string{"a.go"}, "body", "mine now", "supersedes", newer.ID)); !strings.HasPrefix(msg, "permission denied: ") {
+		t.Fatalf("superseding someone else's note = %q", msg)
 	}
 }

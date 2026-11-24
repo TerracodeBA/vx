@@ -77,10 +77,16 @@ func New(baseURL, token string) *Client {
 func Message(err error) string {
 	var ce *connect.Error
 	if errors.As(err, &ce) {
+		if ce.Code() == connect.CodePermissionDenied && !strings.HasPrefix(ce.Message(), permissionDenied) {
+			return permissionDenied + ce.Message() // servers before v0.3 left the phrase out
+		}
 		return ce.Message()
 	}
 	return err.Error()
 }
+
+// permissionDenied starts every permission error (service.PermissionDenied).
+const permissionDenied = "permission denied: "
 
 // Code returns the connect code of err, or 0.
 func Code(err error) connect.Code {

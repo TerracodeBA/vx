@@ -29,7 +29,7 @@ func TestPostSupersedes(t *testing.T) {
 	if out := b.must("context", "limit.Allow"); strings.Contains(out, "Limits are per IP") {
 		t.Errorf("context shows the replaced note:\n%s", out)
 	}
-	if out, code := b.run("post", "plan", "Mine now", "--supersedes", old); code == 0 || !strings.Contains(out, "only replace your own notes") {
+	if out, code := b.run("post", "plan", "Mine now", "--supersedes", old); code == 0 || !strings.Contains(out, "vx: permission denied: note ") || !strings.Contains(out, "only replace your own notes") {
 		t.Errorf("superseding a teammate's note = %d %q", code, out)
 	}
 	if out := a.must("post", "--help"); !strings.Contains(out, "symbols") || !strings.Contains(out, "pkg.Func") || !strings.Contains(out, "directories") {

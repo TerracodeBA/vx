@@ -268,3 +268,4 @@ Every note in a tool result carries its `author`, a `trust` of `self`, `same_per
 - `0` success, `1` error, `2` stopped on conflicts, `3` `vx ask --wait` escalated without an answer, `4` `vx wait` timed out with nothing happening (so `vx wait --timeout 15m && vx sync` syncs only after an event).
 - `vx land` always ends with one result line, after the board feed and warnings: `Landed HASH (CHANGE): INTENT`, or `Not landed: conflicts in N file(s) (exit 2)` (or `Not landed: the effort moved on ...`), so `vx land ... | tail -1` keeps the result. It takes no positional arguments: `vx land "text"` is refused with "did you mean -m" instead of dropping the text.
 - `--json` on every command prints structured output.
+- Permission errors (CLI, API and MCP) always start with `permission denied:`, followed by what happened and what to do, so scripts can grep for it. A repository you cannot read is "not found", never "permission denied".
