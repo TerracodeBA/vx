@@ -15,9 +15,9 @@ Phase 1, in progress.
 | 0 | Project setup, Postgres, migrations, CI | done |
 | 1 | Storage core: blobs, trees, changesets, BLAKE3, three-way merge | done |
 | 2 | Server and CLI: efforts, workspaces, land with compare-and-swap, sync | done |
-| 3 | Git import: follow any branch of a git or GitHub repo | in progress |
-| 4 | Shipping: clean commits, `vx/` branch, pull request | next |
-| 5 | Three Claude Code agents build one feature through vx | next |
+| 3 | Git import: follow any branch of a git or GitHub repo, chosen on the fly | done |
+| 4 | Shipping: replay onto the target, clean commits, `vx/` branch, pull request | done |
+| 5 | Three Claude Code agents build one feature through vx | in progress |
 
 ## Quick start
 
@@ -46,6 +46,44 @@ export VX_TOKEN=<that token>  # in the agent's environment
 export VX_MODEL=claude-opus-5-5
 ```
 
+## Connecting GitHub
+
+```sh
+vx repo create acme/shop-api --github acme/shop-api
+vx effort new "Rate limiting" --repo acme/shop-api            # starts on the default branch
+vx effort new "Hotfix" --repo acme/shop-api --from release/1.4 # any branch, imported on first use
+```
+
+The server talks to GitHub in one of two ways:
+
+- **With `VX_GITHUB_TOKEN`** set for `vx-server`: fetch and push over HTTPS, and pull requests are opened and updated through the API.
+- **Without a token**: fetch and push over SSH with the server user's SSH agent and `known_hosts`, exactly like `git`. `vx ship open` pushes the branch and prints the link where you open the pull request with one click.
+
+vx only ever pushes branches under `vx/`. It never pushes to `main` and never merges.
+
+## Shipping
+
+```sh
+vx ship plan            # the commits this effort would ship, replayed onto the latest target
+vx ship open --draft    # push vx/<effort>, open or update the pull request
+vx ship list
+```
+
+Each landed change becomes one commit with its intent as the message and provenance in trailers:
+
+```
+Add rate limit middleware
+
+Vx-Change-Id: kxqr-7m2p
+Vx-Effort: rate-limiting
+Vx-Agent: agent:alice/backend
+Vx-On-Behalf-Of: user:alice
+Vx-Model: claude-opus-5-5
+Vx-Evidence: go test ./... pass (142 passed, 0 failed)
+```
+
+The commit author is the person the agent works for. If the target branch moved since the effort started, every change is merged onto its new head first, so the pull request is up to date with no extra step.
+
 ## Commands
 
 | Command | What it does |
@@ -64,6 +102,7 @@ export VX_MODEL=claude-opus-5-5
 | `vx sync` | Bring in others' changes, keeping your edits |
 | `vx abandon` | Close a workspace without landing |
 | `vx log [--files]` / `vx show REF` | History with intent, agent and evidence |
+| `vx ship plan` / `vx ship open [--draft] [--to BRANCH]` | Ship the effort as a pull request |
 
 Every command accepts `--json` for agents. Exit code 2 means a land or sync stopped on conflicts.
 
