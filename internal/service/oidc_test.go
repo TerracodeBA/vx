@@ -13,6 +13,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/oidc"
 	"github.com/TerracodeBA/vx/internal/oidc/oidctest"
+	"github.com/TerracodeBA/vx/internal/ratelimit"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 	"github.com/TerracodeBA/vx/internal/store/storetest"
@@ -177,6 +178,15 @@ func TestSSOSignInAndRequire(t *testing.T) {
 	}
 	if _, _, err := svc.Authorize(ctx, owner, "acme/api", service.RoleRead); err != nil {
 		t.Fatalf("owner: %v", err)
+	}
+	// A superadmin without a role still gets "not found" (#33), never a
+	// single sign-on prompt that would reveal the repository.
+	root := e.personWithToken("root", "root@vx.test")
+	if _, _, err := svc.ConsoleSetSuperadmin(ctx, "root", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Authorize(ctx, root, "acme/api", service.RoleRead); code(err) != service.CodeNotFound {
+		t.Fatalf("superadmin: %v", err)
 	}
 	internal := e.bob
 	internal.TokenID = [16]byte{}
@@ -393,5 +403,34 @@ func TestSSOOrgFor(t *testing.T) {
 	}
 	if _, err := e.svc.SSOOrgFor(e.ctx, "acme"); code(err) != service.CodeNotFound {
 		t.Errorf("after removing: %v", err)
+	}
+}
+
+// TestSSOSignupRateLimited: creating accounts through single sign-on takes
+// from the same sign-up rate as GitHub (r3-ops' AllowSignup); people who
+// already have an account still sign in when it is spent.
+func TestSSOSignupRateLimited(t *testing.T) {
+	e := newSSOEnv(t)
+	if err := e.configure(false, "acme.test"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1000, 0)
+	l := ratelimit.New(ratelimit.Config{ratelimit.SignUp: {PerSecond: 1.0 / 60, Burst: 1}})
+	l.Now = func() time.Time { return now }
+	e.svc.Limits = l
+	e.ctx = service.WithClientIP(e.ctx, "203.0.113.9")
+	first, err := e.signIn(user("one-sub", "one@acme.test"), nil)
+	if err != nil || !first.IsNew {
+		t.Fatalf("first sign-up: %+v %v", first, err)
+	}
+	_, err = e.signIn(user("two-sub", "two@acme.test"), nil)
+	if code(err) != service.CodeTooMany || !strings.Contains(err.Error(), "slow down: too many new accounts from your address") {
+		t.Fatalf("second sign-up from the same address: %v", err)
+	}
+	if _, err := e.svc.Store.PrincipalByHandle(e.ctx, "two"); err == nil {
+		t.Fatal("a refused sign-up created the person")
+	}
+	if again, err := e.signIn(user("one-sub", "one@acme.test"), nil); err != nil || again.IsNew {
+		t.Fatalf("existing person while the rate is spent: %+v %v", again, err)
 	}
 }
