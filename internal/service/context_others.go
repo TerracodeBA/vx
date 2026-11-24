@@ -114,7 +114,7 @@ func (s *Service) otherEffort(ctx context.Context, repoID uuid.UUID, e store.Eff
 	}
 	touches := len(act.ChangedPaths) > 0 || len(act.Claims) > 0
 	rows, err := s.Store.ListNotes(ctx, store.NoteFilter{
-		EffortID: e.ID, Kinds: []string{string(NoteInterface), string(NoteDecision)}, Limit: otherNotesScan,
+		EffortID: e.ID, Kinds: []string{string(NoteInterface), string(NoteDecision)}, Current: true, Limit: otherNotesScan,
 	})
 	if err != nil {
 		return act, false, err

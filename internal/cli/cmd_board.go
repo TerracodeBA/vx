@@ -523,6 +523,9 @@ separately, so their changes do not show up in vx sync.`,
 				}
 			}
 			a.printOtherEfforts(m.OtherEfforts, a.me(ctx, c))
+			for _, o := range m.OtherEfforts {
+				a.markRead(ctx, c, o.Notes...)
+			}
 			a.emit(m)
 			return nil
 		},
@@ -641,7 +644,8 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.Wo
 	repo, slug := wc.Config.Repo, wc.Config.Effort
 	paths := changedPaths(changes)
 	me := a.me(ctx, c)
-	claims, notesOnFiles, contextOK := a.othersClaims(ctx, c, repo, slug, me, paths)
+	pc, contextOK := a.contextFor(ctx, c, repo, slug, me, paths)
+	claims, notesOnFiles, others := pc.claims, pc.notes, pc.others
 	var onFiles []*vxv1.Note // unread notes by others: your own are never news
 	for _, n := range notesOnFiles {
 		if !n.Read && n.Trust != "self" && (me == "" || n.Author.GetRef() != me) {
@@ -656,6 +660,7 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.Wo
 	f := boardFeed{notes: fresh, claims: claims}
 	out := f.json()
 	out["notes_on_changed_files"] = len(onFiles)
+	out["other_efforts"] = otherEffortsJSON(others)
 	a.printf("\nBoard:\n")
 	switch {
 	case !contextOK:
@@ -679,6 +684,17 @@ func (a *App) boardStatus(ctx context.Context, c *client.Client, wc *workcopy.Wo
 			}
 			a.printf("    %s\n", claimLine(cl))
 		}
+	}
+	if len(others) > 0 {
+		a.printf("  Other efforts on files you changed (%d); they ship separately, coordinate with their owners:\n", len(others))
+		for i, o := range others {
+			if i == 3 {
+				a.printf("    and %d more\n", len(others)-3)
+				break
+			}
+			a.printf("    %s\n", otherEffortLine(o))
+		}
+		a.printf("    Details: vx context %s\n", strings.Join(paths[:min(len(paths), 4)], " "))
 	}
 	if len(fresh) > 0 {
 		a.printf("  %d new note(s) since you last looked. %s\n", len(fresh), boardFraming)
