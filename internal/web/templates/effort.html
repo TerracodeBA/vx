@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}{{$wc := .WorkColor}}
-<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{q $repo}}">{{$repo}}</a> / <span>{{.Effort.Name}}</span></nav>
+<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{$repo}}">{{$repo}}</a> / <span>{{.Effort.Name}}</span></nav>
 
 <div class="head head-row">
   <div>
@@ -14,8 +14,8 @@
     </div>
   </div>
   <div class="head-actions">
-    <span class="live" data-poll="/ui/effort/head?repo={{q $repo}}&amp;slug={{q $slug}}" data-key="{{$repo}}/{{$slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span>Live</span>
-    <a class="btn primary" href="/ui/ship?repo={{q $repo}}&amp;slug={{q $slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
+    <span class="live" data-poll="/ui/effort/head?repo={{$repo}}&amp;slug={{$slug}}" data-key="{{$repo}}/{{$slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span>Live</span>
+    <a class="btn primary" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
   </div>
 </div>
 
@@ -41,7 +41,7 @@ vx land --run "go test ./..."</pre></div>
         <span class="dot" aria-hidden="true"></span>
         <div class="land-body">
           <div class="land-top">
-            <a class="land-title" href="/ui/change?repo={{q .Repo}}&amp;ref={{.Hash}}">{{.Title}}</a>
+            <a class="land-title" href="/ui/change?repo={{.Repo}}&amp;ref={{.Hash}}">{{.Title}}</a>
             <span class="mono muted">{{.ChangeID}}</span>
           </div>
           <div class="land-meta">

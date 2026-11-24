@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$repo := .Repo.Name}}
-<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{q $repo}}">{{$repo}}</a>{{if .Effort}} / <a href="/ui/effort?repo={{q $repo}}&amp;slug={{q .Effort.Slug}}">{{.Effort.Name}}</a>{{end}} / <span class="mono">{{.C.ChangeID}}</span></nav>
+<nav class="crumbs"><a href="/ui">Efforts</a> / <a href="/ui/repo?name={{$repo}}">{{$repo}}</a>{{if .Effort}} / <a href="/ui/effort?repo={{$repo}}&amp;slug={{.Effort.Slug}}">{{.Effort.Name}}</a>{{end}} / <span class="mono">{{.C.ChangeID}}</span></nav>
 <div class="head">
   <h1>{{.Title}}</h1>
   {{with rest .C.Intent}}<p class="goal pre">{{.}}</p>{{end}}
@@ -37,7 +37,7 @@
         {{if .C.Author.Session}}<dt>Session</dt><dd class="mono">{{.C.Author.Session}}</dd>{{end}}
         <dt>Landed</dt><dd>{{ago .C.CreatedAt}}</dd>
         <dt>Origin</dt><dd>{{.C.Origin}}{{if .C.GitSHA}} · <span class="mono">{{short .C.GitSHA}}</span>{{end}}</dd>
-        {{range .C.Parents}}<dt>Parent</dt><dd><a class="mono" href="/ui/change?repo={{q $repo}}&amp;ref={{.}}">{{short .}}</a></dd>{{end}}
+        {{range .C.Parents}}<dt>Parent</dt><dd><a class="mono" href="/ui/change?repo={{$repo}}&amp;ref={{.}}">{{short .}}</a></dd>{{end}}
       </dl>
     </section>
     <section class="side-card">

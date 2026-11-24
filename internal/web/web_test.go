@@ -2,12 +2,14 @@ package web_test
 
 import (
 	"context"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -31,12 +33,12 @@ func TestPages(t *testing.T) {
 	agent, _ := svc.ResolveActor(ctx, ag)
 	token, _ := st.CreateToken(ctx, alice.ID, "web")
 
-	repo, err := svc.CreateRepo(ctx, human, service.CreateRepoInput{Name: "shop"})
+	repo, err := svc.CreateRepo(ctx, human, service.CreateRepoInput{Name: "acme/shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eff, _ := svc.CreateEffort(ctx, human, service.CreateEffortInput{Repo: "shop", Name: "Rate limiting", Goal: "Limit <logins>"})
-	ws, _ := svc.OpenWorkspace(ctx, agent, "shop", eff.Slug, "Add limiter")
+	eff, _ := svc.CreateEffort(ctx, human, service.CreateEffortInput{Repo: "acme/shop", Name: "Rate limiting", Goal: "Limit <logins>"})
+	ws, _ := svc.OpenWorkspace(ctx, agent, "acme/shop", eff.Slug, "Add limiter")
 	row, _ := st.GetChangeset(ctx, repo.ID, ws.Workspace.Base)
 	h, _ := blobs.Put(ctx, hash.KindBlob, []byte("package limit\n\nfunc Allow() bool { return true }\n"))
 	tree, _ := object.ApplyChanges(ctx, blobs, row.Tree, []object.Change{{Path: "limit/limit.go", Op: object.OpAdd, New: object.File{Hash: h, Mode: object.ModeFile}}})
@@ -45,7 +47,7 @@ func TestPages(t *testing.T) {
 	if err != nil || !res.Landed {
 		t.Fatal(err)
 	}
-	svc.OpenWorkspace(ctx, agent, "shop", eff.Slug, "Wire limiter into login")
+	svc.OpenWorkspace(ctx, agent, "acme/shop", eff.Slug, "Wire limiter into login")
 
 	mux := http.NewServeMux()
 	if err := web.Mount(mux, svc, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
@@ -83,11 +85,11 @@ func TestPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, wants := range map[string][]string{
-		"/ui":                                   {"Rate limiting", "1 change", "1 working now"},
-		"/ui/repo?name=shop":                    {"Branches vx follows", "main"},
-		"/ui/effort?repo=shop&slug=" + eff.Slug: {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5"},
-		"/ui/change?repo=shop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", "func Allow() bool", "run by vx"},
-		"/ui/ship?repo=shop&slug=" + eff.Slug:                {"has no git upstream"},
+		"/ui":                       {"Rate limiting", "1 change", "1 working now"},
+		"/ui/repo?name=acme%2Fshop": {"Branches vx follows", "main"},
+		"/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug:              {"Add limiter", "alice/backend", "run by vx", "Wire limiter into login", "Limit &lt;logins&gt;", "claude-opus-5-5"},
+		"/ui/change?repo=acme%2Fshop&ref=" + res.Changeset.ChangeID: {"limit/limit.go", "func Allow() bool", "run by vx"},
+		"/ui/ship?repo=acme%2Fshop&slug=" + eff.Slug:                {"has no git upstream"},
 	} {
 		code, body := get(path)
 		if code != 200 {
@@ -102,10 +104,34 @@ func TestPages(t *testing.T) {
 			t.Errorf("%s: unescaped user content", path)
 		}
 	}
-	if code, body := get("/ui/effort/head?repo=shop&slug=" + eff.Slug); code != 200 || !strings.HasPrefix(body, res.Changeset.Hash.String()) {
+	// Follow real links from page to page, as a person clicking would.
+	_, home := get("/ui")
+	link := regexp.MustCompile(`href="(/ui/effort\?[^"]+)"`).FindStringSubmatch(home)
+	if link == nil {
+		t.Fatal("home has no effort link")
+	}
+	effortURL := html.UnescapeString(link[1])
+	code, body := get(effortURL)
+	if code != 200 || !strings.Contains(body, "Add limiter") {
+		t.Fatalf("following %s: %d", effortURL, code)
+	}
+	for _, re := range []string{`href="(/ui/change\?[^"]+)"`, `href="(/ui/ship\?[^"]+)"`, `href="(/ui/repo\?[^"]+)"`} {
+		m := regexp.MustCompile(re).FindStringSubmatch(body)
+		if m == nil {
+			t.Fatalf("effort page has no link matching %s", re)
+		}
+		if code, page := get(html.UnescapeString(m[1])); code != 200 || strings.Contains(page, "Something went wrong") {
+			t.Fatalf("following %s: %d", m[1], code)
+		}
+	}
+	// A link encoded twice still works.
+	if code, _ := get("/ui/repo?name=acme%252Fshop"); code != 200 {
+		t.Fatalf("double-encoded link = %d", code)
+	}
+	if code, body := get("/ui/effort/head?repo=acme%2Fshop&slug=" + eff.Slug); code != 200 || !strings.HasPrefix(body, res.Changeset.Hash.String()) {
 		t.Fatalf("head = %d %s", code, body)
 	}
-	if code, _ := get("/ui/effort?repo=shop&slug=nope"); code != 404 {
+	if code, _ := get("/ui/effort?repo=acme%2Fshop&slug=nope"); code != 404 {
 		t.Fatalf("missing effort = %d", code)
 	}
 	if code, body := get("/ui/static/vx.css"); code != 200 || !strings.Contains(body, "--accent") {

@@ -14,7 +14,7 @@ vx effort new "Rate limiting" --repo acme/shop-api</pre>
 {{range .Repos}}
 <section class="repo-block">
   <div class="repo-title">
-    <h2><a href="/ui/repo?name={{q .Name}}">{{.Name}}</a></h2>
+    <h2><a href="/ui/repo?name={{.Name}}">{{.Name}}</a></h2>
     <span class="chip">{{.Provider}}{{if .Remote}} · {{.Remote}}{{end}}</span>
   </div>
   {{if .Efforts}}
@@ -22,7 +22,7 @@ vx effort new "Rate limiting" --repo acme/shop-api</pre>
     {{$repo := .Name}}
     {{range .Efforts}}
     <li>
-      <a class="effort-card" href="/ui/effort?repo={{q $repo}}&amp;slug={{q .Slug}}">
+      <a class="effort-card" href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}">
         <div class="effort-top">
           <span class="effort-name">{{.Name}}</span>
           <span class="state state-{{.State}}">{{.State}}</span>

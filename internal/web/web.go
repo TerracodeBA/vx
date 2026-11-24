@@ -236,7 +236,7 @@ func (u *UI) ref(r *http.Request, id uuid.UUID) string {
 
 func (u *UI) repo(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repo, err := u.svc.Store.RepoByName(ctx, r.URL.Query().Get("name"))
+	repo, err := u.svc.Store.RepoByName(ctx, param(r, "name"))
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -281,7 +281,7 @@ type agentStat struct {
 
 func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repoName, slug := r.URL.Query().Get("repo"), r.URL.Query().Get("slug")
+	repoName, slug := param(r, "repo"), param(r, "slug")
 	v, err := u.svc.GetEffort(ctx, repoName, slug)
 	if err != nil {
 		u.fail(w, err)
@@ -383,7 +383,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 
 // effortHead lets the page poll cheaply for changes.
 func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, _ service.Actor) {
-	v, err := u.svc.GetEffort(r.Context(), r.URL.Query().Get("repo"), r.URL.Query().Get("slug"))
+	v, err := u.svc.GetEffort(r.Context(), param(r, "repo"), param(r, "slug"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -416,7 +416,7 @@ type fileDiff struct {
 
 func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repoName, ref := r.URL.Query().Get("repo"), r.URL.Query().Get("ref")
+	repoName, ref := param(r, "repo"), param(r, "ref")
 	repo, e, err := u.svc.GetChangeset(ctx, repoName, ref)
 	if err != nil {
 		u.fail(w, err)
@@ -524,7 +524,7 @@ func renderHunks(edits []merge.Edit, a, b []string, context int) []diffLine {
 
 func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repoName, slug, target := r.URL.Query().Get("repo"), r.URL.Query().Get("slug"), r.URL.Query().Get("to")
+	repoName, slug, target := param(r, "repo"), param(r, "slug"), param(r, "to")
 	v, err := u.svc.GetEffort(ctx, repoName, slug)
 	if err != nil {
 		u.fail(w, err)
@@ -566,6 +566,19 @@ func (u *UI) shipPost(w http.ResponseWriter, r *http.Request, actor service.Acto
 }
 
 // ---------- helpers ----------
+
+// param reads a query parameter. Names never contain "%", so a value that
+// still has one was encoded twice (for example by a copied link) and is
+// decoded once more.
+func param(r *http.Request, key string) string {
+	v := r.URL.Query().Get(key)
+	if strings.Contains(v, "%") {
+		if d, err := url.QueryUnescape(v); err == nil {
+			return d
+		}
+	}
+	return v
+}
 
 func shortHash(v any) string {
 	var s string
