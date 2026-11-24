@@ -68,6 +68,7 @@ var changeIDTrailer = regexp.MustCompile(`(?m)^Vx-Change-Id:\s*(\S+)\s*$`)
 // returns how many efforts it marked; errors for one effort are logged and
 // do not stop the others.
 func (s *Service) markMergedEfforts(ctx context.Context, repo store.Repo, branch string) int {
+	s.markMergedShipments(ctx, repo, branch)
 	b, err := s.Store.GetBranch(ctx, repo.ID, branch)
 	if err != nil {
 		return 0

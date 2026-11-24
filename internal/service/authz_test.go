@@ -315,6 +315,20 @@ var authzOps = []authzOp{
 		_, err := e.svc.RejectReview(e.ctx, a, e.pendingReview(), "not now")
 		return pastAccess(a, err)
 	}},
+	{"PlanSplit", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.PlanSplit(e.ctx, a, service.SplitInput{Repo: "acme/shop", Effort: e.eff.Slug, Mode: service.SplitStacked})
+		if isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: acme/shop has no git upstream to ship to
+		}
+		return err
+	}},
+	{"OpenShipment split", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.OpenShipment(e.ctx, a, service.ShipInput{Repo: "acme/shop", Effort: e.eff.Slug, Split: service.SplitIndependent})
+		if isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: this server has no git bridge
+		}
+		return err
+	}},
 	{"OpenShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.OpenShipment(e.ctx, a, service.ShipInput{Repo: "acme/shop", Effort: e.eff.Slug})
 		if isCode(err, service.CodeFailedPrecondition) {

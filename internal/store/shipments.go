@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/TerracodeBA/vx/internal/hash"
 )
@@ -21,10 +23,15 @@ type Shipment struct {
 	ProviderRef string
 	URL         string
 	State       string
-	CreatedBy   uuid.UUID
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	Changes     []ShipmentChange
+	// Split is how the parts of an effort shipped as several pull
+	// requests relate: "independent" or "stacked"; empty for one PR.
+	Split string
+	// Part is the 1-based position among the effort's parts; 0 for one PR.
+	Part      int
+	CreatedBy uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Changes   []ShipmentChange
 }
 
 // ShipmentChange is one changeset in a shipment and the commit made for it.
@@ -35,12 +42,12 @@ type ShipmentChange struct {
 	GitSHA    string
 }
 
-const shipmentCols = `id, effort_id, title, branch, target, base_git_sha, head_git_sha, provider_ref, url, state, created_by, created_at, updated_at`
+const shipmentCols = `id, effort_id, title, branch, target, base_git_sha, head_git_sha, provider_ref, url, state, split, part, created_by, created_at, updated_at`
 
 func scanShipment(row interface{ Scan(...any) error }) (Shipment, error) {
 	var s Shipment
 	err := row.Scan(&s.ID, &s.EffortID, &s.Title, &s.Branch, &s.Target, &s.BaseGitSHA, &s.HeadGitSHA,
-		&s.ProviderRef, &s.URL, &s.State, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+		&s.ProviderRef, &s.URL, &s.State, &s.Split, &s.Part, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
 	return s, err
 }
 
@@ -48,14 +55,14 @@ func scanShipment(row interface{ Scan(...any) error }) (Shipment, error) {
 // and branch, replacing its change list.
 func (q Q) SaveShipment(ctx context.Context, s Shipment) (Shipment, error) {
 	row := q.db.QueryRow(ctx, `insert into shipments
-		(effort_id, title, branch, target, base_git_sha, head_git_sha, provider_ref, url, state, created_by)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		(effort_id, title, branch, target, base_git_sha, head_git_sha, provider_ref, url, state, split, part, created_by)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		on conflict (effort_id, branch) do update set
 			title = excluded.title, target = excluded.target, base_git_sha = excluded.base_git_sha,
 			head_git_sha = excluded.head_git_sha, provider_ref = excluded.provider_ref, url = excluded.url,
-			state = excluded.state, updated_at = now()
+			state = excluded.state, split = excluded.split, part = excluded.part, updated_at = now()
 		returning `+shipmentCols,
-		s.EffortID, s.Title, s.Branch, s.Target, s.BaseGitSHA, s.HeadGitSHA, s.ProviderRef, s.URL, s.State, s.CreatedBy)
+		s.EffortID, s.Title, s.Branch, s.Target, s.BaseGitSHA, s.HeadGitSHA, s.ProviderRef, s.URL, s.State, s.Split, s.Part, s.CreatedBy)
 	out, err := scanShipment(row)
 	if err != nil {
 		return Shipment{}, err
@@ -73,12 +80,51 @@ func (q Q) SaveShipment(ctx context.Context, s Shipment) (Shipment, error) {
 	return out, nil
 }
 
-// ListShipments returns an effort's shipments with their changes.
+// ListShipments returns an effort's shipments with their changes: oldest
+// first, the parts of a split in part order.
 func (q Q) ListShipments(ctx context.Context, effortID uuid.UUID) ([]Shipment, error) {
-	rows, err := q.db.Query(ctx, `select `+shipmentCols+` from shipments where effort_id = $1 order by created_at`, effortID)
+	rows, err := q.db.Query(ctx, `select `+shipmentCols+` from shipments where effort_id = $1 order by created_at, part`, effortID)
 	if err != nil {
 		return nil, err
 	}
+	return q.shipmentsWithChanges(ctx, rows)
+}
+
+// ShipmentByBranch returns the shipment of an effort in repoID pushed to
+// branch, with its changes.
+func (q Q) ShipmentByBranch(ctx context.Context, repoID uuid.UUID, branch string) (Shipment, error) {
+	rows, err := q.db.Query(ctx, `select `+prefixCols("s.", shipmentCols)+` from shipments s
+		join efforts e on e.id = s.effort_id where e.repo_id = $1 and s.branch = $2
+		order by s.updated_at desc limit 1`, repoID, branch)
+	if err != nil {
+		return Shipment{}, err
+	}
+	out, err := q.shipmentsWithChanges(ctx, rows)
+	if err != nil {
+		return Shipment{}, err
+	}
+	if len(out) == 0 {
+		return Shipment{}, ErrNotFound
+	}
+	return out[0], nil
+}
+
+// SetShipmentState sets one shipment's state (a part of a split merged on
+// its own, or left out of a newer split).
+func (q Q) SetShipmentState(ctx context.Context, id uuid.UUID, state string) error {
+	_, err := q.db.Exec(ctx, `update shipments set state = $1, updated_at = now() where id = $2`, state, id)
+	return err
+}
+
+func prefixCols(prefix, cols string) string {
+	parts := strings.Split(cols, ", ")
+	for i, c := range parts {
+		parts[i] = prefix + c
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (q Q) shipmentsWithChanges(ctx context.Context, rows pgx.Rows) ([]Shipment, error) {
 	var out []Shipment
 	for rows.Next() {
 		s, err := scanShipment(rows)

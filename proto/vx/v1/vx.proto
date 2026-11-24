@@ -597,6 +597,8 @@ service ShipService {
   // latest head of the target branch.
   rpc PlanShipment(PlanShipmentRequest) returns (PlanShipmentResponse) {}
   // OpenShipment pushes vx/<effort> and opens or updates the pull request.
+  // With split, it pushes vx/<effort>/<n>-<name> and opens or updates one
+  // pull request per part.
   rpc OpenShipment(OpenShipmentRequest) returns (OpenShipmentResponse) {}
   rpc ListShipments(ListShipmentsRequest) returns (ListShipmentsResponse) {}
 }
@@ -617,6 +619,37 @@ message ShipmentPlan {
   repeated Conflict conflicts = 7;
   string conflicted_change = 8; // change id where the replay stopped
   repeated Warning warnings = 9; // problems found in the shipped tree
+  // A split: one pull request per group.
+  string split = 10; // independent, stacked; empty: one pull request
+  repeated ShipGroup groups = 11;
+  bool suggested = 12; // vx chose the grouping
+  repeated string problems = 13; // why the split cannot ship as grouped
+  repeated string notes = 14;
+  repeated Shipment stale = 15; // open parts of an earlier split this one leaves out
+}
+
+// ShipGroup is one part of a split: one branch and one pull request.
+message ShipGroup {
+  int32 part = 1; // 1-based
+  string name = 2;
+  string title = 3;
+  string branch = 4; // vx/<effort>/<n>-<name>
+  string base = 5; // the target, or the previous part's branch (stacked)
+  repeated ShipStep steps = 6;
+  repeated string files = 7;
+  repeated string why = 8; // why these changes are together
+  repeated Conflict conflicts = 9;
+  string conflicted_change = 10;
+  string problem = 11; // why the part cannot ship as grouped
+  repeated Warning warnings = 12;
+  string body = 13;
+  string pr_number = 14; // of the shipment this part updates
+  string url = 15;
+}
+
+// ShipGroupInput is one part of a person's grouping.
+message ShipGroupInput {
+  repeated string change_ids = 1; // ids or unique prefixes
 }
 
 message Shipment {
@@ -632,12 +665,16 @@ message Shipment {
   string state = 10; // open, draft, pushed, merged, closed
   repeated string change_ids = 11;
   string updated_at = 12;
+  string split = 13; // independent, stacked; empty: one pull request
+  int32 part = 14; // 1-based part of a split; 0: one pull request
 }
 
 message PlanShipmentRequest {
   string repo = 1;
   string effort = 2;
   string target = 3; // empty: the effort's base branch
+  string split = 4; // independent, stacked; empty: one pull request
+  repeated ShipGroupInput groups = 5; // a person's grouping; empty: vx suggests
 }
 
 message PlanShipmentResponse {
@@ -651,12 +688,16 @@ message OpenShipmentRequest {
   string title = 4; // empty: the effort name
   string body = 5; // empty: generated from intents and evidence
   bool draft = 6;
+  string split = 7; // independent, stacked; empty: one pull request
+  repeated ShipGroupInput groups = 8; // a person's grouping; empty: vx suggests
 }
 
 message OpenShipmentResponse {
-  Shipment shipment = 1;
+  Shipment shipment = 1; // the first part of a split
   ShipmentPlan plan = 2;
   bool pr_updated = 3; // an open PR existed and was updated
+  repeated Shipment shipments = 4; // a split's parts, in order
+  repeated bool prs_updated = 5; // per part
 }
 
 message ListShipmentsRequest {

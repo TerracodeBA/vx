@@ -43,8 +43,6 @@ const (
 	PublicServiceName = "vx.v1.PublicService"
 	// RulesServiceName is the fully-qualified name of the RulesService service.
 	RulesServiceName = "vx.v1.RulesService"
-	// ReviewServiceName is the fully-qualified name of the ReviewService service.
-	ReviewServiceName = "vx.v1.ReviewService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -70,11 +68,6 @@ const (
 	// AuthServiceCreateLoginCodeProcedure is the fully-qualified name of the AuthService's
 	// CreateLoginCode RPC.
 	AuthServiceCreateLoginCodeProcedure = "/vx.v1.AuthService/CreateLoginCode"
-	// AuthServiceGetAgentProcedure is the fully-qualified name of the AuthService's GetAgent RPC.
-	AuthServiceGetAgentProcedure = "/vx.v1.AuthService/GetAgent"
-	// AuthServiceSetAgentScopeProcedure is the fully-qualified name of the AuthService's SetAgentScope
-	// RPC.
-	AuthServiceSetAgentScopeProcedure = "/vx.v1.AuthService/SetAgentScope"
 	// ObjectServiceMissingObjectsProcedure is the fully-qualified name of the ObjectService's
 	// MissingObjects RPC.
 	ObjectServiceMissingObjectsProcedure = "/vx.v1.ObjectService/MissingObjects"
@@ -228,17 +221,6 @@ const (
 	// RulesServiceListReservationsProcedure is the fully-qualified name of the RulesService's
 	// ListReservations RPC.
 	RulesServiceListReservationsProcedure = "/vx.v1.RulesService/ListReservations"
-	// ReviewServiceListReviewsProcedure is the fully-qualified name of the ReviewService's ListReviews
-	// RPC.
-	ReviewServiceListReviewsProcedure = "/vx.v1.ReviewService/ListReviews"
-	// ReviewServiceGetReviewProcedure is the fully-qualified name of the ReviewService's GetReview RPC.
-	ReviewServiceGetReviewProcedure = "/vx.v1.ReviewService/GetReview"
-	// ReviewServiceApproveReviewProcedure is the fully-qualified name of the ReviewService's
-	// ApproveReview RPC.
-	ReviewServiceApproveReviewProcedure = "/vx.v1.ReviewService/ApproveReview"
-	// ReviewServiceRejectReviewProcedure is the fully-qualified name of the ReviewService's
-	// RejectReview RPC.
-	ReviewServiceRejectReviewProcedure = "/vx.v1.ReviewService/RejectReview"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -262,13 +244,6 @@ type AuthServiceClient interface {
 	// CreateLoginCode returns a one-time code that signs the caller in to the
 	// web UI (vx ui). It expires after two minutes and works once.
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
-	// GetAgent returns an agent with its path scope, budgets and today's
-	// usage. An agent may read its own (agent empty), a person their agents',
-	// a site admin anyone's.
-	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
-	// SetAgentScope changes an agent's path scope and budgets. Only the
-	// agent's person or a site admin may; an agent cannot, not even its own.
-	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the vx.v1.AuthService service. By default, it uses
@@ -324,18 +299,6 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
 			connect.WithClientOptions(opts...),
 		),
-		getAgent: connect.NewClient[v1.GetAgentRequest, v1.GetAgentResponse](
-			httpClient,
-			baseURL+AuthServiceGetAgentProcedure,
-			connect.WithSchema(authServiceMethods.ByName("GetAgent")),
-			connect.WithClientOptions(opts...),
-		),
-		setAgentScope: connect.NewClient[v1.SetAgentScopeRequest, v1.SetAgentScopeResponse](
-			httpClient,
-			baseURL+AuthServiceSetAgentScopeProcedure,
-			connect.WithSchema(authServiceMethods.ByName("SetAgentScope")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
@@ -348,8 +311,6 @@ type authServiceClient struct {
 	revokeToken     *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
 	createToken     *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
 	createLoginCode *connect.Client[v1.CreateLoginCodeRequest, v1.CreateLoginCodeResponse]
-	getAgent        *connect.Client[v1.GetAgentRequest, v1.GetAgentResponse]
-	setAgentScope   *connect.Client[v1.SetAgentScopeRequest, v1.SetAgentScopeResponse]
 }
 
 // WhoAmI calls vx.v1.AuthService.WhoAmI.
@@ -387,16 +348,6 @@ func (c *authServiceClient) CreateLoginCode(ctx context.Context, req *connect.Re
 	return c.createLoginCode.CallUnary(ctx, req)
 }
 
-// GetAgent calls vx.v1.AuthService.GetAgent.
-func (c *authServiceClient) GetAgent(ctx context.Context, req *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error) {
-	return c.getAgent.CallUnary(ctx, req)
-}
-
-// SetAgentScope calls vx.v1.AuthService.SetAgentScope.
-func (c *authServiceClient) SetAgentScope(ctx context.Context, req *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error) {
-	return c.setAgentScope.CallUnary(ctx, req)
-}
-
 // AuthServiceHandler is an implementation of the vx.v1.AuthService service.
 type AuthServiceHandler interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
@@ -418,13 +369,6 @@ type AuthServiceHandler interface {
 	// CreateLoginCode returns a one-time code that signs the caller in to the
 	// web UI (vx ui). It expires after two minutes and works once.
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
-	// GetAgent returns an agent with its path scope, budgets and today's
-	// usage. An agent may read its own (agent empty), a person their agents',
-	// a site admin anyone's.
-	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
-	// SetAgentScope changes an agent's path scope and budgets. Only the
-	// agent's person or a site admin may; an agent cannot, not even its own.
-	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -476,18 +420,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("CreateLoginCode")),
 		connect.WithHandlerOptions(opts...),
 	)
-	authServiceGetAgentHandler := connect.NewUnaryHandler(
-		AuthServiceGetAgentProcedure,
-		svc.GetAgent,
-		connect.WithSchema(authServiceMethods.ByName("GetAgent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authServiceSetAgentScopeHandler := connect.NewUnaryHandler(
-		AuthServiceSetAgentScopeProcedure,
-		svc.SetAgentScope,
-		connect.WithSchema(authServiceMethods.ByName("SetAgentScope")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/vx.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceWhoAmIProcedure:
@@ -504,10 +436,6 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceCreateTokenHandler.ServeHTTP(w, r)
 		case AuthServiceCreateLoginCodeProcedure:
 			authServiceCreateLoginCodeHandler.ServeHTTP(w, r)
-		case AuthServiceGetAgentProcedure:
-			authServiceGetAgentHandler.ServeHTTP(w, r)
-		case AuthServiceSetAgentScopeProcedure:
-			authServiceSetAgentScopeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -543,14 +471,6 @@ func (UnimplementedAuthServiceHandler) CreateToken(context.Context, *connect.Req
 
 func (UnimplementedAuthServiceHandler) CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.CreateLoginCode is not implemented"))
-}
-
-func (UnimplementedAuthServiceHandler) GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.GetAgent is not implemented"))
-}
-
-func (UnimplementedAuthServiceHandler) SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.AuthService.SetAgentScope is not implemented"))
 }
 
 // ObjectServiceClient is a client for the vx.v1.ObjectService service.
@@ -1393,6 +1313,8 @@ type ShipServiceClient interface {
 	// latest head of the target branch.
 	PlanShipment(context.Context, *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error)
 	// OpenShipment pushes vx/<effort> and opens or updates the pull request.
+	// With split, it pushes vx/<effort>/<n>-<name> and opens or updates one
+	// pull request per part.
 	OpenShipment(context.Context, *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error)
 	ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error)
 }
@@ -1457,6 +1379,8 @@ type ShipServiceHandler interface {
 	// latest head of the target branch.
 	PlanShipment(context.Context, *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error)
 	// OpenShipment pushes vx/<effort> and opens or updates the pull request.
+	// With split, it pushes vx/<effort>/<n>-<name> and opens or updates one
+	// pull request per part.
 	OpenShipment(context.Context, *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error)
 	ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error)
 }
@@ -2655,156 +2579,4 @@ func (UnimplementedRulesServiceHandler) Reserve(context.Context, *connect.Reques
 
 func (UnimplementedRulesServiceHandler) ListReservations(context.Context, *connect.Request[v1.ListReservationsRequest]) (*connect.Response[v1.ListReservationsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RulesService.ListReservations is not implemented"))
-}
-
-// ReviewServiceClient is a client for the vx.v1.ReviewService service.
-type ReviewServiceClient interface {
-	ListReviews(context.Context, *connect.Request[v1.ListReviewsRequest]) (*connect.Response[v1.ListReviewsResponse], error)
-	GetReview(context.Context, *connect.Request[v1.GetReviewRequest]) (*connect.Response[v1.GetReviewResponse], error)
-	// ApproveReview lands the change onto the current effort head. When it
-	// conflicts, the review stays pending and goes back to the author.
-	ApproveReview(context.Context, *connect.Request[v1.ApproveReviewRequest]) (*connect.Response[v1.ApproveReviewResponse], error)
-	RejectReview(context.Context, *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error)
-}
-
-// NewReviewServiceClient constructs a client for the vx.v1.ReviewService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewReviewServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ReviewServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	reviewServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("ReviewService").Methods()
-	return &reviewServiceClient{
-		listReviews: connect.NewClient[v1.ListReviewsRequest, v1.ListReviewsResponse](
-			httpClient,
-			baseURL+ReviewServiceListReviewsProcedure,
-			connect.WithSchema(reviewServiceMethods.ByName("ListReviews")),
-			connect.WithClientOptions(opts...),
-		),
-		getReview: connect.NewClient[v1.GetReviewRequest, v1.GetReviewResponse](
-			httpClient,
-			baseURL+ReviewServiceGetReviewProcedure,
-			connect.WithSchema(reviewServiceMethods.ByName("GetReview")),
-			connect.WithClientOptions(opts...),
-		),
-		approveReview: connect.NewClient[v1.ApproveReviewRequest, v1.ApproveReviewResponse](
-			httpClient,
-			baseURL+ReviewServiceApproveReviewProcedure,
-			connect.WithSchema(reviewServiceMethods.ByName("ApproveReview")),
-			connect.WithClientOptions(opts...),
-		),
-		rejectReview: connect.NewClient[v1.RejectReviewRequest, v1.RejectReviewResponse](
-			httpClient,
-			baseURL+ReviewServiceRejectReviewProcedure,
-			connect.WithSchema(reviewServiceMethods.ByName("RejectReview")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// reviewServiceClient implements ReviewServiceClient.
-type reviewServiceClient struct {
-	listReviews   *connect.Client[v1.ListReviewsRequest, v1.ListReviewsResponse]
-	getReview     *connect.Client[v1.GetReviewRequest, v1.GetReviewResponse]
-	approveReview *connect.Client[v1.ApproveReviewRequest, v1.ApproveReviewResponse]
-	rejectReview  *connect.Client[v1.RejectReviewRequest, v1.RejectReviewResponse]
-}
-
-// ListReviews calls vx.v1.ReviewService.ListReviews.
-func (c *reviewServiceClient) ListReviews(ctx context.Context, req *connect.Request[v1.ListReviewsRequest]) (*connect.Response[v1.ListReviewsResponse], error) {
-	return c.listReviews.CallUnary(ctx, req)
-}
-
-// GetReview calls vx.v1.ReviewService.GetReview.
-func (c *reviewServiceClient) GetReview(ctx context.Context, req *connect.Request[v1.GetReviewRequest]) (*connect.Response[v1.GetReviewResponse], error) {
-	return c.getReview.CallUnary(ctx, req)
-}
-
-// ApproveReview calls vx.v1.ReviewService.ApproveReview.
-func (c *reviewServiceClient) ApproveReview(ctx context.Context, req *connect.Request[v1.ApproveReviewRequest]) (*connect.Response[v1.ApproveReviewResponse], error) {
-	return c.approveReview.CallUnary(ctx, req)
-}
-
-// RejectReview calls vx.v1.ReviewService.RejectReview.
-func (c *reviewServiceClient) RejectReview(ctx context.Context, req *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error) {
-	return c.rejectReview.CallUnary(ctx, req)
-}
-
-// ReviewServiceHandler is an implementation of the vx.v1.ReviewService service.
-type ReviewServiceHandler interface {
-	ListReviews(context.Context, *connect.Request[v1.ListReviewsRequest]) (*connect.Response[v1.ListReviewsResponse], error)
-	GetReview(context.Context, *connect.Request[v1.GetReviewRequest]) (*connect.Response[v1.GetReviewResponse], error)
-	// ApproveReview lands the change onto the current effort head. When it
-	// conflicts, the review stays pending and goes back to the author.
-	ApproveReview(context.Context, *connect.Request[v1.ApproveReviewRequest]) (*connect.Response[v1.ApproveReviewResponse], error)
-	RejectReview(context.Context, *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error)
-}
-
-// NewReviewServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewReviewServiceHandler(svc ReviewServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	reviewServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("ReviewService").Methods()
-	reviewServiceListReviewsHandler := connect.NewUnaryHandler(
-		ReviewServiceListReviewsProcedure,
-		svc.ListReviews,
-		connect.WithSchema(reviewServiceMethods.ByName("ListReviews")),
-		connect.WithHandlerOptions(opts...),
-	)
-	reviewServiceGetReviewHandler := connect.NewUnaryHandler(
-		ReviewServiceGetReviewProcedure,
-		svc.GetReview,
-		connect.WithSchema(reviewServiceMethods.ByName("GetReview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	reviewServiceApproveReviewHandler := connect.NewUnaryHandler(
-		ReviewServiceApproveReviewProcedure,
-		svc.ApproveReview,
-		connect.WithSchema(reviewServiceMethods.ByName("ApproveReview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	reviewServiceRejectReviewHandler := connect.NewUnaryHandler(
-		ReviewServiceRejectReviewProcedure,
-		svc.RejectReview,
-		connect.WithSchema(reviewServiceMethods.ByName("RejectReview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/vx.v1.ReviewService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ReviewServiceListReviewsProcedure:
-			reviewServiceListReviewsHandler.ServeHTTP(w, r)
-		case ReviewServiceGetReviewProcedure:
-			reviewServiceGetReviewHandler.ServeHTTP(w, r)
-		case ReviewServiceApproveReviewProcedure:
-			reviewServiceApproveReviewHandler.ServeHTTP(w, r)
-		case ReviewServiceRejectReviewProcedure:
-			reviewServiceRejectReviewHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
-}
-
-// UnimplementedReviewServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedReviewServiceHandler struct{}
-
-func (UnimplementedReviewServiceHandler) ListReviews(context.Context, *connect.Request[v1.ListReviewsRequest]) (*connect.Response[v1.ListReviewsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.ListReviews is not implemented"))
-}
-
-func (UnimplementedReviewServiceHandler) GetReview(context.Context, *connect.Request[v1.GetReviewRequest]) (*connect.Response[v1.GetReviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.GetReview is not implemented"))
-}
-
-func (UnimplementedReviewServiceHandler) ApproveReview(context.Context, *connect.Request[v1.ApproveReviewRequest]) (*connect.Response[v1.ApproveReviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.ApproveReview is not implemented"))
-}
-
-func (UnimplementedReviewServiceHandler) RejectReview(context.Context, *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.RejectReview is not implemented"))
 }

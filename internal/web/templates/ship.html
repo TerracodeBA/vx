@@ -5,6 +5,14 @@
   <h1>Ship {{.Effort.Name}}</h1>
   <p class="muted">Every landed change becomes one commit, replayed onto the latest head of the target branch and pushed to a <span class="mono">vx/</span> branch. vx never merges; that stays your decision on {{if eq .Repo.Provider "github"}}GitHub{{else}}the git host{{end}}.</p>
 </div></div>
+<div class="tabs-row">
+  <nav class="tabs" aria-label="How to ship">
+    <a class="tab{{if not .Split}} on{{end}}" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">One pull request</a>
+    <a class="tab{{if eq .Split "independent"}} on{{end}}" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}&amp;split=independent">Independent pull requests</a>
+    <a class="tab{{if eq .Split "stacked"}} on{{end}}" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}&amp;split=stacked">Stacked pull requests</a>
+  </nav>
+</div>
+{{if .Split}}{{template "split" .}}{{else}}
 {{if .Shipped}}<p class="note ok">Pushed. {{with index .Shipments 0}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Open pull request #{{.ProviderRef}}{{else}}Open the pull request on GitHub{{end}}</a>{{end}}{{end}}</p>{{end}}
 {{if .PlanError}}<p class="note bad">{{.PlanError}}</p>{{end}}
 
@@ -58,5 +66,61 @@
     </section>
   </aside>
 </div>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "split"}}
+{{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}
+<p class="muted">{{if eq .Split "stacked"}}Stacked: each part is a pull request based on the previous part's branch, so reviewers see one step at a time and merge them in order.{{else}}Independent: each part is a pull request that replays onto the target on its own and merges in any order. Changes that touch a common file or depend on each other stay in one part.{{end}} Move a change to another part, merge or split parts, then check the grouping and open the pull requests.</p>
+{{if .Shipped}}<p class="note ok">Pushed every part.{{range .Shipments}}{{if and .Part .URL}} <a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}#{{.ProviderRef}}{{else}}{{.Branch}}{{end}}</a>{{end}}{{end}}</p>{{end}}
+{{if .PlanError}}<p class="note bad">{{.PlanError}}</p>{{end}}
+{{if .OpenError}}<p class="note bad">{{.OpenError}}</p>{{end}}
+{{with .Plan}}
+{{if .Problems}}<div class="note bad"><p>This grouping cannot ship:</p><ul>{{range .Problems}}<li>{{.}}</li>{{end}}</ul></div>
+{{else if $.Checked}}<p class="note ok">This grouping ships: {{len .Groups}} pull request{{if ne (len .Groups) 1}}s{{end}}, every part replays cleanly{{if eq .Split "independent"}} and they merge in any order{{end}}.</p>{{end}}
+{{range .Notes}}<p class="note warn">{{.}}</p>{{end}}
+{{range .Stale}}<p class="note warn"><span class="mono">{{.Branch}}</span>{{if .ProviderRef}} (pull request #{{.ProviderRef}}){{end}} is no longer part of the split: vx stops updating it once you open these; close it on the host.</p>{{end}}
+<form method="post" action="/ui/ship/split" class="stack">
+  <input type="hidden" name="repo" value="{{$repo}}">
+  <input type="hidden" name="slug" value="{{$slug}}">
+  <input type="hidden" name="split" value="{{.Split}}">
+  <input type="hidden" name="to" value="{{.Target}}">
+  <p class="muted small">{{if .Suggested}}Grouping suggested by vx{{else}}Your grouping{{end}}: {{len .Groups}} part{{if ne (len .Groups) 1}}s{{end}} onto <span class="mono">{{.Target}}</span> at <span class="mono">{{short .TargetHead.GitSHA}}</span>.</p>
+  {{range $.Parts}}{{$part := .Part}}
+  <section class="panel panel-pad" id="part-{{.Part}}">
+    <h2 class="sec">Part {{.Part}}: {{.Title}}</h2>
+    <p class="muted small mono">{{.Branch}} → {{.Base}}{{if .Previous}}{{if .Previous.ProviderRef}} · updates pull request #{{.Previous.ProviderRef}}{{end}}{{end}}</p>
+    {{if .Problem}}<p class="note bad">{{.Problem}}</p>{{end}}
+    <ol class="commits">
+      {{range .Steps}}
+      <li class="{{if .Skipped}}skipped{{end}}">
+        <span><span class="mono muted">{{.Changeset.ChangeID}}</span>
+        <a href="/ui/change?repo={{$repo}}&amp;ref={{.Changeset.Hash}}">{{.Changeset.Title}}</a></span>
+        <span class="muted small">{{principal .Changeset.Author.Principal}} · {{.Files}} file{{if ne .Files 1}}s{{end}}{{if .Changeset.Evidence}}{{range .Changeset.Evidence.Checks}} · <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}">{{.Result}}</span> <span class="mono">{{.Name}}</span>{{end}}{{range .Changeset.Evidence.NotVerified}} · <span class="pill warn">not verified</span> <span class="mono">{{.}}</span>{{end}}{{else}} · no evidence{{end}}</span>
+        <input type="hidden" name="change" value="{{.Changeset.ChangeID}}">
+        <label class="small">Part <select name="part.{{.Changeset.ChangeID}}" aria-label="Part of {{.Changeset.ChangeID}}">{{range $.Parts}}<option value="{{.Part}}"{{if eq .Part $part}} selected{{end}}>{{.Part}}</option>{{end}}<option value="{{$.NewPart}}">new part</option></select></label>
+      </li>
+      {{end}}
+    </ol>
+    {{if .Files}}<p class="muted small">Files: {{range $i, $f := .Files}}{{if $i}}, {{end}}<span class="mono">{{$f}}</span>{{end}}</p>{{end}}
+    {{if .Why}}<ul class="muted small">{{range .Why}}<li>Together because {{.}}</li>{{end}}</ul>{{end}}
+    {{if .Warnings}}<ul class="small">{{range .Warnings}}<li>{{.Detail}}</li>{{end}}</ul>{{end}}
+    <p>
+      {{if gt .Part 1}}<button class="btn ghost" type="submit" name="op" value="merge:{{.Part}}">Merge into part {{.Before}}</button>{{end}}
+      {{if gt (len .Steps) 1}}<button class="btn ghost" type="submit" name="op" value="split:{{.Part}}">Split into one part per change</button>{{end}}
+      {{if and (eq $.Split "stacked") (gt .Part 1)}}<button class="btn ghost" type="submit" name="op" value="up:{{.Part}}">Move up</button>{{end}}
+    </p>
+    {{if not .Problem}}<details><summary class="small">Pull request description</summary><pre class="pr-body">{{.Body}}</pre></details>{{end}}
+  </section>
+  {{end}}
+  <p>
+    <button class="btn ghost" type="submit" name="op" value="check">Check this grouping</button>
+    <a class="btn ghost" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}&amp;split={{.Split}}">Back to vx's suggestion</a>
+  </p>
+  <label class="check"><input type="checkbox" name="draft" checked> Open as drafts</label>
+  <p><button class="btn primary" type="submit" name="op" value="open" {{if .Problems}}disabled{{end}}>Open {{len .Groups}} pull request{{if ne (len .Groups) 1}}s{{end}}</button></p>
+  <p class="muted small">Opening pushes one vx/{{$slug}}/... branch per part and opens or updates its pull request. vx never merges.</p>
+</form>
 {{end}}
 {{end}}

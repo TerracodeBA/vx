@@ -40,7 +40,7 @@ flowchart LR
 | Rebase | One replay of an effort onto a newer branch head: state, progress, conflicts | Postgres |
 | Workspace | One task inside an effort: intent, change ID, base | Postgres |
 | Branch | An upstream branch vx follows, with its imported head | Postgres |
-| Shipment | A pushed `vx/` branch and its pull request | Postgres |
+| Shipment | A pushed `vx/` branch and its pull request; a split effort has one per part | Postgres |
 
 Changesets list their tree, so two snapshots are compared by walking both trees and skipping every subtree whose hash is equal. The cost of a diff, a merge or an upload is proportional to the size of the change, not of the repository.
 
@@ -142,6 +142,17 @@ Every step that changes the rebase row is a compare-and-swap on its version. A c
 2. Replay each landed vx changeset, oldest first, onto the target head: take its tree when its parent equals the current tree, otherwise three-way merge it onto the current tree. Stop at the first conflict and report it; `vx effort rebase` resolves it inside vx (see "Rebasing an effort").
 3. Write one git commit per change: the intent as the message, provenance trailers (`Vx-Change-Id`, `Vx-Agent`, `Vx-On-Behalf-Of`, `Vx-Model`, `Vx-Evidence`, and for rebased changes `Vx-Rebased-Onto` and `Vx-Resolved-By`), the person as author.
 4. Push to `vx/<effort>` (the bridge refuses any other branch) and open or update the pull request.
+
+### Several pull requests (`internal/service/ship_split.go`)
+
+`PlanSplit` groups the changes the target lacks into parts. Two changes are tied when they touch a common path, or when the newer one's `depends_on` names the older one's change id (or a 4+ character prefix) or a symbol or path the older one changes (the same check claims use, `landTouches`).
+
+- `independent`: union-find over the ties, parts ordered by their oldest change. Each part is replayed onto the target head alone (`replayChain` on the part's changes); parts that share a path are also replayed onto each other in both orders (`replayForecast`) and must be clean.
+- `stacked`: one part per change, or a person's ordered list; part n is replayed onto the tree after part n-1.
+- A person's grouping (`SplitInput.Groups`) must hold every change exactly once. Problems are reasons, not errors: a part whose replay conflicts names the change of another part whose lines it builds on (a change of another part, older than the conflicting one, that touches the conflicting path), or the target when there is none; a `depends_on` across independent parts, or onto a higher stacked part, is refused too. `OpenShipment` refuses a plan with problems.
+- Without a person's grouping, open parts of an earlier split of the same mode seed the grouping, so shipping again keeps branches and pull requests; ties between two already shipped changes are not followed (a person may have split them on purpose), ties to new changes are. Parts the new grouping lacks are `Stale` and set to `closed` when the split ships.
+
+`openSplit` pushes every branch first (stacked part n on part n-1's last commit), then opens or updates the pull requests in order with `Base` = the target or the previous part's branch, then updates the bodies that could not know the later parts' numbers yet. Each part is one `shipments` row (`split`, `part`, `target` = its base). Merged detection: `markMergedShipments` (run by `markMergedEfforts`) marks a part merged when the target branch carries all its change ids; `markShipmentMergedByHead` (merged pull request webhooks, for squash merges) marks the part pushed to the head branch merged, and its effort once no other part is open.
 
 ## Overlap forecast
 
