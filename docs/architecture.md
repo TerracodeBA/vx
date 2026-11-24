@@ -113,7 +113,7 @@ Every step that changes the rebase row is a compare-and-swap on its version. A c
 - One bare git mirror per repository under the data directory (go-git, no git binary needed).
 - Only branches in use are fetched; the first import is shallow.
 - Git objects are mapped to vx objects in Postgres (`git_objects`), so later imports skip unchanged subtrees and exports reuse git objects.
-- Without a GitHub token the bridge uses SSH with the server user's agent and `known_hosts`; with a token it uses HTTPS and the REST API.
+- Repositories of a GitHub App installation use its installation token (HTTPS as `x-access-token`, cached until shortly before it expires). Others: without a GitHub token the bridge uses SSH with the server user's agent and `known_hosts`; with a token it uses HTTPS and the REST API.
 
 ## Shipping
 

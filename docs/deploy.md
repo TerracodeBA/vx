@@ -30,7 +30,7 @@ With a GitHub App, people sign in with GitHub, roles on installed repositories c
 2. As a site admin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents and pull requests write, checks read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
 3. Click **Install the App on GitHub** and pick the organizations and repositories. They show up in vx at once; their roles come from GitHub.
 
-The App's private key, client secret and webhook secret are stored encrypted with `VX_SECRET_KEY`. Webhooks need `https://vx.example.com/hooks/github` reachable from GitHub; nothing else has to be open.
+Repositories of an installation fetch, push `vx/` branches and open pull requests with the App's installation token, so they need neither `VX_GITHUB_TOKEN` nor an SSH key. The App's private key, client secret and webhook secret are stored encrypted with `VX_SECRET_KEY`. Webhooks need `https://vx.example.com/hooks/github` reachable from GitHub; nothing else has to be open.
 
 ## HTTPS
 

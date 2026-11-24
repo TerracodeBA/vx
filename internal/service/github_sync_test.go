@@ -313,3 +313,31 @@ func TestGitHubOrgMembershipWebhook(t *testing.T) {
 		t.Fatalf("after member_removed: %q", role)
 	}
 }
+
+// Repositories of an installation get its installation token for git and
+// pull requests; others get none.
+func TestGitHubRepoToken(t *testing.T) {
+	e := newHookEnv(t)
+	ctx, svc, gh := e.ctx, e.svc, e.gh
+	gh.AddOrg("acme")
+	gh.AddRepo("acme/shop", true)
+	id := gh.Install("acme")
+	if err := svc.SyncInstallation(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := svc.GitHubRepoToken(ctx, e.repo("acme/shop"))
+	if err != nil || tok == "" {
+		t.Fatalf("token %q %v", tok, err)
+	}
+	again, _ := svc.GitHubRepoToken(ctx, e.repo("acme/shop"))
+	if again != tok || gh.Calls("POST /app/installations/*") != 1 {
+		t.Fatalf("token not cached: %d requests", gh.Calls("POST /app/installations/*"))
+	}
+	other, err := svc.Store.CreateRepo(ctx, store.Repo{Name: "acme/plain", Provider: store.ProviderGitHub, Remote: "acme/plain", OrgID: mustOrg(t, svc, "acme").ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok, err := svc.GitHubRepoToken(ctx, other); err != nil || tok != "" {
+		t.Fatalf("unlinked repo: %q %v", tok, err)
+	}
+}

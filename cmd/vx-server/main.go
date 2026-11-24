@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -286,5 +287,13 @@ func openMigrated(ctx context.Context, url string) (*store.Store, error) {
 // upstream builds the git bridge. GitHub access uses VX_GITHUB_TOKEN.
 func upstream(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error) {
 	token := func() string { return os.Getenv("VX_GITHUB_TOKEN") }
-	return gitbridge.New(st, blobs, filepath.Join(dataDir, "git"), token), nil
+	b := gitbridge.New(st, blobs, filepath.Join(dataDir, "git"), token)
+	// GitHub Enterprise Server (checked by githubSettings).
+	if v := strings.TrimRight(os.Getenv("VX_GITHUB_URL"), "/"); v != "" {
+		b.GitHubGitBase = v
+	}
+	if v := strings.TrimRight(os.Getenv("VX_GITHUB_API_URL"), "/"); v != "" {
+		b.GitHubAPI = v
+	}
+	return b, nil
 }
