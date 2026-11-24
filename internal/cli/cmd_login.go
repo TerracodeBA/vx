@@ -231,7 +231,13 @@ type serverInfo struct {
 	CLIVersion   string    `json:"cli_version"` // the vx that asked
 	CLIStatus    string    `json:"cli_status"`
 	Message      string    `json:"message,omitempty"`
+	// OlderAt is when vx last said it is older than the server.
+	OlderAt time.Time `json:"older_noticed_at,omitempty"`
 }
+
+// olderNoticeEvery is how often vx repeats that it is older than the
+// server: once per command would drown the output, once a day is missed.
+const olderNoticeEvery = time.Hour
 
 // serverInfoTTL is how often vx asks the server for its version.
 const serverInfoTTL = 24 * time.Hour
@@ -302,9 +308,19 @@ func serverLacksPublic(err error) bool {
 	return false
 }
 
-// notice prints one line when the server recommends updating vx.
+// notice prints one line when vx should be updated: that this vx is older
+// than the server's release (vx self-update fixes it), or else what the
+// server recommends.
 func (a *App) notice(info *serverInfo) {
-	if info != nil && info.CLIStatus != "" && info.CLIStatus != "ok" && info.Message != "" {
+	if info == nil {
+		return
+	}
+	if msg := version.OlderThanServer(version.Version, info.Version); msg != "" {
+		fmt.Fprintln(a.Err, "vx:", msg)
+		info.OlderAt = time.Now()
+		return
+	}
+	if info.CLIStatus != "" && info.CLIStatus != "ok" && info.Message != "" {
 		fmt.Fprintln(a.Err, "vx: notice:", info.Message)
 	}
 }
@@ -321,6 +337,12 @@ func (a *App) checkServer(server string) {
 	server = strings.TrimRight(server, "/")
 	s := a.fileSettings()
 	if c := s.ServerInfo; c != nil && c.Server == server && c.CLIVersion == version.Version && time.Since(c.CheckedAt) < serverInfoTTL {
+		// Known: repeat "older than the server" now and then, without asking.
+		if msg := version.OlderThanServer(version.Version, c.Version); msg != "" && time.Since(c.OlderAt) >= olderNoticeEvery {
+			fmt.Fprintln(a.Err, "vx:", msg)
+			c.OlderAt = time.Now()
+			_ = a.saveSettings(s)
+		}
 		return
 	}
 	info, err := a.fetchServerInfo(context.Background(), server)

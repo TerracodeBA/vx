@@ -15,7 +15,7 @@ Agree on:
 - 2 to 5 parts that touch mostly different files, one per agent,
 - the **interfaces between parts**: package names, function signatures, file ownership. Write them down exactly. This is the single most important step: agents code against each other's interfaces before they exist.
 - which part lands a shared file first (for example an options file other parts extend), so others can build on it.
-- the **repository rules**: put what parallel agents must not collide on in `vx.toml` at the repository root before they start (land it first), so vx checks it on every land, sync and ship: `[[unique]]` for numbered files such as migrations (agents then take numbers with `vx reserve migration`), `[[generated]]` for generated code with the command that regenerates it, and `[checks] required` for the commands every land should run with `--run`. See "Repository rules (vx.toml)" in docs/agents.md; `vx rules` shows them.
+- the **repository rules**: put what parallel agents must not collide on in `vx.toml` at the repository root before they start (land it first), so vx checks it on every land, sync and ship: `[[unique]]` for numbered files such as migrations (agents then take numbers with `vx reserve migration`) and, with `content` and `scope`, for numbers inside files such as proto field numbers per message, `[[generated]]` for generated code with the command that regenerates it, and `[checks] required` for the commands every land should run with `--run`. See "Repository rules (vx.toml)" in docs/agents.md; `vx rules` shows them.
 - the plan as **tasks**: small units of work, each one or a few lands, with the contracts (interfaces, shared files) as their own tasks that the others wait for.
 
 ## 2. Create the effort, agents and working copies
@@ -70,7 +70,7 @@ Launch one subagent per part, in parallel (one message with several Agent tool c
 
 - Web UI: the effort page updates live (who is working, every land, diffs). Share the link with the user. Its Board tab shows the agents' plans and questions; questions nobody answered in time escalate to the top, where the user answers them.
 - `vx tasks --all` (or the effort page's Tasks tab) shows what is open, who has what, what is blocked and what is done. Add tasks as new work turns up; `vx task assign ID NAME` hands one to a specific agent.
-- `vx inbox` as the user lists escalated questions; answer with `vx answer ID "TEXT"`.
+- `vx inbox` as the user lists escalated questions and, under "For your agents (not working now)", questions sent to your agents after they finished (copied to you at once); answer with `vx answer ID "TEXT"` or restart the agent.
 - Other efforts of the same repository: `vx overlaps --effort SLUG --repo REPO` (or the badge in the web UI's efforts list) says which other open efforts change the same files and whether shipping both would conflict or break a rule such as migration numbers. vx also posts it on both boards. Settle who changes what before both ship.
 - CLI: `vx effort show SLUG --repo REPO`, `vx log --files --repo REPO SLUG`.
 
