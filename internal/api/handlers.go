@@ -282,7 +282,7 @@ func (h *Handlers) Log(ctx context.Context, req *connect.Request[vxv1.LogRequest
 		if !req.Msg.IncludeFiles {
 			files = nil
 		}
-		out.Changesets = append(out.Changesets, changesetPB(e.Hash, e.Changeset, req.Msg.Effort, files))
+		out.Changesets = append(out.Changesets, changesetRowPB(e.ChangesetRow, req.Msg.Effort, files))
 	}
 	return connect.NewResponse(out), nil
 }
@@ -298,7 +298,7 @@ func (h *Handlers) GetChangeset(ctx context.Context, req *connect.Request[vxv1.G
 			effort = eff.Slug
 		}
 	}
-	return connect.NewResponse(&vxv1.GetChangesetResponse{Changeset: changesetPB(e.Hash, e.Changeset, effort, e.Files)}), nil
+	return connect.NewResponse(&vxv1.GetChangesetResponse{Changeset: changesetRowPB(e.ChangesetRow, effort, e.Files)}), nil
 }
 
 // ---------- Workspaces ----------
@@ -386,7 +386,7 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 		if v, err := h.svc.GetWorkspace(ctx, id); err == nil {
 			effort = v.Effort.Slug
 		}
-		out.Changeset = changesetPB(res.Changeset.Hash, res.Changeset.Changeset, effort, res.Files)
+		out.Changeset = changesetRowPB(res.Changeset, effort, res.Files)
 	}
 	return connect.NewResponse(out), nil
 }

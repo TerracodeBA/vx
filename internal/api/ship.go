@@ -21,7 +21,7 @@ func planPB(p service.ShipPlan) *vxv1.ShipmentPlan {
 	}
 	for _, st := range p.Steps {
 		out.Steps = append(out.Steps, &vxv1.ShipStep{
-			Changeset: changesetPB(st.Changeset.Hash, st.Changeset.Changeset, p.Effort.Slug, nil),
+			Changeset: changesetRowPB(st.Changeset, p.Effort.Slug, nil),
 			Files:     int32(st.Files), Skipped: st.Skipped,
 		})
 	}
