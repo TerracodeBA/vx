@@ -247,16 +247,38 @@ func commitMessage(slug string, c *object.Changeset) string {
 	if c.Author.Model != "" {
 		fmt.Fprintf(&b, "Vx-Model: %s\n", c.Author.Model)
 	}
+	if r := c.Rebase; r != nil {
+		fmt.Fprintf(&b, "Vx-Rebased-Onto: %s\n", rebasedOnto(c))
+		if r.ResolvedBy != "" {
+			fmt.Fprintf(&b, "Vx-Resolved-By: %s\n", r.ResolvedBy)
+		}
+	}
 	if c.Evidence != nil {
 		for _, ch := range c.Evidence.Checks {
 			text := checkText(ch)
 			if c.Merged() {
 				text += ", before merge"
 			}
+			if c.Rebased() {
+				text += ", before rebase"
+			}
 			fmt.Fprintf(&b, "Vx-Evidence: %s\n", text)
 		}
 	}
 	return b.String()
+}
+
+// rebasedOnto names where a rebased change was replayed: "main at 1a2b3c4d5e6f".
+func rebasedOnto(c *object.Changeset) string {
+	r := c.Rebase
+	branch := r.Branch
+	if branch == "" {
+		branch = "the target"
+	}
+	if r.OntoGitSHA != "" {
+		return branch + " at " + short(r.OntoGitSHA)
+	}
+	return branch + " at vx " + r.Onto.Short()
 }
 
 func checkText(ch object.Check) string {
@@ -287,6 +309,7 @@ func prBody(p ShipPlan) string {
 	agents := map[string]bool{}
 	people := map[string]bool{}
 	var checks []string
+	var rebased *object.Changeset // the latest rebased change, if any
 	for _, st := range p.Commits() {
 		c := st.Changeset
 		who := c.Author.Principal
@@ -296,11 +319,20 @@ func prBody(p ShipPlan) string {
 		}
 		agents[c.Author.Principal] = true
 		fmt.Fprintf(&b, "- %s (`%s`, %s)\n", c.Title(), c.ChangeID, who)
+		if c.Rebase != nil {
+			rebased = c.Changeset
+			if c.Rebase.ResolvedBy != "" {
+				fmt.Fprintf(&b, "  - conflict resolved during the rebase by %s\n", c.Rebase.ResolvedBy)
+			}
+		}
 		if c.Evidence != nil {
 			for _, ch := range c.Evidence.Checks {
 				line := fmt.Sprintf("- `%s`: %s", c.ChangeID, checkText(ch))
 				if c.Merged() {
 					line += " on the author's snapshot, before vx merged it onto newer work"
+				}
+				if c.Rebased() {
+					line += ", before the effort was rebased onto " + rebasedOnto(c.Changeset)
 				}
 				checks = append(checks, line)
 			}
@@ -316,6 +348,13 @@ func prBody(p ShipPlan) string {
 		fmt.Fprintf(&b, " for %d person(s)", len(people))
 	}
 	fmt.Fprintf(&b, ". %d commit(s) on top of `%s` at %s.\n", len(p.Commits()), p.Target, short(p.TargetHead.GitSHA))
+	if rebased != nil {
+		fmt.Fprintf(&b, "The effort was rebased onto %s", "`"+strings.Replace(rebasedOnto(rebased), " at ", "` at ", 1))
+		if rebased.Rebase.By != "" {
+			fmt.Fprintf(&b, " by %s", rebased.Rebase.By)
+		}
+		b.WriteString("; evidence of the rebased changes was gathered before the rebase.\n")
+	}
 	return b.String()
 }
 

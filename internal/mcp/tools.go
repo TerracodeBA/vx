@@ -89,6 +89,8 @@ type Evidence struct {
 	NewTests []string `json:"new_tests,omitempty"`
 	// BeforeMerge: the server merged the author's snapshot onto newer work.
 	BeforeMerge bool `json:"before_merge,omitempty" jsonschema:"the server merged this change onto newer work, so the evidence was gathered on the author's snapshot, not the landed tree"`
+	// BeforeRebase: a rebase of the effort replayed this change onto a newer base.
+	BeforeRebase bool `json:"before_rebase,omitempty" jsonschema:"a rebase of the effort replayed this change onto a newer base, so the evidence was gathered before the rebase"`
 }
 
 // Warning is a problem the server found when the change landed.
@@ -455,7 +457,7 @@ func files(fs []store.FileChange) []File {
 }
 
 func evidence(cs *object.Changeset) Evidence {
-	out := Evidence{BeforeMerge: cs.Merged()}
+	out := Evidence{BeforeMerge: cs.Merged(), BeforeRebase: cs.Rebased()}
 	ev := cs.Evidence
 	if ev == nil || ev.IsEmpty() {
 		out.Summary = "no evidence"
@@ -491,6 +493,9 @@ func evidence(cs *object.Changeset) Evidence {
 	out.Summary = strings.Join(parts, ", ")
 	if out.BeforeMerge {
 		out.Summary += ", gathered before the server merged it"
+	}
+	if out.BeforeRebase {
+		out.Summary += ", gathered before the effort was rebased"
 	}
 	return out
 }
