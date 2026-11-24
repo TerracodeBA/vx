@@ -35,7 +35,7 @@ Launch one subagent per part, in parallel (one message with several Agent tool c
 - the setup line: every Bash call starts with `source ~/.vx-agents/NAME.env && cd ~/work/SLUG-NAME && ...` (each call is a fresh shell), plus `export VX_MODEL=<model id>` so changes record the model,
 - the effort goal and all parts, so the agent knows what the others do,
 - the exact agreed interfaces, and which files it owns and must not touch,
-- the plan as small tasks, each one `vx new "..."` then `vx land --run "<test command>"`,
+- the plan as small tasks, each one `vx new "..."` then `vx land --run "<test command>"` (for Go, `go test -count=1 ./...` so no result comes from the test cache),
 - coordination: `vx sync` before each task, `vx status` to see others, `vx wait --timeout 10m && vx sync` when blocked on another part,
 - conflicts: on exit code 2, `vx sync`, resolve markers, re-run tests, land again,
 - the instruction to use the `work` skill, never git, and not to ship,
