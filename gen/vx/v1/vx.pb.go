@@ -2997,6 +2997,642 @@ func (x *AbandonResponse) GetWorkspace() *Workspace {
 	return nil
 }
 
+type ShipStep struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Changeset     *Changeset             `protobuf:"bytes,1,opt,name=changeset,proto3" json:"changeset,omitempty"`
+	Files         int32                  `protobuf:"varint,2,opt,name=files,proto3" json:"files,omitempty"`     // files the step changes on the target
+	Skipped       bool                   `protobuf:"varint,3,opt,name=skipped,proto3" json:"skipped,omitempty"` // the target already has this change
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShipStep) Reset() {
+	*x = ShipStep{}
+	mi := &file_vx_v1_vx_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShipStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShipStep) ProtoMessage() {}
+
+func (x *ShipStep) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShipStep.ProtoReflect.Descriptor instead.
+func (*ShipStep) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ShipStep) GetChangeset() *Changeset {
+	if x != nil {
+		return x.Changeset
+	}
+	return nil
+}
+
+func (x *ShipStep) GetFiles() int32 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *ShipStep) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
+}
+
+type ShipmentPlan struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Target           string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	TargetGitSha     string                 `protobuf:"bytes,2,opt,name=target_git_sha,json=targetGitSha,proto3" json:"target_git_sha,omitempty"`
+	Branch           string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	Title            string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	Body             string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
+	Steps            []*ShipStep            `protobuf:"bytes,6,rep,name=steps,proto3" json:"steps,omitempty"`
+	Conflicts        []*Conflict            `protobuf:"bytes,7,rep,name=conflicts,proto3" json:"conflicts,omitempty"`
+	ConflictedChange string                 `protobuf:"bytes,8,opt,name=conflicted_change,json=conflictedChange,proto3" json:"conflicted_change,omitempty"` // change id where the replay stopped
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ShipmentPlan) Reset() {
+	*x = ShipmentPlan{}
+	mi := &file_vx_v1_vx_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShipmentPlan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShipmentPlan) ProtoMessage() {}
+
+func (x *ShipmentPlan) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShipmentPlan.ProtoReflect.Descriptor instead.
+func (*ShipmentPlan) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ShipmentPlan) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *ShipmentPlan) GetTargetGitSha() string {
+	if x != nil {
+		return x.TargetGitSha
+	}
+	return ""
+}
+
+func (x *ShipmentPlan) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *ShipmentPlan) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ShipmentPlan) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *ShipmentPlan) GetSteps() []*ShipStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+func (x *ShipmentPlan) GetConflicts() []*Conflict {
+	if x != nil {
+		return x.Conflicts
+	}
+	return nil
+}
+
+func (x *ShipmentPlan) GetConflictedChange() string {
+	if x != nil {
+		return x.ConflictedChange
+	}
+	return ""
+}
+
+type Shipment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Branch        string                 `protobuf:"bytes,4,opt,name=branch,proto3" json:"branch,omitempty"`
+	Target        string                 `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	BaseGitSha    string                 `protobuf:"bytes,6,opt,name=base_git_sha,json=baseGitSha,proto3" json:"base_git_sha,omitempty"`
+	HeadGitSha    string                 `protobuf:"bytes,7,opt,name=head_git_sha,json=headGitSha,proto3" json:"head_git_sha,omitempty"`
+	PrNumber      string                 `protobuf:"bytes,8,opt,name=pr_number,json=prNumber,proto3" json:"pr_number,omitempty"`
+	Url           string                 `protobuf:"bytes,9,opt,name=url,proto3" json:"url,omitempty"`
+	State         string                 `protobuf:"bytes,10,opt,name=state,proto3" json:"state,omitempty"` // open, draft, pushed, merged, closed
+	ChangeIds     []string               `protobuf:"bytes,11,rep,name=change_ids,json=changeIds,proto3" json:"change_ids,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Shipment) Reset() {
+	*x = Shipment{}
+	mi := &file_vx_v1_vx_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Shipment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Shipment) ProtoMessage() {}
+
+func (x *Shipment) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Shipment.ProtoReflect.Descriptor instead.
+func (*Shipment) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *Shipment) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Shipment) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *Shipment) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Shipment) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *Shipment) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *Shipment) GetBaseGitSha() string {
+	if x != nil {
+		return x.BaseGitSha
+	}
+	return ""
+}
+
+func (x *Shipment) GetHeadGitSha() string {
+	if x != nil {
+		return x.HeadGitSha
+	}
+	return ""
+}
+
+func (x *Shipment) GetPrNumber() string {
+	if x != nil {
+		return x.PrNumber
+	}
+	return ""
+}
+
+func (x *Shipment) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *Shipment) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Shipment) GetChangeIds() []string {
+	if x != nil {
+		return x.ChangeIds
+	}
+	return nil
+}
+
+func (x *Shipment) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type PlanShipmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Target        string                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"` // empty: the effort's base branch
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlanShipmentRequest) Reset() {
+	*x = PlanShipmentRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlanShipmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlanShipmentRequest) ProtoMessage() {}
+
+func (x *PlanShipmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlanShipmentRequest.ProtoReflect.Descriptor instead.
+func (*PlanShipmentRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *PlanShipmentRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *PlanShipmentRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *PlanShipmentRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+type PlanShipmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plan          *ShipmentPlan          `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlanShipmentResponse) Reset() {
+	*x = PlanShipmentResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlanShipmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlanShipmentResponse) ProtoMessage() {}
+
+func (x *PlanShipmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlanShipmentResponse.ProtoReflect.Descriptor instead.
+func (*PlanShipmentResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *PlanShipmentResponse) GetPlan() *ShipmentPlan {
+	if x != nil {
+		return x.Plan
+	}
+	return nil
+}
+
+type OpenShipmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Target        string                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	Title         string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"` // empty: the effort name
+	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`   // empty: generated from intents and evidence
+	Draft         bool                   `protobuf:"varint,6,opt,name=draft,proto3" json:"draft,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenShipmentRequest) Reset() {
+	*x = OpenShipmentRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenShipmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenShipmentRequest) ProtoMessage() {}
+
+func (x *OpenShipmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenShipmentRequest.ProtoReflect.Descriptor instead.
+func (*OpenShipmentRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *OpenShipmentRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *OpenShipmentRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *OpenShipmentRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *OpenShipmentRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *OpenShipmentRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *OpenShipmentRequest) GetDraft() bool {
+	if x != nil {
+		return x.Draft
+	}
+	return false
+}
+
+type OpenShipmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Shipment      *Shipment              `protobuf:"bytes,1,opt,name=shipment,proto3" json:"shipment,omitempty"`
+	Plan          *ShipmentPlan          `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	PrUpdated     bool                   `protobuf:"varint,3,opt,name=pr_updated,json=prUpdated,proto3" json:"pr_updated,omitempty"` // an open PR existed and was updated
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenShipmentResponse) Reset() {
+	*x = OpenShipmentResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenShipmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenShipmentResponse) ProtoMessage() {}
+
+func (x *OpenShipmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenShipmentResponse.ProtoReflect.Descriptor instead.
+func (*OpenShipmentResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *OpenShipmentResponse) GetShipment() *Shipment {
+	if x != nil {
+		return x.Shipment
+	}
+	return nil
+}
+
+func (x *OpenShipmentResponse) GetPlan() *ShipmentPlan {
+	if x != nil {
+		return x.Plan
+	}
+	return nil
+}
+
+func (x *OpenShipmentResponse) GetPrUpdated() bool {
+	if x != nil {
+		return x.PrUpdated
+	}
+	return false
+}
+
+type ListShipmentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListShipmentsRequest) Reset() {
+	*x = ListShipmentsRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListShipmentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListShipmentsRequest) ProtoMessage() {}
+
+func (x *ListShipmentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListShipmentsRequest.ProtoReflect.Descriptor instead.
+func (*ListShipmentsRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *ListShipmentsRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *ListShipmentsRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+type ListShipmentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Shipments     []*Shipment            `protobuf:"bytes,1,rep,name=shipments,proto3" json:"shipments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListShipmentsResponse) Reset() {
+	*x = ListShipmentsResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListShipmentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListShipmentsResponse) ProtoMessage() {}
+
+func (x *ListShipmentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListShipmentsResponse.ProtoReflect.Descriptor instead.
+func (*ListShipmentsResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ListShipmentsResponse) GetShipments() []*Shipment {
+	if x != nil {
+		return x.Shipments
+	}
+	return nil
+}
+
 var File_vx_v1_vx_proto protoreflect.FileDescriptor
 
 const file_vx_v1_vx_proto_rawDesc = "" +
@@ -3217,7 +3853,61 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x0eAbandonRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"A\n" +
 	"\x0fAbandonResponse\x12.\n" +
-	"\tworkspace\x18\x01 \x01(\v2\x10.vx.v1.WorkspaceR\tworkspace2\x8e\x01\n" +
+	"\tworkspace\x18\x01 \x01(\v2\x10.vx.v1.WorkspaceR\tworkspace\"j\n" +
+	"\bShipStep\x12.\n" +
+	"\tchangeset\x18\x01 \x01(\v2\x10.vx.v1.ChangesetR\tchangeset\x12\x14\n" +
+	"\x05files\x18\x02 \x01(\x05R\x05files\x12\x18\n" +
+	"\askipped\x18\x03 \x01(\bR\askipped\"\x91\x02\n" +
+	"\fShipmentPlan\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12$\n" +
+	"\x0etarget_git_sha\x18\x02 \x01(\tR\ftargetGitSha\x12\x16\n" +
+	"\x06branch\x18\x03 \x01(\tR\x06branch\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x05 \x01(\tR\x04body\x12%\n" +
+	"\x05steps\x18\x06 \x03(\v2\x0f.vx.v1.ShipStepR\x05steps\x12-\n" +
+	"\tconflicts\x18\a \x03(\v2\x0f.vx.v1.ConflictR\tconflicts\x12+\n" +
+	"\x11conflicted_change\x18\b \x01(\tR\x10conflictedChange\"\xbf\x02\n" +
+	"\bShipment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x16\n" +
+	"\x06branch\x18\x04 \x01(\tR\x06branch\x12\x16\n" +
+	"\x06target\x18\x05 \x01(\tR\x06target\x12 \n" +
+	"\fbase_git_sha\x18\x06 \x01(\tR\n" +
+	"baseGitSha\x12 \n" +
+	"\fhead_git_sha\x18\a \x01(\tR\n" +
+	"headGitSha\x12\x1b\n" +
+	"\tpr_number\x18\b \x01(\tR\bprNumber\x12\x10\n" +
+	"\x03url\x18\t \x01(\tR\x03url\x12\x14\n" +
+	"\x05state\x18\n" +
+	" \x01(\tR\x05state\x12\x1d\n" +
+	"\n" +
+	"change_ids\x18\v \x03(\tR\tchangeIds\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\f \x01(\tR\tupdatedAt\"Y\n" +
+	"\x13PlanShipmentRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x16\n" +
+	"\x06target\x18\x03 \x01(\tR\x06target\"?\n" +
+	"\x14PlanShipmentResponse\x12'\n" +
+	"\x04plan\x18\x01 \x01(\v2\x13.vx.v1.ShipmentPlanR\x04plan\"\x99\x01\n" +
+	"\x13OpenShipmentRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x16\n" +
+	"\x06target\x18\x03 \x01(\tR\x06target\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x05 \x01(\tR\x04body\x12\x14\n" +
+	"\x05draft\x18\x06 \x01(\bR\x05draft\"\x8b\x01\n" +
+	"\x14OpenShipmentResponse\x12+\n" +
+	"\bshipment\x18\x01 \x01(\v2\x0f.vx.v1.ShipmentR\bshipment\x12'\n" +
+	"\x04plan\x18\x02 \x01(\v2\x13.vx.v1.ShipmentPlanR\x04plan\x12\x1d\n" +
+	"\n" +
+	"pr_updated\x18\x03 \x01(\bR\tprUpdated\"B\n" +
+	"\x14ListShipmentsRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\"F\n" +
+	"\x15ListShipmentsResponse\x12-\n" +
+	"\tshipments\x18\x01 \x03(\v2\x0f.vx.v1.ShipmentR\tshipments2\x8e\x01\n" +
 	"\vAuthService\x127\n" +
 	"\x06WhoAmI\x12\x14.vx.v1.WhoAmIRequest\x1a\x15.vx.v1.WhoAmIResponse\"\x00\x12F\n" +
 	"\vCreateAgent\x12\x19.vx.v1.CreateAgentRequest\x1a\x1a.vx.v1.CreateAgentResponse\"\x002\xea\x01\n" +
@@ -3245,7 +3935,11 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\fGetWorkspace\x12\x1a.vx.v1.GetWorkspaceRequest\x1a\x1b.vx.v1.GetWorkspaceResponse\"\x00\x12:\n" +
 	"\aSetBase\x12\x15.vx.v1.SetBaseRequest\x1a\x16.vx.v1.SetBaseResponse\"\x00\x121\n" +
 	"\x04Land\x12\x12.vx.v1.LandRequest\x1a\x13.vx.v1.LandResponse\"\x00\x12:\n" +
-	"\aAbandon\x12\x15.vx.v1.AbandonRequest\x1a\x16.vx.v1.AbandonResponse\"\x00Bs\n" +
+	"\aAbandon\x12\x15.vx.v1.AbandonRequest\x1a\x16.vx.v1.AbandonResponse\"\x002\xf1\x01\n" +
+	"\vShipService\x12I\n" +
+	"\fPlanShipment\x12\x1a.vx.v1.PlanShipmentRequest\x1a\x1b.vx.v1.PlanShipmentResponse\"\x00\x12I\n" +
+	"\fOpenShipment\x12\x1a.vx.v1.OpenShipmentRequest\x1a\x1b.vx.v1.OpenShipmentResponse\"\x00\x12L\n" +
+	"\rListShipments\x12\x1b.vx.v1.ListShipmentsRequest\x1a\x1c.vx.v1.ListShipmentsResponse\"\x00Bs\n" +
 	"\tcom.vx.v1B\aVxProtoP\x01Z(github.com/TerracodeBA/vx/gen/vx/v1;vxv1\xa2\x02\x03VXX\xaa\x02\x05Vx.V1\xca\x02\x05Vx\\V1\xe2\x02\x11Vx\\V1\\GPBMetadata\xea\x02\x06Vx::V1b\x06proto3"
 
 var (
@@ -3260,7 +3954,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),              // 0: vx.v1.Principal
 	(*Branch)(nil),                 // 1: vx.v1.Branch
@@ -3312,6 +4006,15 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*LandResponse)(nil),           // 47: vx.v1.LandResponse
 	(*AbandonRequest)(nil),         // 48: vx.v1.AbandonRequest
 	(*AbandonResponse)(nil),        // 49: vx.v1.AbandonResponse
+	(*ShipStep)(nil),               // 50: vx.v1.ShipStep
+	(*ShipmentPlan)(nil),           // 51: vx.v1.ShipmentPlan
+	(*Shipment)(nil),               // 52: vx.v1.Shipment
+	(*PlanShipmentRequest)(nil),    // 53: vx.v1.PlanShipmentRequest
+	(*PlanShipmentResponse)(nil),   // 54: vx.v1.PlanShipmentResponse
+	(*OpenShipmentRequest)(nil),    // 55: vx.v1.OpenShipmentRequest
+	(*OpenShipmentResponse)(nil),   // 56: vx.v1.OpenShipmentResponse
+	(*ListShipmentsRequest)(nil),   // 57: vx.v1.ListShipmentsRequest
+	(*ListShipmentsResponse)(nil),  // 58: vx.v1.ListShipmentsResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
 	1,  // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
@@ -3340,49 +4043,62 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	8,  // 23: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
 	10, // 24: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
 	9,  // 25: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
-	12, // 26: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	14, // 27: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	16, // 28: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	18, // 29: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	20, // 30: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	22, // 31: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	24, // 32: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	26, // 33: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	28, // 34: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	30, // 35: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	32, // 36: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	34, // 37: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	36, // 38: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	38, // 39: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	40, // 40: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	42, // 41: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	44, // 42: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	46, // 43: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	48, // 44: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	13, // 45: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	15, // 46: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	17, // 47: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	19, // 48: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	21, // 49: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	23, // 50: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	25, // 51: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	27, // 52: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	29, // 53: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	31, // 54: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	33, // 55: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	35, // 56: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	37, // 57: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	39, // 58: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	41, // 59: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	43, // 60: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	45, // 61: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	47, // 62: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	49, // 63: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	45, // [45:64] is the sub-list for method output_type
-	26, // [26:45] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	8,  // 26: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
+	50, // 27: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
+	10, // 28: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
+	51, // 29: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	52, // 30: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
+	51, // 31: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	52, // 32: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
+	12, // 33: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	14, // 34: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	16, // 35: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	18, // 36: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	20, // 37: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	22, // 38: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	24, // 39: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	26, // 40: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	28, // 41: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	30, // 42: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	32, // 43: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	34, // 44: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	36, // 45: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	38, // 46: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	40, // 47: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	42, // 48: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	44, // 49: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	46, // 50: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	48, // 51: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	53, // 52: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	55, // 53: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	57, // 54: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	13, // 55: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	15, // 56: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	17, // 57: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	19, // 58: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	21, // 59: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	23, // 60: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	25, // 61: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	27, // 62: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	29, // 63: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	31, // 64: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	33, // 65: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	35, // 66: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	37, // 67: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	39, // 68: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	41, // 69: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	43, // 70: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	45, // 71: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	47, // 72: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	49, // 73: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	54, // 74: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	56, // 75: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	58, // 76: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	55, // [55:77] is the sub-list for method output_type
+	33, // [33:55] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -3396,9 +4112,9 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   50,
+			NumMessages:   59,
 			NumExtensions: 0,
-			NumServices:   5,
+			NumServices:   6,
 		},
 		GoTypes:           file_vx_v1_vx_proto_goTypes,
 		DependencyIndexes: file_vx_v1_vx_proto_depIdxs,

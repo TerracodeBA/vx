@@ -26,6 +26,7 @@ type Client struct {
 	Repos      vxv1connect.RepoServiceClient
 	Efforts    vxv1connect.EffortServiceClient
 	Workspaces vxv1connect.WorkspaceServiceClient
+	Ships      vxv1connect.ShipServiceClient
 }
 
 const maxMessage = 64 << 20
@@ -53,6 +54,7 @@ func New(baseURL, token string) *Client {
 		Repos:      vxv1connect.NewRepoServiceClient(httpClient, baseURL, opts...),
 		Efforts:    vxv1connect.NewEffortServiceClient(httpClient, baseURL, opts...),
 		Workspaces: vxv1connect.NewWorkspaceServiceClient(httpClient, baseURL, opts...),
+		Ships:      vxv1connect.NewShipServiceClient(httpClient, baseURL, opts...),
 	}
 }
 

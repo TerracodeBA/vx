@@ -31,6 +31,8 @@ const (
 	EffortServiceName = "vx.v1.EffortService"
 	// WorkspaceServiceName is the fully-qualified name of the WorkspaceService service.
 	WorkspaceServiceName = "vx.v1.WorkspaceService"
+	// ShipServiceName is the fully-qualified name of the ShipService service.
+	ShipServiceName = "vx.v1.ShipService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -89,6 +91,15 @@ const (
 	// WorkspaceServiceAbandonProcedure is the fully-qualified name of the WorkspaceService's Abandon
 	// RPC.
 	WorkspaceServiceAbandonProcedure = "/vx.v1.WorkspaceService/Abandon"
+	// ShipServicePlanShipmentProcedure is the fully-qualified name of the ShipService's PlanShipment
+	// RPC.
+	ShipServicePlanShipmentProcedure = "/vx.v1.ShipService/PlanShipment"
+	// ShipServiceOpenShipmentProcedure is the fully-qualified name of the ShipService's OpenShipment
+	// RPC.
+	ShipServiceOpenShipmentProcedure = "/vx.v1.ShipService/OpenShipment"
+	// ShipServiceListShipmentsProcedure is the fully-qualified name of the ShipService's ListShipments
+	// RPC.
+	ShipServiceListShipmentsProcedure = "/vx.v1.ShipService/ListShipments"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -813,4 +824,132 @@ func (UnimplementedWorkspaceServiceHandler) Land(context.Context, *connect.Reque
 
 func (UnimplementedWorkspaceServiceHandler) Abandon(context.Context, *connect.Request[v1.AbandonRequest]) (*connect.Response[v1.AbandonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.WorkspaceService.Abandon is not implemented"))
+}
+
+// ShipServiceClient is a client for the vx.v1.ShipService service.
+type ShipServiceClient interface {
+	// PlanShipment shows the commits an effort would ship, replayed onto the
+	// latest head of the target branch.
+	PlanShipment(context.Context, *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error)
+	// OpenShipment pushes vx/<effort> and opens or updates the pull request.
+	OpenShipment(context.Context, *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error)
+	ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error)
+}
+
+// NewShipServiceClient constructs a client for the vx.v1.ShipService service. By default, it uses
+// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewShipServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ShipServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	shipServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("ShipService").Methods()
+	return &shipServiceClient{
+		planShipment: connect.NewClient[v1.PlanShipmentRequest, v1.PlanShipmentResponse](
+			httpClient,
+			baseURL+ShipServicePlanShipmentProcedure,
+			connect.WithSchema(shipServiceMethods.ByName("PlanShipment")),
+			connect.WithClientOptions(opts...),
+		),
+		openShipment: connect.NewClient[v1.OpenShipmentRequest, v1.OpenShipmentResponse](
+			httpClient,
+			baseURL+ShipServiceOpenShipmentProcedure,
+			connect.WithSchema(shipServiceMethods.ByName("OpenShipment")),
+			connect.WithClientOptions(opts...),
+		),
+		listShipments: connect.NewClient[v1.ListShipmentsRequest, v1.ListShipmentsResponse](
+			httpClient,
+			baseURL+ShipServiceListShipmentsProcedure,
+			connect.WithSchema(shipServiceMethods.ByName("ListShipments")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// shipServiceClient implements ShipServiceClient.
+type shipServiceClient struct {
+	planShipment  *connect.Client[v1.PlanShipmentRequest, v1.PlanShipmentResponse]
+	openShipment  *connect.Client[v1.OpenShipmentRequest, v1.OpenShipmentResponse]
+	listShipments *connect.Client[v1.ListShipmentsRequest, v1.ListShipmentsResponse]
+}
+
+// PlanShipment calls vx.v1.ShipService.PlanShipment.
+func (c *shipServiceClient) PlanShipment(ctx context.Context, req *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error) {
+	return c.planShipment.CallUnary(ctx, req)
+}
+
+// OpenShipment calls vx.v1.ShipService.OpenShipment.
+func (c *shipServiceClient) OpenShipment(ctx context.Context, req *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error) {
+	return c.openShipment.CallUnary(ctx, req)
+}
+
+// ListShipments calls vx.v1.ShipService.ListShipments.
+func (c *shipServiceClient) ListShipments(ctx context.Context, req *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error) {
+	return c.listShipments.CallUnary(ctx, req)
+}
+
+// ShipServiceHandler is an implementation of the vx.v1.ShipService service.
+type ShipServiceHandler interface {
+	// PlanShipment shows the commits an effort would ship, replayed onto the
+	// latest head of the target branch.
+	PlanShipment(context.Context, *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error)
+	// OpenShipment pushes vx/<effort> and opens or updates the pull request.
+	OpenShipment(context.Context, *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error)
+	ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error)
+}
+
+// NewShipServiceHandler builds an HTTP handler from the service implementation. It returns the path
+// on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewShipServiceHandler(svc ShipServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	shipServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("ShipService").Methods()
+	shipServicePlanShipmentHandler := connect.NewUnaryHandler(
+		ShipServicePlanShipmentProcedure,
+		svc.PlanShipment,
+		connect.WithSchema(shipServiceMethods.ByName("PlanShipment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	shipServiceOpenShipmentHandler := connect.NewUnaryHandler(
+		ShipServiceOpenShipmentProcedure,
+		svc.OpenShipment,
+		connect.WithSchema(shipServiceMethods.ByName("OpenShipment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	shipServiceListShipmentsHandler := connect.NewUnaryHandler(
+		ShipServiceListShipmentsProcedure,
+		svc.ListShipments,
+		connect.WithSchema(shipServiceMethods.ByName("ListShipments")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.ShipService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ShipServicePlanShipmentProcedure:
+			shipServicePlanShipmentHandler.ServeHTTP(w, r)
+		case ShipServiceOpenShipmentProcedure:
+			shipServiceOpenShipmentHandler.ServeHTTP(w, r)
+		case ShipServiceListShipmentsProcedure:
+			shipServiceListShipmentsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedShipServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedShipServiceHandler struct{}
+
+func (UnimplementedShipServiceHandler) PlanShipment(context.Context, *connect.Request[v1.PlanShipmentRequest]) (*connect.Response[v1.PlanShipmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ShipService.PlanShipment is not implemented"))
+}
+
+func (UnimplementedShipServiceHandler) OpenShipment(context.Context, *connect.Request[v1.OpenShipmentRequest]) (*connect.Response[v1.OpenShipmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ShipService.OpenShipment is not implemented"))
+}
+
+func (UnimplementedShipServiceHandler) ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ShipService.ListShipments is not implemented"))
 }

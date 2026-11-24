@@ -350,3 +350,80 @@ message AbandonRequest {
 message AbandonResponse {
   Workspace workspace = 1;
 }
+
+// ---------- Shipping ----------
+
+service ShipService {
+  // PlanShipment shows the commits an effort would ship, replayed onto the
+  // latest head of the target branch.
+  rpc PlanShipment(PlanShipmentRequest) returns (PlanShipmentResponse) {}
+  // OpenShipment pushes vx/<effort> and opens or updates the pull request.
+  rpc OpenShipment(OpenShipmentRequest) returns (OpenShipmentResponse) {}
+  rpc ListShipments(ListShipmentsRequest) returns (ListShipmentsResponse) {}
+}
+
+message ShipStep {
+  Changeset changeset = 1;
+  int32 files = 2; // files the step changes on the target
+  bool skipped = 3; // the target already has this change
+}
+
+message ShipmentPlan {
+  string target = 1;
+  string target_git_sha = 2;
+  string branch = 3;
+  string title = 4;
+  string body = 5;
+  repeated ShipStep steps = 6;
+  repeated Conflict conflicts = 7;
+  string conflicted_change = 8; // change id where the replay stopped
+}
+
+message Shipment {
+  string id = 1;
+  string effort = 2;
+  string title = 3;
+  string branch = 4;
+  string target = 5;
+  string base_git_sha = 6;
+  string head_git_sha = 7;
+  string pr_number = 8;
+  string url = 9;
+  string state = 10; // open, draft, pushed, merged, closed
+  repeated string change_ids = 11;
+  string updated_at = 12;
+}
+
+message PlanShipmentRequest {
+  string repo = 1;
+  string effort = 2;
+  string target = 3; // empty: the effort's base branch
+}
+
+message PlanShipmentResponse {
+  ShipmentPlan plan = 1;
+}
+
+message OpenShipmentRequest {
+  string repo = 1;
+  string effort = 2;
+  string target = 3;
+  string title = 4; // empty: the effort name
+  string body = 5; // empty: generated from intents and evidence
+  bool draft = 6;
+}
+
+message OpenShipmentResponse {
+  Shipment shipment = 1;
+  ShipmentPlan plan = 2;
+  bool pr_updated = 3; // an open PR existed and was updated
+}
+
+message ListShipmentsRequest {
+  string repo = 1;
+  string effort = 2;
+}
+
+message ListShipmentsResponse {
+  repeated Shipment shipments = 1;
+}

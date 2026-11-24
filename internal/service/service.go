@@ -78,6 +78,7 @@ type Service struct {
 	Store    *store.Store
 	Blobs    blob.Store
 	Upstream UpstreamSyncer // nil: repos without an upstream only
+	Shipper  Shipper        // nil: shipping disabled
 	Now      func() time.Time
 	// MaxLandAttempts bounds compare-and-swap retries when several agents
 	// land into the same effort at once.
@@ -85,8 +86,13 @@ type Service struct {
 }
 
 // New returns a Service with defaults filled in.
+// When upstream can also ship (the git bridge can), it is used for that too.
 func New(st *store.Store, blobs blob.Store, upstream UpstreamSyncer) *Service {
-	return &Service{Store: st, Blobs: blobs, Upstream: upstream, Now: time.Now, MaxLandAttempts: 25}
+	s := &Service{Store: st, Blobs: blobs, Upstream: upstream, Now: time.Now, MaxLandAttempts: 25}
+	if sh, ok := upstream.(Shipper); ok {
+		s.Shipper = sh
+	}
+	return s
 }
 
 // Actor is the authenticated caller, with the human it acts for.
