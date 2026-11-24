@@ -1,0 +1,247 @@
+package service
+
+import (
+	"context"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/TerracodeBA/vx/internal/hash"
+	"github.com/TerracodeBA/vx/internal/store"
+)
+
+// CreateEffortInput describes a new effort.
+type CreateEffortInput struct {
+	Repo       string
+	Name       string
+	Goal       string
+	BaseBranch string // empty: the repo's default branch
+}
+
+// CreateEffort starts an effort on the current head of its base branch.
+func (s *Service) CreateEffort(ctx context.Context, actor Actor, in CreateEffortInput) (store.Effort, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return store.Effort{}, errf(CodeInvalid, "an effort needs a name")
+	}
+	repo, err := s.Store.RepoByName(ctx, in.Repo)
+	if err != nil {
+		return store.Effort{}, classify(err)
+	}
+	if in.BaseBranch == "" {
+		in.BaseBranch = repo.DefaultBranch
+	}
+	branch, err := s.Branch(ctx, actor, repo, in.BaseBranch)
+	if err != nil {
+		return store.Effort{}, err
+	}
+	var eff store.Effort
+	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
+		var err error
+		eff, err = tx.CreateEffort(ctx, store.Effort{
+			RepoID: repo.ID, Name: strings.TrimSpace(in.Name), Goal: strings.TrimSpace(in.Goal),
+			BaseBranch: in.BaseBranch, Base: branch.Head, OwnerID: actor.Human().ID,
+		})
+		if err != nil {
+			return err
+		}
+		return tx.LogOp(ctx, &repo.ID, &actor.ID, "effort.create", eff.Slug, nil,
+			map[string]string{"base_branch": eff.BaseBranch, "base": eff.Base.String()})
+	})
+	return eff, classify(err)
+}
+
+// EffortView is an effort with its repo and open workspaces.
+type EffortView struct {
+	Repo       store.Repo
+	Effort     store.Effort
+	Workspaces []store.Workspace
+}
+
+// GetEffort loads an effort by repo name and slug.
+func (s *Service) GetEffort(ctx context.Context, repoName, slug string) (EffortView, error) {
+	repo, err := s.Store.RepoByName(ctx, repoName)
+	if err != nil {
+		return EffortView{}, classify(err)
+	}
+	eff, err := s.Store.GetEffort(ctx, repo.ID, slug)
+	if err != nil {
+		return EffortView{}, classify(err)
+	}
+	ws, err := s.Store.ListWorkspaces(ctx, eff.ID, store.WorkspaceOpen)
+	if err != nil {
+		return EffortView{}, err
+	}
+	return EffortView{Repo: repo, Effort: eff, Workspaces: ws}, nil
+}
+
+// ListEfforts lists a repo's efforts.
+func (s *Service) ListEfforts(ctx context.Context, repoName string, state store.EffortState) (store.Repo, []store.Effort, error) {
+	repo, err := s.Store.RepoByName(ctx, repoName)
+	if err != nil {
+		return store.Repo{}, nil, classify(err)
+	}
+	effs, err := s.Store.ListEfforts(ctx, repo.ID, state)
+	return repo, effs, err
+}
+
+// LogEntry is a landed changeset with its file list.
+type LogEntry struct {
+	store.ChangesetRow
+	Files []store.FileChange
+}
+
+// Log lists changes landed in an effort since its base, newest first.
+func (s *Service) Log(ctx context.Context, repoName, slug string, limit int, withFiles bool) ([]LogEntry, error) {
+	v, err := s.GetEffort(ctx, repoName, slug)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+	rows, err := s.Store.Chain(ctx, v.Repo.ID, v.Effort.Head, v.Effort.Base, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LogEntry, 0, len(rows))
+	for _, r := range rows {
+		e := LogEntry{ChangesetRow: r}
+		if withFiles {
+			if e.Files, err = s.Store.FileChanges(ctx, v.Repo.ID, r.Hash); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// GetChangeset resolves a changeset by hash, prefix or change ID.
+func (s *Service) GetChangeset(ctx context.Context, repoName, ref string) (store.Repo, LogEntry, error) {
+	repo, err := s.Store.RepoByName(ctx, repoName)
+	if err != nil {
+		return store.Repo{}, LogEntry{}, classify(err)
+	}
+	row, err := s.Store.ResolveChangeset(ctx, repo.ID, ref)
+	if err != nil {
+		return repo, LogEntry{}, classify(err)
+	}
+	files, err := s.Store.FileChanges(ctx, repo.ID, row.Hash)
+	return repo, LogEntry{ChangesetRow: row, Files: files}, err
+}
+
+// WorkspaceView is a workspace with its effort and repo.
+type WorkspaceView struct {
+	Repo      store.Repo
+	Effort    store.Effort
+	Workspace store.Workspace
+}
+
+// OpenWorkspace starts a task in an effort, based on the effort's head.
+func (s *Service) OpenWorkspace(ctx context.Context, actor Actor, repoName, slug, intent string) (WorkspaceView, error) {
+	if strings.TrimSpace(intent) == "" {
+		return WorkspaceView{}, errf(CodeInvalid, "say what this workspace is for: vx new \"<intent>\"")
+	}
+	v, err := s.GetEffort(ctx, repoName, slug)
+	if err != nil {
+		return WorkspaceView{}, err
+	}
+	if v.Effort.State != store.EffortOpen {
+		return WorkspaceView{}, errf(CodeFailedPrecondition, "effort %s is %s", slug, v.Effort.State)
+	}
+	var ws store.Workspace
+	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
+		var err error
+		ws, err = tx.CreateWorkspace(ctx, store.Workspace{EffortID: v.Effort.ID, OwnerID: actor.ID, Intent: strings.TrimSpace(intent), Base: v.Effort.Head})
+		if err != nil {
+			return err
+		}
+		return tx.LogOp(ctx, &v.Repo.ID, &actor.ID, "workspace.open", ws.ID.String(), nil, map[string]string{"effort": slug, "intent": ws.Intent})
+	})
+	if err != nil {
+		return WorkspaceView{}, classify(err)
+	}
+	return WorkspaceView{Repo: v.Repo, Effort: v.Effort, Workspace: ws}, nil
+}
+
+// GetWorkspace loads a workspace with its effort and repo.
+func (s *Service) GetWorkspace(ctx context.Context, id uuid.UUID) (WorkspaceView, error) {
+	ws, err := s.Store.GetWorkspace(ctx, id)
+	if err != nil {
+		return WorkspaceView{}, classify(err)
+	}
+	eff, err := s.Store.EffortByID(ctx, ws.EffortID)
+	if err != nil {
+		return WorkspaceView{}, classify(err)
+	}
+	repo, err := s.Store.RepoByID(ctx, eff.RepoID)
+	if err != nil {
+		return WorkspaceView{}, classify(err)
+	}
+	return WorkspaceView{Repo: repo, Effort: eff, Workspace: ws}, nil
+}
+
+func (s *Service) ownWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (WorkspaceView, error) {
+	v, err := s.GetWorkspace(ctx, id)
+	if err != nil {
+		return v, err
+	}
+	if v.Workspace.OwnerID != actor.ID {
+		return v, errf(CodePermission, "workspace %s belongs to another principal", id)
+	}
+	return v, nil
+}
+
+// SetBase records that the workspace's files now sit on base, which must be
+// on the effort's chain.
+func (s *Service) SetBase(ctx context.Context, actor Actor, id uuid.UUID, base hash.Hash) (WorkspaceView, error) {
+	v, err := s.ownWorkspace(ctx, actor, id)
+	if err != nil {
+		return v, err
+	}
+	if v.Workspace.State != store.WorkspaceOpen {
+		return v, errf(CodeFailedPrecondition, "workspace is %s", v.Workspace.State)
+	}
+	if err := s.checkOnEffort(ctx, v.Repo, v.Effort, base); err != nil {
+		return v, err
+	}
+	if err := s.Store.SetWorkspaceBase(ctx, id, base); err != nil {
+		return v, err
+	}
+	v.Workspace.Base = base
+	return v, nil
+}
+
+// Abandon closes a workspace without landing it.
+func (s *Service) Abandon(ctx context.Context, actor Actor, id uuid.UUID) (WorkspaceView, error) {
+	v, err := s.ownWorkspace(ctx, actor, id)
+	if err != nil {
+		return v, err
+	}
+	if v.Workspace.State != store.WorkspaceOpen {
+		return v, errf(CodeFailedPrecondition, "workspace is already %s", v.Workspace.State)
+	}
+	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
+		if err := tx.FinishWorkspace(ctx, id, store.WorkspaceAbandoned, hash.Zero); err != nil {
+			return err
+		}
+		return tx.LogOp(ctx, &v.Repo.ID, &actor.ID, "workspace.abandon", id.String(), nil, nil)
+	})
+	v.Workspace.State = store.WorkspaceAbandoned
+	return v, err
+}
+
+// checkOnEffort verifies base is the effort's head or an earlier point of it.
+func (s *Service) checkOnEffort(ctx context.Context, repo store.Repo, eff store.Effort, base hash.Hash) error {
+	if base == eff.Head {
+		return nil
+	}
+	ok, err := s.Store.OnChain(ctx, repo.ID, eff.Head, base, 100000)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errf(CodeInvalid, "snapshot base %s is not part of effort %s", base.Short(), eff.Slug)
+	}
+	return nil
+}

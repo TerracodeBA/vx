@@ -1,0 +1,19 @@
+# Development database for vx. Start with: make db
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: vx
+      POSTGRES_PASSWORD: vx
+      POSTGRES_DB: vx
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - vx-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vx"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  vx-pg:

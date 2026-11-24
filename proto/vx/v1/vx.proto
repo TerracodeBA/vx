@@ -1,0 +1,352 @@
+syntax = "proto3";
+
+package vx.v1;
+
+// Hashes are written as text: "b3:" followed by 64 hex characters.
+// Times are RFC 3339 strings in UTC.
+
+// ---------- Shared messages ----------
+
+message Principal {
+  string ref = 1; // "user:alice" or "agent:alice/claude-backend"
+  string handle = 2;
+  string kind = 3; // human, agent, service
+  string display_name = 4;
+  string email = 5;
+  string on_behalf_of = 6; // the human an agent acts for
+}
+
+message Branch {
+  string name = 1;
+  string head = 2; // changeset hash
+  string git_sha = 3;
+  string synced_at = 4;
+}
+
+message Repo {
+  string name = 1;
+  string provider = 2; // github, git, none
+  string remote = 3;
+  string default_branch = 4;
+  repeated Branch branches = 5;
+}
+
+message Effort {
+  string repo = 1;
+  string slug = 2;
+  string name = 3;
+  string goal = 4;
+  string base_branch = 5;
+  string base = 6;
+  string head = 7;
+  int64 version = 8;
+  string state = 9;
+  string owner = 10;
+  int32 open_workspaces = 11;
+  string created_at = 12;
+  string updated_at = 13;
+}
+
+message Author {
+  string principal = 1;
+  string name = 2;
+  string email = 3;
+  string on_behalf_of = 4;
+  string model = 5;
+  string session = 6;
+}
+
+message Check {
+  string name = 1;
+  string result = 2; // pass or fail
+  int32 passed = 3;
+  int32 failed = 4;
+}
+
+message Evidence {
+  repeated Check checks = 1;
+  repeated string new_tests = 2;
+}
+
+message FileChange {
+  string path = 1;
+  string op = 2; // add, modify, delete
+  string old_hash = 3;
+  string new_hash = 4;
+  string mode = 5; // file, exec, symlink
+  int32 added = 6;
+  int32 deleted = 7;
+}
+
+message Changeset {
+  string hash = 1;
+  string change_id = 2;
+  repeated string parents = 3;
+  string tree = 4;
+  string origin = 5; // vx or upstream
+  string git_sha = 6;
+  Author author = 7;
+  string intent = 8;
+  repeated string depends_on = 9;
+  Evidence evidence = 10;
+  string created_at = 11;
+  repeated FileChange files = 12;
+  string effort = 13; // slug, empty for upstream changesets
+}
+
+message Workspace {
+  string id = 1;
+  string repo = 2;
+  string effort = 3;
+  string intent = 4;
+  string change_id = 5;
+  string base = 6;
+  string state = 7;
+  string owner = 8;
+  string landed_as = 9;
+  string created_at = 10;
+}
+
+message Conflict {
+  string path = 1;
+  string kind = 2; // content, add/add, modify/delete, delete/modify, mode, binary, path
+  string detail = 3;
+  string base = 4;
+  string ours = 5;
+  string theirs = 6;
+}
+
+message Object {
+  string kind = 1; // blob or tree
+  bytes data = 2;
+  string hash = 3; // set in responses
+}
+
+// ---------- Auth ----------
+
+service AuthService {
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {}
+  // CreateAgent creates an agent that acts for the caller and returns its token.
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse) {}
+}
+
+message WhoAmIRequest {}
+
+message WhoAmIResponse {
+  Principal principal = 1;
+}
+
+message CreateAgentRequest {
+  string name = 1; // becomes "<caller>/<name>"
+  string display_name = 2;
+}
+
+message CreateAgentResponse {
+  Principal agent = 1;
+  string token = 2;
+}
+
+// ---------- Objects ----------
+
+service ObjectService {
+  rpc MissingObjects(MissingObjectsRequest) returns (MissingObjectsResponse) {}
+  rpc PutObjects(PutObjectsRequest) returns (PutObjectsResponse) {}
+  rpc GetObjects(GetObjectsRequest) returns (GetObjectsResponse) {}
+}
+
+message MissingObjectsRequest {
+  repeated string hashes = 1;
+}
+
+message MissingObjectsResponse {
+  repeated string missing = 1;
+}
+
+message PutObjectsRequest {
+  repeated Object objects = 1;
+}
+
+message PutObjectsResponse {
+  repeated string hashes = 1;
+}
+
+message GetObjectsRequest {
+  repeated string hashes = 1;
+}
+
+message GetObjectsResponse {
+  repeated Object objects = 1;
+}
+
+// ---------- Repos ----------
+
+service RepoService {
+  rpc CreateRepo(CreateRepoRequest) returns (CreateRepoResponse) {}
+  rpc GetRepo(GetRepoRequest) returns (GetRepoResponse) {}
+  rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
+  // SyncBranch imports the latest commits of an upstream branch.
+  rpc SyncBranch(SyncBranchRequest) returns (SyncBranchResponse) {}
+}
+
+message CreateRepoRequest {
+  string name = 1;
+  string provider = 2; // github, git or none
+  string remote = 3; // owner/name for github, URL or path for git
+  string default_branch = 4; // empty: ask the provider, or "main"
+}
+
+message CreateRepoResponse {
+  Repo repo = 1;
+}
+
+message GetRepoRequest {
+  string name = 1;
+}
+
+message GetRepoResponse {
+  Repo repo = 1;
+}
+
+message ListReposRequest {}
+
+message ListReposResponse {
+  repeated Repo repos = 1;
+}
+
+message SyncBranchRequest {
+  string repo = 1;
+  string branch = 2; // empty: the default branch
+}
+
+message SyncBranchResponse {
+  Branch branch = 1;
+  int32 imported = 2; // commits imported in this call
+}
+
+// ---------- Efforts ----------
+
+service EffortService {
+  rpc CreateEffort(CreateEffortRequest) returns (CreateEffortResponse) {}
+  rpc GetEffort(GetEffortRequest) returns (GetEffortResponse) {}
+  rpc ListEfforts(ListEffortsRequest) returns (ListEffortsResponse) {}
+  // Log lists the changes landed in an effort, newest first.
+  rpc Log(LogRequest) returns (LogResponse) {}
+  rpc GetChangeset(GetChangesetRequest) returns (GetChangesetResponse) {}
+}
+
+message CreateEffortRequest {
+  string repo = 1;
+  string name = 2;
+  string goal = 3;
+  string base_branch = 4; // empty: the repo's default branch
+}
+
+message CreateEffortResponse {
+  Effort effort = 1;
+}
+
+message GetEffortRequest {
+  string repo = 1;
+  string effort = 2; // slug
+}
+
+message GetEffortResponse {
+  Effort effort = 1;
+  repeated Workspace open_workspaces = 2;
+}
+
+message ListEffortsRequest {
+  string repo = 1;
+  string state = 2; // empty: all
+}
+
+message ListEffortsResponse {
+  repeated Effort efforts = 1;
+}
+
+message LogRequest {
+  string repo = 1;
+  string effort = 2;
+  int32 limit = 3;
+  bool include_files = 4;
+}
+
+message LogResponse {
+  repeated Changeset changesets = 1;
+}
+
+message GetChangesetRequest {
+  string repo = 1;
+  string ref = 2; // hash, hash prefix or change id
+}
+
+message GetChangesetResponse {
+  Changeset changeset = 1;
+}
+
+// ---------- Workspaces ----------
+
+service WorkspaceService {
+  rpc OpenWorkspace(OpenWorkspaceRequest) returns (OpenWorkspaceResponse) {}
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse) {}
+  // SetBase records that the working copy was updated to a newer snapshot.
+  rpc SetBase(SetBaseRequest) returns (SetBaseResponse) {}
+  // Land merges a snapshot into the effort.
+  rpc Land(LandRequest) returns (LandResponse) {}
+  rpc Abandon(AbandonRequest) returns (AbandonResponse) {}
+}
+
+message OpenWorkspaceRequest {
+  string repo = 1;
+  string effort = 2;
+  string intent = 3;
+}
+
+message OpenWorkspaceResponse {
+  Workspace workspace = 1;
+}
+
+message GetWorkspaceRequest {
+  string id = 1;
+}
+
+message GetWorkspaceResponse {
+  Workspace workspace = 1;
+}
+
+message SetBaseRequest {
+  string id = 1;
+  string base = 2;
+}
+
+message SetBaseResponse {
+  Workspace workspace = 1;
+}
+
+message LandRequest {
+  string workspace_id = 1;
+  string base = 2; // changeset the snapshot was made on
+  string tree = 3; // snapshot root tree, objects uploaded first
+  string intent = 4; // empty: the workspace intent
+  Evidence evidence = 5;
+  repeated string depends_on = 6;
+  string model = 7;
+  string session = 8;
+}
+
+message LandResponse {
+  bool landed = 1;
+  Changeset changeset = 2;
+  bool rebased = 3; // the effort had moved and the snapshot was merged onto it
+  repeated string auto_merged = 4; // paths changed on both sides that merged cleanly
+  repeated Conflict conflicts = 5; // set when landed is false
+  string effort_head = 6;
+}
+
+message AbandonRequest {
+  string id = 1;
+}
+
+message AbandonResponse {
+  Workspace workspace = 1;
+}
