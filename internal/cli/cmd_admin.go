@@ -100,24 +100,56 @@ path. An agent then only needs:
 func (a *App) repoCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "repo", Short: "Register and inspect repositories"}
 
-	var gh, gitURL, branch, org string
+	var gh, gitURL, branch, org, tokenFile string
+	var hosts hostFlags
 	create := &cobra.Command{
 		Use:   "create NAME",
-		Short: "Register a repository, optionally connected to GitHub or a git remote",
-		Args:  cobra.ExactArgs(1),
+		Short: "Register a repository, optionally connected to GitHub, GitLab, Gitea, Forgejo, Bitbucket or a git remote",
+		Long: `Register a repository. Connected to a host, vx imports its default branch
+and ships efforts there as pull requests (GitLab: merge requests).
+
+  vx repo create acme/shop --github acme/shop
+  vx repo create acme/shop --gitlab acme/shop [--gitlab-url https://gitlab.example.com]
+  vx repo create acme/shop --gitea acme/shop --gitea-url https://gitea.example.com
+  vx repo create acme/shop --forgejo acme/shop --forgejo-url https://codeberg.org
+  vx repo create acme/shop --bitbucket acme/shop
+  vx repo create acme/shop --git https://git.example.com/shop.git
+
+--token-file gives a token for this repository only (kept sealed on the
+server); without it the server's token for the host is used. For GitLab,
+Gitea, Forgejo and Bitbucket vx prints the webhook to register on the host.
+Roles on these repositories are vx's own: grant them with vx repo grant.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
 			if err != nil {
 				return err
 			}
 			req := &vxv1.CreateRepoRequest{Name: args[0], Provider: "none", DefaultBranch: branch, Org: org}
-			switch {
-			case gh != "" && gitURL != "":
-				return errors.New("use either --github or --git, not both")
-			case gh != "":
+			chosen := 0
+			if gh != "" {
 				req.Provider, req.Remote = "github", gh
-			case gitURL != "":
+				chosen++
+			}
+			if gitURL != "" {
 				req.Provider, req.Remote = "git", gitURL
+				chosen++
+			}
+			for _, h := range hosts.all() {
+				if *h.remote != "" {
+					req.Provider, req.Remote, req.BaseUrl = h.provider, *h.remote, *h.url
+					chosen++
+				} else if *h.url != "" {
+					return fmt.Errorf("--%s-url goes with --%s OWNER/REPO", h.provider, h.provider)
+				}
+			}
+			if chosen > 1 {
+				return errors.New("connect the repository to one host: --github, --gitlab, --gitea, --forgejo, --bitbucket or --git")
+			}
+			if tokenFile != "" {
+				if req.Token, err = a.readToken(tokenFile); err != nil {
+					return err
+				}
 			}
 			resp, err := c.Repos.CreateRepo(ctxOf(cmd), connect.NewRequest(req))
 			if err != nil {
@@ -128,6 +160,9 @@ func (a *App) repoCmd() *cobra.Command {
 			if r.Remote != "" {
 				a.printf(" following %s %s", r.Provider, r.Remote)
 			}
+			if r.BaseUrl != "" {
+				a.printf(" on %s", r.BaseUrl)
+			}
 			if r.Org != "" {
 				a.printf(" in organization %s", r.Org)
 			}
@@ -135,12 +170,17 @@ func (a *App) repoCmd() *cobra.Command {
 			for _, b := range r.Branches {
 				a.printf("  %s at %s %s\n", b.Name, short(b.Head), short(b.GitSha))
 			}
+			if resp.Msg.Hook != nil {
+				a.printHostHook(r.Provider, r.Name, resp.Msg.Hook)
+			}
 			a.emit(resp.Msg)
 			return nil
 		},
 	}
 	create.Flags().StringVar(&gh, "github", "", "GitHub repository as owner/name")
 	create.Flags().StringVar(&gitURL, "git", "", "any git remote URL or local path")
+	hosts.register(create)
+	create.Flags().StringVar(&tokenFile, "token-file", "", "file with a token for this repository only (- reads stdin); Bitbucket app passwords as USER:APP_PASSWORD")
 	create.Flags().StringVar(&branch, "branch", "", "default branch (default: ask the provider)")
 	create.Flags().StringVar(&org, "org", "", "owning organization (default: the one named like NAME's owner part if you own or admin it, else your personal organization)")
 
@@ -164,7 +204,11 @@ func (a *App) repoCmd() *cobra.Command {
 				if org == "" {
 					org = "-"
 				}
-				line := fmt.Sprintf("%-30s %-16s %-6s %-7s %s", r.Name, org, r.MyRole, r.Provider, r.Remote)
+				remote := r.Remote
+				if r.BaseUrl != "" && r.WebUrl != "" {
+					remote = strings.TrimPrefix(strings.TrimPrefix(r.WebUrl, "https://"), "http://")
+				}
+				line := fmt.Sprintf("%-30s %-16s %-6s %-9s %s", r.Name, org, r.MyRole, r.Provider, remote)
 				if r.GithubBacked {
 					line += "  (roles from GitHub)"
 				}
@@ -201,7 +245,7 @@ func (a *App) repoCmd() *cobra.Command {
 	sync.Flags().StringVar(&syncRepo, "repo", "", "repository (default: the current working copy's)")
 	sync.Flags().StringVar(&syncBranch, "branch", "", "branch (default: the repo's default branch)")
 
-	cmd.AddCommand(create, list, sync)
+	cmd.AddCommand(create, list, sync, a.repoHostCmd())
 	cmd.AddCommand(a.repoAccessCmds()...)
 	return cmd
 }

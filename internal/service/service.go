@@ -100,7 +100,9 @@ type Service struct {
 	Blobs    blob.Store
 	Upstream UpstreamSyncer // nil: repos without an upstream only
 	Shipper  Shipper        // nil: shipping disabled
-	Now      func() time.Time
+	// Hosts configures GitLab, Gitea, Forgejo and Bitbucket webhooks.
+	Hosts HostSettings
+	Now   func() time.Time
 	// MaxLandAttempts bounds compare-and-swap retries when several agents
 	// land into the same effort at once.
 	MaxLandAttempts int

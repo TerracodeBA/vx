@@ -49,11 +49,16 @@ func repoPB(r service.RepoView, branches []store.Branch) *vxv1.Repo {
 	out := &vxv1.Repo{
 		Name: r.Name, Provider: string(r.Provider), Remote: r.Remote, DefaultBranch: r.DefaultBranch,
 		Org: r.Org, MyRole: string(r.Role), GithubBacked: r.GitHubBacked(),
+		BaseUrl: r.BaseURL, Host: r.HostName(), WebUrl: r.WebURL(),
 	}
 	for _, b := range branches {
 		out.Branches = append(out.Branches, branchPB(b))
 	}
 	return out
+}
+
+func hostHookPB(h service.HostHook) *vxv1.HostHook {
+	return &vxv1.HostHook{Url: h.URL, Secret: h.Secret, SecretSource: h.SecretSource}
 }
 
 func branchPB(b store.Branch) *vxv1.Branch {

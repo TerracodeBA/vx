@@ -276,15 +276,40 @@ func (h *Handlers) CreateRepo(ctx context.Context, req *connect.Request[vxv1.Cre
 	m := req.Msg
 	repo, err := h.svc.CreateRepo(ctx, actorFrom(ctx), service.CreateRepoInput{
 		Name: m.Name, Provider: store.Provider(m.Provider), Remote: m.Remote, DefaultBranch: m.DefaultBranch, Org: m.Org,
+		BaseURL: m.BaseUrl, Token: m.Token,
 	})
 	if err != nil {
 		return nil, toConnect(err)
+	}
+	out := &vxv1.CreateRepoResponse{}
+	if repo.Provider.Hosted() {
+		// A webhook secret of its own when the server can seal one; else
+		// the server's secret for the host, if any, verifies deliveries.
+		hook, err := h.svc.SetRepoHost(ctx, actorFrom(ctx), service.SetRepoHostInput{Repo: repo.Name, RotateWebhookSecret: h.svc.CanSealSecrets()})
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		out.Hook = hostHookPB(hook)
 	}
 	v, branches, err := h.svc.GetRepo(ctx, actorFrom(ctx), repo.Name)
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&vxv1.CreateRepoResponse{Repo: repoPB(v, branches)}), nil
+	out.Repo = repoPB(v, branches)
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handlers) SetRepoHost(ctx context.Context, req *connect.Request[vxv1.SetRepoHostRequest]) (*connect.Response[vxv1.SetRepoHostResponse], error) {
+	m := req.Msg
+	in := service.SetRepoHostInput{Repo: m.Repo, RotateWebhookSecret: m.RotateWebhookSecret}
+	if m.SetToken {
+		in.Token = &m.Token
+	}
+	hook, err := h.svc.SetRepoHost(ctx, actorFrom(ctx), in)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.SetRepoHostResponse{Hook: hostHookPB(hook)}), nil
 }
 
 func (h *Handlers) GetRepo(ctx context.Context, req *connect.Request[vxv1.GetRepoRequest]) (*connect.Response[vxv1.GetRepoResponse], error) {

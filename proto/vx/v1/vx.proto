@@ -27,13 +27,16 @@ message Branch {
 
 message Repo {
   string name = 1;
-  string provider = 2; // github, git, none
+  string provider = 2; // github, gitlab, gitea, forgejo, bitbucket, git, none
   string remote = 3;
   string default_branch = 4;
   repeated Branch branches = 5;
   string org = 6; // the organization that owns the repository
   string my_role = 7; // the caller's role: read, write or admin
   bool github_backed = 8; // roles come from GitHub permissions, not vx grants
+  string base_url = 9; // the host's web address (GitLab, Gitea, Forgejo, Bitbucket)
+  string host = 10; // the host as people call it: GitHub, GitLab, Gitea, Forgejo, Bitbucket, git, vx
+  string web_url = 11; // the repository's page on its host, when known
 }
 
 message Effort {
@@ -381,18 +384,42 @@ service RepoService {
   rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
   // SyncBranch imports the latest commits of an upstream branch.
   rpc SyncBranch(SyncBranchRequest) returns (SyncBranchResponse) {}
+  // SetRepoHost sets the token of a GitLab, Gitea, Forgejo or Bitbucket
+  // repository or makes a new webhook secret for it (admin).
+  rpc SetRepoHost(SetRepoHostRequest) returns (SetRepoHostResponse) {}
 }
 
 message CreateRepoRequest {
   string name = 1;
-  string provider = 2; // github, git or none
-  string remote = 3; // owner/name for github, URL or path for git
+  string provider = 2; // github, gitlab, gitea, forgejo, bitbucket, git or none
+  string remote = 3; // owner/name for github, group/project for gitlab, owner/repo for gitea and forgejo, workspace/repo for bitbucket, URL or path for git
   string default_branch = 4; // empty: ask the provider, or "main"
   string org = 5; // owning organization; empty: the org named like the repo's owner part, else the caller's personal org
+  string base_url = 6; // gitlab, gitea, forgejo, bitbucket: the host's web address; empty: the server's default (gitlab.com, bitbucket.org)
+  string token = 7; // gitlab, gitea, forgejo, bitbucket: a token for this repository only, kept sealed; empty: the server's token for the host
 }
 
 message CreateRepoResponse {
   Repo repo = 1;
+  HostHook hook = 2; // gitlab, gitea, forgejo, bitbucket: how to register the webhook
+}
+
+// HostHook is how to register a repository's webhook on its host.
+message HostHook {
+  string url = 1; // where the host delivers
+  string secret = 2; // the repository's webhook secret: only right after it was made
+  string secret_source = 3; // repository, server (VX_<HOST>_WEBHOOK_SECRET) or empty (none: deliveries are refused)
+}
+
+message SetRepoHostRequest {
+  string repo = 1;
+  bool set_token = 2; // replace the token with token (empty token: remove it)
+  string token = 3;
+  bool rotate_webhook_secret = 4; // make a new webhook secret, returned once
+}
+
+message SetRepoHostResponse {
+  HostHook hook = 1;
 }
 
 message GetRepoRequest {

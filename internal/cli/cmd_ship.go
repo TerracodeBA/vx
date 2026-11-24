@@ -15,9 +15,10 @@ func (a *App) shipCmd() *cobra.Command {
 		Use:   "ship",
 		Short: "Turn an effort into a pull request on the git host",
 		Long: `Ship an effort: every landed change becomes one commit, replayed onto
-the latest head of the target branch, pushed to vx/<effort>. On GitHub a
-pull request is opened, or updated if one is open. vx never merges; that
-stays a decision on the git host.
+the latest head of the target branch, pushed to vx/<effort>. On GitHub,
+GitLab (a merge request), Gitea, Forgejo and Bitbucket a pull request is
+opened, or updated if one is open. vx never merges; that stays a decision
+on the git host.
 
 With --split an effort ships as several pull requests, one per part:
   independent  parts merge in any order; changes that touch a common file
@@ -237,7 +238,7 @@ Branches are vx/<effort>/<n>-<name>. vx ship plan --split shows the parts;
 			a.printf("\nPushed %s (%d commit(s)) on top of %s.\n", s.Branch, len(s.ChangeIds), s.Target)
 			switch {
 			case s.State == "pushed" && s.Url != "":
-				a.printf("The server has no GitHub API token, so open the pull request here:\n  %s\n", s.Url)
+				a.printf("The server has no API token for this host, so open the pull request here:\n  %s\n", s.Url)
 			case s.Url != "" && resp.Msg.PrUpdated:
 				a.printf("Updated pull request #%s: %s\n", s.PrNumber, s.Url)
 			case s.Url != "":

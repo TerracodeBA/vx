@@ -51,7 +51,7 @@ vx effort new "Rate limiting" --repo acme/shop-api</pre>
     <thead><tr><th>Repository</th><th>Upstream</th><th class="num">Efforts</th></tr></thead>
     <tbody>
     {{range .Repos}}
-      <tr><td class="cell-main"><a class="row-link" href="/ui/repo?name={{.Name}}">{{.Name}}</a></td><td class="muted small">{{.Provider}}{{if .Remote}} · <span class="mono">{{.Remote}}</span>{{end}}</td><td class="num">{{len .Efforts}}</td></tr>
+      <tr><td class="cell-main"><a class="row-link" href="/ui/repo?name={{.Name}}">{{.Name}}</a></td><td class="muted small">{{.HostName}}{{if .Remote}} · <span class="mono">{{.Remote}}</span>{{end}}</td><td class="num">{{len .Efforts}}</td></tr>
     {{end}}
     </tbody>
   </table>

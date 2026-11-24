@@ -335,6 +335,12 @@ var authzOps = []authzOp{
 			return nil // past the access check: this server has no git bridge
 		}
 		return err
+	}}, {"SetRepoHost", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.SetRepoHost(e.ctx, a, service.SetRepoHostInput{Repo: "acme/shop", RotateWebhookSecret: true})
+		if isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: acme/shop is not on GitLab, Gitea, Forgejo or Bitbucket
+		}
+		return err
 	}},
 }
 

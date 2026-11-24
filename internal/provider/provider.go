@@ -36,3 +36,24 @@ type OpenedPR struct {
 
 // ErrNoPullRequests means the provider cannot open pull requests (plain git).
 var ErrNoPullRequests = errors.New("this provider has no pull requests")
+
+// PRState is where a pull request (a GitLab merge request) stands.
+type PRState string
+
+const (
+	PRStateOpen   PRState = "open"
+	PRStateMerged PRState = "merged"
+	PRStateClosed PRState = "closed" // closed or declined without merging
+)
+
+// PRInfo is a pull request as the host reports it.
+type PRInfo struct {
+	Number int
+	URL    string
+	State  PRState
+	Head   string // source branch
+	Base   string // target branch
+}
+
+// ErrNotFound means the host has no such pull request.
+var ErrNotFound = errors.New("no such pull request on the host")

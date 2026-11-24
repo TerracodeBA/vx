@@ -228,6 +228,7 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Set an agent's path scope and budgets (no repository role: only the agent's person or a site admin; never an agent, not even for itself) | `vx agent scope`, Settings | person or site admin |
 | See an agent's scope, budgets and usage (the agent itself, its person, site admins) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person, agent or site admin |
 | Plan and open a split shipment (one `vx/<effort>/<n>-<name>` branch and PR per part) | `vx ship plan --split`, `vx ship open --split`, the Prepare pull requests page | admin |
+| Set a GitLab, Gitea, Forgejo or Bitbucket repository's token, make a new webhook secret | `vx repo host` | admin |
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
 
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).

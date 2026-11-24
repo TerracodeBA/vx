@@ -3,7 +3,7 @@
 {{$repo := .Repo.Name}}{{$slug := .Effort.Slug}}
 <div class="page-head"><div class="page-title">
   <h1>Ship {{.Effort.Name}}</h1>
-  <p class="muted">Every landed change becomes one commit, replayed onto the latest head of the target branch and pushed to a <span class="mono">vx/</span> branch. vx never merges; that stays your decision on {{if eq .Repo.Provider "github"}}GitHub{{else}}the git host{{end}}.</p>
+  <p class="muted">Every landed change becomes one commit, replayed onto the latest head of the target branch and pushed to a <span class="mono">vx/</span> branch. vx never merges; that stays your decision on {{if eq .Repo.Provider "git"}}the git host{{else}}{{.Repo.HostName}}{{end}}.</p>
 </div></div>
 <div class="tabs-row">
   <nav class="tabs" aria-label="How to ship">
@@ -13,7 +13,7 @@
   </nav>
 </div>
 {{if .Split}}{{template "split" .}}{{else}}
-{{if .Shipped}}<p class="note ok">Pushed. {{with index .Shipments 0}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Open pull request #{{.ProviderRef}}{{else}}Open the pull request on GitHub{{end}}</a>{{end}}{{end}}</p>{{end}}
+{{if .Shipped}}<p class="note ok">Pushed. {{with index .Shipments 0}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Open {{$.Repo.PRName}} {{if eq $.Repo.Provider "gitlab"}}!{{else}}#{{end}}{{.ProviderRef}}{{else}}Open the {{$.Repo.PRName}} on {{$.Repo.HostName}}{{end}}</a>{{end}}{{end}}</p>{{end}}
 {{if .PlanError}}<p class="note bad">{{.PlanError}}</p>{{end}}
 
 {{with .Plan}}
@@ -60,7 +60,7 @@
       {{if not $.Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
       <ul class="plain-list">
       {{range $.Shipments}}
-        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}Pull request #{{.ProviderRef}}{{else}}Open the pull request{{end}}</a>{{end}}</li>
+        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}{{if eq $.Repo.Provider "gitlab"}}Merge request !{{.ProviderRef}}{{else}}Pull request #{{.ProviderRef}}{{end}}{{else}}Open the {{$.Repo.PRName}}{{end}}</a>{{end}}</li>
       {{end}}
       </ul>
     </section>

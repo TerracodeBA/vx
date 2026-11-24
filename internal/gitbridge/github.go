@@ -18,8 +18,12 @@ import (
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-// OpenPullRequest opens a PR for head, or updates the open one.
+// OpenPullRequest opens a PR (GitLab: merge request) for head, or updates
+// the open one: title, body and base, so a stacked PR can be retargeted.
 func (b *Bridge) OpenPullRequest(ctx context.Context, repo store.Repo, pr provider.PullRequest) (provider.OpenedPR, error) {
+	if repo.Provider.Hosted() {
+		return b.openHostPR(ctx, repo, pr)
+	}
 	if repo.Provider != store.ProviderGitHub {
 		return provider.OpenedPR{}, provider.ErrNoPullRequests
 	}
