@@ -124,6 +124,7 @@ func (s *Service) PutObjects(ctx context.Context, actor Actor, repo string, objs
 	if err := s.Store.AddRepoObjects(ctx, r.ID, out); err != nil {
 		return nil, err
 	}
+	s.sizes.queue(out)
 	return out, nil
 }
 
@@ -212,7 +213,12 @@ func (s *Service) recordTree(ctx context.Context, repoID uuid.UUID, from, tree h
 	if err != nil {
 		return err
 	}
-	return s.Store.AddRepoObjects(ctx, repoID, append(trees, blobs...))
+	made := append(trees, blobs...)
+	if err := s.Store.AddRepoObjects(ctx, repoID, made); err != nil {
+		return err
+	}
+	s.sizes.queue(made)
+	return nil
 }
 
 // checkInRepo verifies that every tree and blob a snapshot adds over

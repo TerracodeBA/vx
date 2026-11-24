@@ -30,6 +30,14 @@ const DefaultURL = "postgres://vx:vx@127.0.0.1:54329/vx?sslmode=disable"
 // New returns a migrated store on a fresh database.
 func New(t testing.TB) *store.Store {
 	t.Helper()
+	s, _ := NewWithURL(t)
+	return s
+}
+
+// NewWithURL is New that also returns the database's URL, for tests that
+// connect more than one server to it.
+func NewWithURL(t testing.TB) (*store.Store, string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	admin := os.Getenv("VX_TEST_DATABASE_URL")
@@ -69,7 +77,7 @@ func New(t testing.TB) *store.Store {
 		}
 		conn.Close(ctx)
 	})
-	return s
+	return s, u.String()
 }
 
 // AddTree records the objects of tree that are not at the same path in

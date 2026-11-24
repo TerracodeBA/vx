@@ -55,6 +55,7 @@ docker image prune -f >/dev/null
 
 echo "== Nightly backup at 03:15"
 install -m 755 $SRC/deploy/production/backup.sh /usr/local/sbin/vx-backup
+install -m 755 $SRC/deploy/production/restore.sh /usr/local/sbin/vx-restore
 printf 'SHELL=/bin/bash\n15 3 * * * root /usr/local/sbin/vx-backup >> /var/log/vx-backup.log 2>&1\n' > /etc/cron.d/vx-backup
 
 echo "== Waiting for https://$DOMAIN"

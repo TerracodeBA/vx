@@ -132,7 +132,7 @@ func TestProfiles(t *testing.T) {
 	}
 
 	// Unknown profiles say what exists.
-	if code, _, errText := run("--profile", "nope", "whoami"); code != 1 || !strings.Contains(errText, `no profile "nope" (saved: `+host1) || !strings.Contains(errText, "vx login --server URL --profile nope") {
+	if code, _, errText := run("--profile", "nope", "whoami"); code != 1 || !strings.Contains(errText, `no profile "nope" (saved: `) || !strings.Contains(errText, host1) || !strings.Contains(errText, host2) || !strings.Contains(errText, "vx login --server URL --profile nope") {
 		t.Fatalf("unknown profile = %d %q", code, errText)
 	}
 	if code, _, errText := run("use", "nope"); code != 1 || !strings.Contains(errText, `no profile "nope"`) {

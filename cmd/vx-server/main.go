@@ -48,7 +48,7 @@ func main() {
 const devDatabaseURL = "postgres://vx:vx@127.0.0.1:54329/vx?sslmode=disable"
 
 func root() *cobra.Command {
-	var dbURL, dataDir string
+	var dbURL, dataDir, blobURL string
 	cmd := &cobra.Command{
 		Use:           "vx-server",
 		Short:         "The vx server",
@@ -63,7 +63,11 @@ func root() *cobra.Command {
 		if dbURL == "" {
 			dbURL = env("VX_DATABASE_URL", devDatabaseURL)
 		}
+		if blobURL == "" {
+			blobURL = os.Getenv("VX_BLOB_URL")
+		}
 	}
+	cmd.PersistentFlags().StringVar(&blobURL, "blob-url", "", "blob store: s3://BUCKET/PREFIX?region=&endpoint= or file:///PATH (default: VX_BLOB_URL, else DATA/objects)")
 	cmd.PersistentFlags().StringVar(&dataDir, "data", env("VX_DATA_DIR", ".vxdata"), "data directory for objects and git mirrors (VX_DATA_DIR)")
 
 	var addr string
@@ -78,7 +82,7 @@ func root() *cobra.Command {
 				return err
 			}
 			cfg := server.Config{
-				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream, GitHub: gh,
+				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, BlobURL: blobURL, Logger: log, Upstream: upstream, GitHub: gh,
 				Hosts: hostSettings(),
 			}
 			if err := applyOps(&cfg, os.Getenv); err != nil {
@@ -229,7 +233,7 @@ again even when already indexed). It is safe to run while the server runs.`,
 				return err
 			}
 			defer st.Close()
-			blobs, err := blob.NewDisk(filepath.Join(dataDir, "objects"))
+			blobs, err := openBlobs(blobURL, dataDir, false)
 			if err != nil {
 				return err
 			}
@@ -275,6 +279,7 @@ again even when already indexed). It is safe to run while the server runs.`,
 	}
 	cmd.AddCommand(serve, migrate, userAdd, invite, tokenCreate, backfill, superadminCmd(&dbURL), versionCmd)
 	cmd.AddCommand(quotaCmd(&dbURL))
+	cmd.AddCommand(blobsCmd(&blobURL, &dataDir), backupCmd())
 	return cmd
 }
 

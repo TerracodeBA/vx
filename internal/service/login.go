@@ -5,11 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -17,20 +15,14 @@ import (
 // LoginCodeTTL is how long a one-time web sign-in code stays valid.
 const LoginCodeTTL = 2 * time.Minute
 
-// loginCodes holds one-time codes that sign a principal in to the web UI
-// (vx ui). They live in memory: a code is meant to be used seconds after it
-// is created, by the same server. Only a hash of each code is kept.
-type loginCodes struct {
-	mu    sync.Mutex
-	codes map[[32]byte]loginCode
-}
+// One-time codes that sign a principal in to the web UI (vx ui) live in
+// Postgres (login_codes), so a code issued by one server works on another
+// behind the same load balancer. Only a hash of each code is kept.
 
-type loginCode struct {
-	principal uuid.UUID
-	expires   time.Time
+func hashCode(code string) []byte {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
+	return sum[:]
 }
-
-func hashCode(code string) [32]byte { return sha256.Sum256([]byte(strings.TrimSpace(code))) }
 
 // CreateLoginCode returns a one-time code that signs the actor in to the web
 // UI. It expires after LoginCodeTTL and works once.
@@ -42,43 +34,39 @@ func (s *Service) CreateLoginCode(ctx context.Context, actor Actor) (string, tim
 	code := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw[:]))
 	now := s.Now()
 	expires := now.Add(LoginCodeTTL)
-	s.logins.mu.Lock()
-	if s.logins.codes == nil {
-		s.logins.codes = map[[32]byte]loginCode{}
+	if err := s.Store.CreateLoginCode(ctx, hashCode(code), actor.ID, expires, now); err != nil {
+		return "", time.Time{}, err
 	}
-	for k, c := range s.logins.codes {
-		if now.After(c.expires) {
-			delete(s.logins.codes, k)
-		}
-	}
-	s.logins.codes[hashCode(code)] = loginCode{principal: actor.ID, expires: expires}
-	s.logins.mu.Unlock()
 	return code, expires, nil
+}
+
+func errLoginCode() error {
+	return errf(CodeNotFound, "this sign-in link has expired or was already used; run vx ui again")
 }
 
 // PeekLoginCode tells who a code would sign in, without using it up.
 func (s *Service) PeekLoginCode(ctx context.Context, code string) (store.Principal, error) {
-	s.logins.mu.Lock()
-	c, ok := s.logins.codes[hashCode(code)]
-	s.logins.mu.Unlock()
-	if !ok || s.Now().After(c.expires) {
-		return store.Principal{}, errf(CodeNotFound, "this sign-in link has expired or was already used; run vx ui again")
+	id, err := s.Store.PeekLoginCode(ctx, hashCode(code), s.Now())
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Principal{}, errLoginCode()
 	}
-	return s.Store.PrincipalByID(ctx, c.principal)
+	if err != nil {
+		return store.Principal{}, err
+	}
+	return s.Store.PrincipalByID(ctx, id)
 }
 
 // RedeemLoginCode uses up a code and issues a new token for its principal,
 // to be kept in the browser's session cookie.
 func (s *Service) RedeemLoginCode(ctx context.Context, code string) (store.Principal, string, error) {
-	h := hashCode(code)
-	s.logins.mu.Lock()
-	c, ok := s.logins.codes[h]
-	delete(s.logins.codes, h)
-	s.logins.mu.Unlock()
-	if !ok || s.Now().After(c.expires) {
-		return store.Principal{}, "", errf(CodeNotFound, "this sign-in link has expired or was already used; run vx ui again")
+	id, err := s.Store.UseLoginCode(ctx, hashCode(code), s.Now())
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Principal{}, "", errLoginCode()
 	}
-	p, err := s.Store.PrincipalByID(ctx, c.principal)
+	if err != nil {
+		return store.Principal{}, "", err
+	}
+	p, err := s.Store.PrincipalByID(ctx, id)
 	if err != nil {
 		return store.Principal{}, "", classify(err)
 	}
