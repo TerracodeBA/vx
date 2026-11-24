@@ -37,6 +37,37 @@ func (s *Service) ruleWarnings(ctx context.Context, base, tree hash.Hash) []engi
 	return ws
 }
 
+// withRequiredChecks returns the evidence to store for a snapshot: ev with
+// NotVerified set to the vx.toml [checks] required commands (rules at
+// tree, the snapshot the evidence describes) that vx did not run. A
+// client's NotVerified is never kept. ev itself is not modified.
+func (s *Service) withRequiredChecks(ctx context.Context, tree hash.Hash, ev *object.Evidence) *object.Evidence {
+	var missing []string
+	if r, err := rules.At(ctx, s.Blobs, tree); err == nil && len(r.RequiredChecks) > 0 {
+		var ran []string
+		if ev != nil {
+			for _, c := range ev.Checks {
+				if c.RanByVX {
+					ran = append(ran, c.Name)
+				}
+			}
+		}
+		missing = rules.MissingChecks(r, ran)
+	}
+	if ev == nil && len(missing) == 0 {
+		return nil
+	}
+	out := &object.Evidence{}
+	if ev != nil {
+		*out = *ev
+	}
+	out.NotVerified = missing
+	if out.IsEmpty() {
+		return nil
+	}
+	return out
+}
+
 // rulesFileChanged reports whether vx.toml differs between two trees.
 func (s *Service) rulesFileChanged(ctx context.Context, a, b hash.Hash) bool {
 	if a.IsZero() {

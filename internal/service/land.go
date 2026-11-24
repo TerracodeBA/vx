@@ -92,6 +92,7 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 	if intent == "" {
 		intent = v.Workspace.Intent
 	}
+	in.Evidence = s.withRequiredChecks(ctx, in.Tree, in.Evidence)
 
 	attempts := s.MaxLandAttempts
 	if attempts <= 0 {

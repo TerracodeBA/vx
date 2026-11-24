@@ -79,7 +79,7 @@ func evidencePB(e *object.Evidence) *vxv1.Evidence {
 	if e == nil || e.IsEmpty() {
 		return nil
 	}
-	out := &vxv1.Evidence{NewTests: e.NewTests}
+	out := &vxv1.Evidence{NewTests: e.NewTests, NotVerified: e.NotVerified}
 	for _, c := range e.Checks {
 		out.Checks = append(out.Checks, &vxv1.Check{Name: c.Name, Result: c.Result, Passed: int32(c.Passed), Failed: int32(c.Failed), RanByVx: c.RanByVX, DurationMs: c.DurationMs, Notes: c.Notes})
 	}
@@ -90,6 +90,7 @@ func evidenceFromPB(e *vxv1.Evidence) (*object.Evidence, error) {
 	if e == nil {
 		return nil, nil
 	}
+	// not_verified is the server's to fill (Land); what a client sends is ignored.
 	out := &object.Evidence{NewTests: e.NewTests}
 	for _, c := range e.Checks {
 		if c.Result != "pass" && c.Result != "fail" {

@@ -57,6 +57,7 @@
       <ul class="plain-list evidence">
         {{range .C.Evidence.Checks}}<li><span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}">{{.Result}}</span><span class="mono small">{{.Name}}</span><span class="muted small">{{if .RanByVX}}run by vx{{else}}reported by the agent{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}{{if .Failed}} · {{.Failed}} failed{{end}}{{if .Notes}} · {{.Notes}}{{end}}</span></li>{{end}}
         {{range .C.Evidence.NewTests}}<li><span class="pill neutral">new test</span><span class="mono small">{{.}}</span></li>{{end}}
+        {{range .C.Evidence.NotVerified}}<li><span class="pill warn">not verified</span><span class="mono small">{{.}}</span><span class="muted small">required in vx.toml [checks], not run by vx</span></li>{{end}}
       </ul>
       {{else}}<p class="muted small">No evidence recorded.</p>{{end}}
       {{if .C.DependsOn}}<h3 class="sec small-sec">Depends on</h3><p class="mono small">{{range $i, $d := .C.DependsOn}}{{if $i}}, {{end}}{{$d}}{{end}}</p>{{end}}

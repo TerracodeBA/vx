@@ -11,6 +11,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/provider"
+	"github.com/TerracodeBA/vx/internal/rules"
 	"github.com/TerracodeBA/vx/internal/store"
 )
 
@@ -348,6 +349,9 @@ func prBody(p ShipPlan) string {
 					line += ", before the effort was rebased onto " + rebasedOnto(c.Changeset)
 				}
 				checks = append(checks, line)
+			}
+			for _, nv := range c.Evidence.NotVerified {
+				checks = append(checks, fmt.Sprintf("- `%s`: not verified: %s", c.ChangeID, rules.NotVerified(nv)))
 			}
 		}
 	}

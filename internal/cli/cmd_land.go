@@ -360,6 +360,9 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if evidence != nil && len(evidence.NewTests) > 0 {
 		a.printf("New tests: %s\n", strings.Join(evidence.NewTests, ", "))
 	}
+	for _, c := range cs.GetEvidence().GetNotVerified() {
+		a.printf("Not verified: %s\n", rules.NotVerified(c))
+	}
 	if notesDropped(evidence, cs.Evidence) {
 		a.printf("Warning: the server did not record the check notes (it may run an older vx); the landed evidence lacks them.\n")
 	}

@@ -1,9 +1,11 @@
 package service_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 )
 
@@ -93,5 +95,40 @@ func TestLandWarnsAboutBrokenRules(t *testing.T) {
 	tree := e.snapshot(repo, e.effort(eff).Head, nil)
 	if _, err := e.svc.RulesAt(e.ctx, tree); err == nil {
 		t.Fatal("RulesAt accepted a broken vx.toml")
+	}
+}
+
+// Required checks vx did not run are recorded on the change's evidence.
+func TestLandRecordsRequiredChecksNotVerified(t *testing.T) {
+	e := newEnv(t)
+	repo, eff := e.setup()
+	// No vx.toml: nothing is added.
+	if c := e.land(repo, eff, "Plain", map[string]*string{"a.txt": s("a")}, nil); c.Evidence != nil {
+		t.Fatalf("evidence without vx.toml: %+v", c.Evidence)
+	}
+	toml := "[checks]\nrequired = [\"go vet ./...\", \"go test ./...\"]\n"
+	c := e.land(repo, e.effort(eff), "Rules", map[string]*string{"vx.toml": s(toml)}, nil)
+	if c.Evidence == nil || !reflect.DeepEqual(c.Evidence.NotVerified, []string{"go vet ./...", "go test ./..."}) {
+		t.Fatalf("no evidence at all: %+v", c.Evidence)
+	}
+	// Run by vx (spaces trimmed) counts; reported by the author does not.
+	ev := &object.Evidence{Checks: []object.Check{
+		{Name: " go vet ./... ", Result: "pass", RanByVX: true},
+		{Name: "go test ./...", Result: "pass"},
+	}, NotVerified: []string{"forged"}}
+	c = e.land(repo, e.effort(eff), "Some", map[string]*string{"b.txt": s("b")}, ev)
+	if !reflect.DeepEqual(c.Evidence.NotVerified, []string{"go test ./..."}) || len(c.Evidence.Checks) != 2 {
+		t.Fatalf("partly verified: %+v", c.Evidence)
+	}
+	if len(ev.NotVerified) != 1 || ev.NotVerified[0] != "forged" {
+		t.Fatal("the caller's evidence was modified")
+	}
+	all := &object.Evidence{Checks: []object.Check{
+		{Name: "go vet ./...", Result: "pass", RanByVX: true},
+		{Name: "go test ./...", Result: "fail", RanByVX: true},
+	}}
+	c = e.land(repo, e.effort(eff), "All", map[string]*string{"c.txt": s("c")}, all)
+	if len(c.Evidence.NotVerified) != 0 {
+		t.Fatalf("all run by vx: %+v", c.Evidence)
 	}
 }

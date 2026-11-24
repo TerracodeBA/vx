@@ -412,6 +412,29 @@ func (r Rules) GeneratedMatcher() func(path string) (command string, ok bool) {
 	}
 }
 
+// NotVerified describes a required check vx did not run:
+//
+//	required check `go vet ./...` (vx.toml) was not run by vx
+func NotVerified(command string) string {
+	return fmt.Sprintf("required check `%s` (%s) was not run by vx", command, File)
+}
+
+// MissingChecks returns the required checks of r that are not in ran
+// (commands vx ran, compared after trimming spaces), in vx.toml order.
+func MissingChecks(r Rules, ran []string) []string {
+	have := map[string]bool{}
+	for _, c := range ran {
+		have[strings.TrimSpace(c)] = true
+	}
+	var out []string
+	for _, c := range r.RequiredChecks {
+		if !have[c] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // MergeOptions are the engine options of a merge whose sides are trees:
 // the [[generated]] rules of every one of them, so a generated file is
 // never text-merged whichever side declared it. A vx.toml that does not
