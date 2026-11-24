@@ -54,8 +54,20 @@ func (r MergeResult) Clean() bool { return len(r.Conflicts) == 0 }
 
 // MergeTrees merges ours and theirs, which both descend from base. Paths
 // changed on one side take that side. Paths changed on both sides are merged
-// line by line when possible.
+// line by line when possible. With conflicts, the result has no tree.
 func MergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels) (MergeResult, error) {
+	return mergeTrees(ctx, s, base, ours, theirs, labels, false)
+}
+
+// MergeTreesKeepConflicts is MergeTrees for a working copy: it always
+// returns a tree. Text conflicts are written into the file with conflict
+// markers; other conflicts keep our side. The caller shows the conflicts and
+// the person or agent resolves them in place.
+func MergeTreesKeepConflicts(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels) (MergeResult, error) {
+	return mergeTrees(ctx, s, base, ours, theirs, labels, true)
+}
+
+func mergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash, labels merge.Labels, keep bool) (MergeResult, error) {
 	var res MergeResult
 	if ours == theirs || ours == base {
 		res.Tree = theirs
@@ -92,9 +104,14 @@ func MergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 			continue
 		case o.Op == object.OpDelete:
 			res.Conflicts = append(res.Conflicts, Conflict{Path: o.Path, Kind: ConflictDeleteModify, Base: o.Old, Theirs: t.New})
+			// Theirs keeps its edit (it is the tree we apply onto), so no
+			// work is lost; the conflict tells the caller ours deleted it.
 			continue
 		case t.Op == object.OpDelete:
 			res.Conflicts = append(res.Conflicts, Conflict{Path: o.Path, Kind: ConflictModifyDelete, Base: o.Old, Ours: o.New})
+			if keep {
+				apply = append(apply, object.Change{Path: o.Path, Op: object.OpAdd, New: o.New})
+			}
 			continue
 		}
 		merged, conflict, err := mergeFile(ctx, s, o, t, labels)
@@ -103,12 +120,23 @@ func MergeTrees(ctx context.Context, s blob.Store, base, ours, theirs hash.Hash,
 		}
 		if conflict != nil {
 			res.Conflicts = append(res.Conflicts, *conflict)
+			if keep {
+				f := o.New
+				if conflict.Markers != nil {
+					h, err := s.Put(ctx, hash.KindBlob, conflict.Markers)
+					if err != nil {
+						return res, err
+					}
+					f = object.File{Hash: h, Mode: o.New.Mode}
+				}
+				apply = append(apply, object.Change{Path: o.Path, Op: object.OpModify, Old: t.New, New: f})
+			}
 			continue
 		}
 		res.AutoMerged = append(res.AutoMerged, o.Path)
 		apply = append(apply, object.Change{Path: o.Path, Op: object.OpModify, Old: t.New, New: merged})
 	}
-	if len(res.Conflicts) > 0 {
+	if len(res.Conflicts) > 0 && !keep {
 		return res, nil
 	}
 	tree, err := object.ApplyChanges(ctx, s, theirs, apply)

@@ -187,3 +187,21 @@ func TestMergeShortcuts(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeKeepConflicts(t *testing.T) {
+	f := newFixture(t)
+	base := map[string]string{"x.go": "1\n2\n3\n", "y.go": "y\n", "z.go": "z\n"}
+	ours := map[string]string{"x.go": "1\nours\n3\n", "y.go": "y ours\n"}
+	theirs := map[string]string{"x.go": "1\ntheirs\n3\n", "z.go": "z theirs\n"}
+	r, err := MergeTreesKeepConflicts(f.ctx, f.s, f.tree(base), f.tree(ours), f.tree(theirs), merge.Labels{Ours: "local", Theirs: "effort"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Conflicts) != 3 || r.Tree.IsZero() {
+		t.Fatalf("got %d conflicts, tree %v", len(r.Conflicts), r.Tree)
+	}
+	got := f.read(r.Tree)
+	if !strings.Contains(got["x.go"], "<<<<<<< local") || got["y.go"] != "y ours\n" || got["z.go"] != "z theirs\n" {
+		t.Fatalf("kept tree = %v", got)
+	}
+}

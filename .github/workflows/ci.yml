@@ -1,0 +1,31 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: vx
+          POSTGRES_PASSWORD: vx
+          POSTGRES_DB: vx
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vx" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format and vet
+        run: |
+          test -z "$(gofmt -l cmd internal)"
+          go vet ./...
+      - name: Test
+        env:
+          VX_REQUIRE_DB: "1"
+        run: go test -race ./...

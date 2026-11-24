@@ -86,3 +86,6 @@ func isUniqueViolation(err error) bool {
 
 // NewID returns a new random UUID.
 func NewID() uuid.UUID { return uuid.New() }
+
+// Ping checks the database connection.
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }

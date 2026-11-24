@@ -45,6 +45,10 @@ func errf(code Code, format string, args ...any) error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}
 }
 
+// Classify turns store and blob errors into service errors and passes
+// others on unchanged.
+func Classify(err error) error { return classify(err) }
+
 // classify turns store errors into service errors and passes others on.
 func classify(err error) error {
 	var se *Error
