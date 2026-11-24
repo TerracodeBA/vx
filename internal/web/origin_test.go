@@ -289,3 +289,23 @@ func TestSessionCookiePerServer(t *testing.T) {
 		t.Fatalf("cookies behind https = %+v", cs)
 	}
 }
+
+// Browsers send "Origin: null" on form posts from a page with
+// Referrer-Policy no-referrer, which the origin check refuses. Pages with
+// forms, the vx ui sign-in page among them, use same-origin instead.
+func TestReferrerPolicyKeepsOrigin(t *testing.T) {
+	e := newWebEnv(t)
+	for _, path := range []string{"/ui/login", "/ui/login/code?c=nope"} {
+		resp, err := e.c.Get(e.srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := resp.Header.Get("Referrer-Policy"); got != "same-origin" {
+			t.Errorf("%s: Referrer-Policy = %q, want same-origin", path, got)
+		}
+	}
+	if code, _ := e.post("/ui/login/code", url.Values{"code": {"nope"}}, map[string]string{"Origin": "null"}); code != http.StatusForbidden {
+		t.Fatalf("Origin: null = %d, want 403", code)
+	}
+}

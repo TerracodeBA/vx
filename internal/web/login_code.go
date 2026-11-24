@@ -26,7 +26,9 @@ func (u *UI) codePage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data["Who"] = p.Ref()
 	}
-	w.Header().Set("Referrer-Policy", "no-referrer") // keep the code out of other sites' logs
+	// Keep the code out of other sites' logs. Not "no-referrer": with it,
+	// browsers send "Origin: null" on the form post and checkOrigin refuses it.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	u.render(w, r, "code", data)
 }
 
