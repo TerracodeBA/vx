@@ -40,6 +40,11 @@ if [ ! -f $ENV ]; then
   umask 077
   printf 'VX_DOMAIN=%s\nPOSTGRES_PASSWORD=%s\n' "$DOMAIN" "$(openssl rand -hex 24)" > $ENV
 fi
+# The key that seals secrets at rest (GitHub App credentials). Made once on
+# this server and never replaced: secrets stored with it open only with it.
+if ! grep -q '^VX_SECRET_KEY=' $ENV; then
+  (umask 077; printf 'VX_SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> $ENV)
+fi
 sed -i "s/^VX_DOMAIN=.*/VX_DOMAIN=$DOMAIN/" $ENV
 ln -sf $ENV .env
 export VX_COMMIT=$(git -C $SRC rev-parse --short=12 HEAD) VX_VERSION=$(git -C $SRC describe --tags --always)

@@ -32,6 +32,11 @@ services:
     environment:
       VX_DATABASE_URL: postgres://vx:${POSTGRES_PASSWORD:-vx}@postgres:5432/vx?sslmode=disable
       VX_GITHUB_TOKEN: ${VX_GITHUB_TOKEN:-}
+      # For the GitHub App (docs/deploy.md): public address and the key
+      # that seals its credentials (openssl rand -hex 32, set once).
+      VX_PUBLIC_URL: ${VX_PUBLIC_URL:-}
+      VX_SECRET_KEY: ${VX_SECRET_KEY:-}
+      VX_SIGNUP: ${VX_SIGNUP:-invite}
     ports:
       - "127.0.0.1:7070:7070"
     volumes:

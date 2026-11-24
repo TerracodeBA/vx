@@ -17,6 +17,7 @@ import (
 
 	"github.com/TerracodeBA/vx/internal/api"
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/github"
 	"github.com/TerracodeBA/vx/internal/mcp"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
@@ -31,6 +32,9 @@ type Config struct {
 	Logger      *slog.Logger
 	// Upstream imports branches from git providers; nil disables it.
 	Upstream func(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error)
+	// GitHub configures the GitHub App (VX_PUBLIC_URL, VX_SECRET_KEY,
+	// VX_SIGNUP). Connect defaults to the internal/github client.
+	GitHub service.GitHubSettings
 }
 
 // Server is a running vx server.
@@ -69,6 +73,18 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	}
 	svc := service.New(st, blobs, up)
+	svc.GitHub = cfg.GitHub
+	if svc.GitHub.Connect == nil {
+		apiURL, webURL := svc.GitHub.APIURL, svc.GitHub.WebURL
+		svc.GitHub.Connect = func(creds service.GitHubAppCredentials) (service.GitHubAPI, error) {
+			return github.FromCredentials(creds, apiURL, webURL)
+		}
+	}
+	// A GitHub App set up earlier must open with this server's key.
+	if err := svc.LoadGitHubApp(ctx); err != nil {
+		st.Close()
+		return nil, err
+	}
 	// Repositories from before objects were scoped to repositories get their
 	// objects indexed: queue them now, so object requests for them wait for
 	// their backfill, and walk them in the background once serving.

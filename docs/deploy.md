@@ -22,6 +22,16 @@ docker compose up -d
 
 To let vx open pull requests on GitHub, add `VX_GITHUB_TOKEN=...` to `.env`: a fine-grained token with **Contents** and **Pull requests** read/write on the repositories the team uses. Without a token, GitHub access goes over SSH from the container and `vx ship open` prints a link to open the PR by hand.
 
+## GitHub App
+
+With a GitHub App, people sign in with GitHub, roles on installed repositories come from GitHub, and webhooks keep repositories, renames and pushes in sync.
+
+1. Set `VX_PUBLIC_URL` (for example `https://vx.example.com`) and `VX_SECRET_KEY` (`openssl rand -hex 32`, once) in `.env`, and restart. `deploy/production/install.sh` does both.
+2. As a site admin, open **Admin > GitHub** in the web UI, enter the GitHub organization that should own the App (or leave it empty for your own account) and click **Create the GitHub App**. GitHub shows the App vx asks for (permissions: metadata read, contents and pull requests write, checks read, organization members read; webhook at `/hooks/github`) and sends you back; click **Finish setting up GitHub**.
+3. Click **Install the App on GitHub** and pick the organizations and repositories. They show up in vx at once; their roles come from GitHub.
+
+The App's private key, client secret and webhook secret are stored encrypted with `VX_SECRET_KEY`. Webhooks need `https://vx.example.com/hooks/github` reachable from GitHub; nothing else has to be open.
+
 ## HTTPS
 
 vx listens on 127.0.0.1:7070. Put a reverse proxy with TLS in front of it. With Caddy:
@@ -144,6 +154,10 @@ docker compose exec -T postgres psql -U vx vx -c "update principals set site_adm
 | `VX_DATA_DIR` | `/data` in the image | Objects and git mirrors |
 | `VX_ADDR` | `0.0.0.0:7070` in the image | Listen address |
 | `VX_GITHUB_TOKEN` | empty | GitHub API and HTTPS git access |
+| `VX_PUBLIC_URL` | empty | This server's public address, like `https://vx.example.com`; needed for the GitHub App (callbacks, webhooks) and the CLI login |
+| `VX_SECRET_KEY` | empty | 32 bytes, 64 hex characters or base64 (`openssl rand -hex 32`); seals the GitHub App's credentials at rest. Required once a GitHub App exists: the server does not start without it. Keep it with your backups; never change it |
+| `VX_SIGNUP` | `invite` | Who may create an account by signing in with GitHub: `invite` (logins a site admin invited), `open` (anyone) or `closed` (nobody new) |
+| `VX_GITHUB_URL`, `VX_GITHUB_API_URL` | github.com | GitHub Enterprise Server only: `https://HOST` and `https://HOST/api/v3` (set both) |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 

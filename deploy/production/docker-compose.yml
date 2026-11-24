@@ -2,7 +2,10 @@
 # Installed and updated by install.sh / update.sh in this folder; settings in .env:
 #   VX_DOMAIN=app.example.com
 #   POSTGRES_PASSWORD=<generated>
+#   VX_SECRET_KEY=<generated once by install.sh; seals the GitHub App's credentials>
+#   VX_SIGNUP=invite|open|closed (optional, default invite)
 #   VX_GITHUB_TOKEN=<optional>
+#   VX_GITHUB_URL, VX_GITHUB_API_URL=<optional, GitHub Enterprise only>
 services:
   postgres:
     image: postgres:17-alpine
@@ -33,6 +36,11 @@ services:
     environment:
       VX_DATABASE_URL: postgres://vx:${POSTGRES_PASSWORD}@postgres:5432/vx?sslmode=disable
       VX_GITHUB_TOKEN: ${VX_GITHUB_TOKEN:-}
+      VX_PUBLIC_URL: https://${VX_DOMAIN}
+      VX_SECRET_KEY: ${VX_SECRET_KEY:-}
+      VX_SIGNUP: ${VX_SIGNUP:-invite}
+      VX_GITHUB_URL: ${VX_GITHUB_URL:-}
+      VX_GITHUB_API_URL: ${VX_GITHUB_API_URL:-}
     volumes:
       - data:/data
     # Not published: only Caddy reaches it.

@@ -1,0 +1,21 @@
+{{define "content"}}
+<section class="login-card">
+  <div class="brand brand-lg"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></div>
+  {{if .Created}}
+  <h1>GitHub created the App</h1>
+  {{if .Code}}
+  <p class="muted">One more step: vx fetches the App's credentials from GitHub and stores them encrypted.</p>
+  <form method="post" action="/ui/admin/github/finish" class="stack">
+    <input type="hidden" name="code" value="{{.Code}}">
+    <input type="hidden" name="state" value="{{.State}}">
+    <button class="btn primary block" type="submit">Finish setting up GitHub</button>
+  </form>
+  {{else}}<p class="note bad">GitHub sent no code back. Start again on <a href="/ui/admin/github">Admin &gt; GitHub</a>.</p>{{end}}
+  {{end}}
+  {{if .Installed}}
+  <h1>The vx GitHub App is installed</h1>
+  {{with .SyncErr}}<p class="note warn">{{.}}</p>{{else}}<p class="muted">vx now knows the repositories you gave the App. Roles on them come from GitHub.</p>{{end}}
+  <p><a class="btn primary block" href="/ui">Continue to vx</a></p>
+  {{end}}
+</section>
+{{end}}

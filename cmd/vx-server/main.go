@@ -72,8 +72,12 @@ func root() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 			log.Info("starting vx-server", "version", version.String())
+			gh, err := githubSettings()
+			if err != nil {
+				return err
+			}
 			srv, err := server.New(cmd.Context(), server.Config{
-				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream,
+				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream, GitHub: gh,
 			})
 			if err != nil {
 				return err
