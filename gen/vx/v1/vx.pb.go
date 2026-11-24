@@ -615,9 +615,12 @@ func (x *Check) GetNotes() string {
 }
 
 type Evidence struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Checks        []*Check               `protobuf:"bytes,1,rep,name=checks,proto3" json:"checks,omitempty"`
-	NewTests      []string               `protobuf:"bytes,2,rep,name=new_tests,json=newTests,proto3" json:"new_tests,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Checks   []*Check               `protobuf:"bytes,1,rep,name=checks,proto3" json:"checks,omitempty"`
+	NewTests []string               `protobuf:"bytes,2,rep,name=new_tests,json=newTests,proto3" json:"new_tests,omitempty"`
+	// Commands vx.toml [checks] required that vx did not run for this change
+	// (no vx land --run with exactly that command). Filled by the server.
+	NotVerified   []string `protobuf:"bytes,3,rep,name=not_verified,json=notVerified,proto3" json:"not_verified,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -662,6 +665,13 @@ func (x *Evidence) GetChecks() []*Check {
 func (x *Evidence) GetNewTests() []string {
 	if x != nil {
 		return x.NewTests
+	}
+	return nil
+}
+
+func (x *Evidence) GetNotVerified() []string {
+	if x != nil {
+		return x.NotVerified
 	}
 	return nil
 }
@@ -10400,10 +10410,11 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\tran_by_vx\x18\x05 \x01(\bR\aranByVx\x12\x1f\n" +
 	"\vduration_ms\x18\x06 \x01(\x03R\n" +
 	"durationMs\x12\x14\n" +
-	"\x05notes\x18\a \x01(\tR\x05notes\"M\n" +
+	"\x05notes\x18\a \x01(\tR\x05notes\"p\n" +
 	"\bEvidence\x12$\n" +
 	"\x06checks\x18\x01 \x03(\v2\f.vx.v1.CheckR\x06checks\x12\x1b\n" +
-	"\tnew_tests\x18\x02 \x03(\tR\bnewTests\"\xaa\x01\n" +
+	"\tnew_tests\x18\x02 \x03(\tR\bnewTests\x12!\n" +
+	"\fnot_verified\x18\x03 \x03(\tR\vnotVerified\"\xaa\x01\n" +
 	"\n" +
 	"FileChange\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x0e\n" +

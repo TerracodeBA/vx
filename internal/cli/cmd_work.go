@@ -15,6 +15,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/rules"
 	"github.com/TerracodeBA/vx/internal/workcopy"
 )
 
@@ -557,6 +558,9 @@ func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
 		}
 		if len(ev.NewTests) > 0 {
 			a.printf("%snew tests: %s\n", indent, strings.Join(ev.NewTests, ", "))
+		}
+		for _, c := range ev.NotVerified {
+			a.printf("%snot verified: %s\n", indent, rules.NotVerified(c))
 		}
 	}
 	if len(cs.DependsOn) > 0 {

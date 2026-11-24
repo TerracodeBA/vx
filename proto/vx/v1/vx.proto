@@ -76,6 +76,9 @@ message Check {
 message Evidence {
   repeated Check checks = 1;
   repeated string new_tests = 2;
+  // Commands vx.toml [checks] required that vx did not run for this change
+  // (no vx land --run with exactly that command). Filled by the server.
+  repeated string not_verified = 3;
 }
 
 message FileChange {

@@ -48,10 +48,15 @@ type Check struct {
 type Evidence struct {
 	Checks   []Check  `json:"checks,omitempty"`
 	NewTests []string `json:"new_tests,omitempty"`
+	// NotVerified are the commands vx.toml [checks] required that vx did
+	// not run for this change (set by the server when it lands).
+	NotVerified []string `json:"not_verified,omitempty"`
 }
 
 // IsEmpty reports whether there is no evidence.
-func (e Evidence) IsEmpty() bool { return len(e.Checks) == 0 && len(e.NewTests) == 0 }
+func (e Evidence) IsEmpty() bool {
+	return len(e.Checks) == 0 && len(e.NewTests) == 0 && len(e.NotVerified) == 0
+}
 
 // Changeset is one change: a snapshot (tree) on top of its parents, with the
 // intent and provenance that git has no place for. Its hash covers every

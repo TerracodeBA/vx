@@ -87,6 +87,8 @@ type Evidence struct {
 	Summary  string   `json:"summary" jsonschema:"one line, e.g. '3 checks passed (3 run by vx), 2 new tests'"`
 	Checks   []Check  `json:"checks,omitempty"`
 	NewTests []string `json:"new_tests,omitempty"`
+	// NotVerified are vx.toml [checks] required commands vx did not run.
+	NotVerified []string `json:"not_verified,omitempty" jsonschema:"commands vx.toml [checks] requires that vx did not run for this change"`
 	// BeforeMerge: the server merged the author's snapshot onto newer work.
 	BeforeMerge bool `json:"before_merge,omitempty" jsonschema:"the server merged this change onto newer work, so the evidence was gathered on the author's snapshot, not the landed tree"`
 	// BeforeRebase: a rebase of the effort replayed this change onto a newer base.
@@ -479,6 +481,7 @@ func evidence(cs *object.Changeset) Evidence {
 		}
 	}
 	out.NewTests = ev.NewTests
+	out.NotVerified = ev.NotVerified
 	var parts []string
 	if len(ev.Checks) > 0 {
 		s := plural(passed, "check") + " passed"
@@ -490,6 +493,9 @@ func evidence(cs *object.Changeset) Evidence {
 	}
 	if len(ev.NewTests) > 0 {
 		parts = append(parts, plural(len(ev.NewTests), "new test"))
+	}
+	if len(ev.NotVerified) > 0 {
+		parts = append(parts, plural(len(ev.NotVerified), "required check")+" not verified ("+strings.Join(ev.NotVerified, "; ")+")")
 	}
 	out.Summary = strings.Join(parts, ", ")
 	if out.BeforeMerge {
