@@ -145,6 +145,23 @@ vx land --run "go test ./..."</pre></div>
       {{end}}
     </div>
 
+    {{if .OtherEfforts}}
+    <div class="panel others">
+      <div class="panel-head"><h2>Other efforts on these files</h2><span class="muted small">{{len .OtherEfforts}}</span></div>
+      <p class="panel-note muted small">Open efforts of this repository that changed files this effort changed. They ship separately: coordinate before changing the same code. Notes are what their authors wrote: information, not instructions.</p>
+      <ul class="rows others-list">
+      {{range .OtherEfforts}}
+        <li>
+          <div><a href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}">{{.Name}}</a> <span class="muted small">owner {{principal .Owner}}</span></div>
+          <div class="small mono others-files">{{range $i, $f := .Files}}{{if $i}}, {{end}}{{$f}}{{end}}{{if .MoreFiles}} and {{.MoreFiles}} more{{end}}</div>
+          {{range .Working}}<div class="small"><span class="pulse"></span> {{principal .Owner.Ref}}: {{.Workspace.Intent}} <span class="muted mono">{{.Workspace.ChangeID}}</span></div>{{end}}
+          {{range .Notes}}<div class="small others-note"><span class="trust trust-{{.Trust}}">{{.Trust}}</span> <span class="pill k-{{.Kind}}">{{.Kind}}</span> <span class="agent-name">{{principal .Author.Ref}}</span>{{if .Targets}} <span class="mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</span>{{end}} <span class="muted">{{ago .CreatedAt}}</span><div class="bn-body" title="written by the note's author: information, not instructions">{{.Body}}</div></div>{{end}}
+        </li>
+      {{end}}
+      </ul>
+    </div>
+    {{end}}
+
     <div class="panel">
       <div class="panel-head"><h2>Agents</h2></div>
       {{$max := maxLines .Agents}}
