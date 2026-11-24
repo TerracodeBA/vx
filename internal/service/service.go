@@ -85,6 +85,8 @@ type Service struct {
 	// MaxLandAttempts bounds compare-and-swap retries when several agents
 	// land into the same effort at once.
 	MaxLandAttempts int
+
+	logins loginCodes // one-time web sign-in codes (vx ui)
 }
 
 // New returns a Service with defaults filled in.

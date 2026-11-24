@@ -17,6 +17,9 @@ import (
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 	"github.com/TerracodeBA/vx/internal/store/storetest"
+	"github.com/TerracodeBA/vx/internal/web"
+	"io"
+	"log/slog"
 )
 
 type harness struct {
@@ -44,6 +47,9 @@ func newHarness(t *testing.T) (*harness, string) {
 	svc := service.New(st, blobs, nil)
 	mux := http.NewServeMux()
 	api.Mount(mux, svc)
+	if err := web.Mount(mux, svc, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	}
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	alice, err := st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "alice", DisplayName: "Alice", Email: "alice@example.com"})
