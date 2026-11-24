@@ -323,12 +323,13 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	sh := store.Shipment{
 		EffortID: plan.Effort.ID, Title: plan.Title, Branch: plan.Branch, Target: plan.Target,
 		BaseGitSHA: plan.TargetHead.GitSHA, HeadGitSHA: shas[len(shas)-1], URL: pr.URL, State: state, CreatedBy: actor.ID,
+		BaseTree: plan.TargetHead.Tree,
 	}
 	if pr.Number > 0 {
 		sh.ProviderRef = fmt.Sprint(pr.Number)
 	}
 	for i, st := range steps {
-		sh.Changes = append(sh.Changes, store.ShipmentChange{Position: i, Changeset: st.Changeset.Hash, ChangeID: st.Changeset.ChangeID, GitSHA: shas[i]})
+		sh.Changes = append(sh.Changes, store.ShipmentChange{Position: i, Changeset: st.Changeset.Hash, ChangeID: st.Changeset.ChangeID, GitSHA: shas[i], Tree: st.Tree})
 	}
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		var err error
@@ -338,6 +339,9 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 		return tx.LogOp(ctx, &plan.Repo.ID, &actor.ID, "ship", plan.Effort.Slug, nil,
 			map[string]any{"branch": plan.Branch, "target": plan.Target, "commits": len(shas), "pr": pr.URL})
 	})
+	if err == nil && pr.Number > 0 {
+		s.postEvidenceCheck(ctx, plan, sh.HeadGitSHA, pr.URL)
+	}
 	return res, err
 }
 

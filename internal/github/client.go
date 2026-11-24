@@ -224,6 +224,8 @@ func (e *Error) Is(target error) bool {
 		return e.Status == http.StatusUnauthorized
 	case ErrRateLimited:
 		return e.RateLimited
+	case service.ErrGitHubForbidden:
+		return e.Status == http.StatusForbidden && !e.RateLimited
 	}
 	return false
 }
@@ -421,12 +423,17 @@ func (c *Client) ForgetInstallationToken(id int64) {
 // installationAPI calls the API with an installation token and retries
 // once with a fresh token when GitHub refuses the cached one.
 func (c *Client) installationAPI(ctx context.Context, id int64, method, path string, out any) (http.Header, error) {
+	return c.installationCall(ctx, id, method, path, nil, out)
+}
+
+// installationCall is installationAPI with a JSON request body.
+func (c *Client) installationCall(ctx context.Context, id int64, method, path string, in, out any) (http.Header, error) {
 	for attempt := 0; ; attempt++ {
 		tok, _, err := c.InstallationToken(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		h, err := c.api(ctx, method, path, &auth{"Bearer", tok}, nil, out)
+		h, err := c.api(ctx, method, path, &auth{"Bearer", tok}, in, out)
 		if attempt == 0 && errors.Is(err, ErrUnauthorized) {
 			c.ForgetInstallationToken(id)
 			continue
@@ -626,3 +633,40 @@ func (c *Client) OrgMembership(ctx context.Context, installationID int64, org, l
 	}
 	return "none", nil
 }
+
+// CreateCheckRun posts a completed check run on a commit of owner/repo.
+// A refusal for want of the checks: write permission matches
+// service.ErrGitHubForbidden.
+func (c *Client) CreateCheckRun(ctx context.Context, installationID int64, owner, repo string, run service.GitHubCheckRun) error {
+	in := map[string]any{
+		"name": run.Name, "head_sha": run.HeadSHA, "status": "completed", "conclusion": run.Conclusion,
+		"output": map[string]any{"title": run.Title, "summary": run.Summary, "text": run.Text},
+	}
+	if run.DetailsURL != "" {
+		in["details_url"] = run.DetailsURL
+	}
+	if run.ExternalID != "" {
+		in["external_id"] = run.ExternalID
+	}
+	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/check-runs"
+	_, err := c.installationCall(ctx, installationID, http.MethodPost, path, in, nil)
+	return err
+}
+
+// AppSettings reads the App's permissions and webhook events (GET /app).
+func (c *Client) AppSettings(ctx context.Context) (service.GitHubAppSettings, error) {
+	a, err := c.appAuth()
+	if err != nil {
+		return service.GitHubAppSettings{}, err
+	}
+	var out struct {
+		Permissions map[string]string `json:"permissions"`
+		Events      []string          `json:"events"`
+	}
+	if _, err := c.api(ctx, http.MethodGet, "/app", a, nil, &out); err != nil {
+		return service.GitHubAppSettings{}, err
+	}
+	return service.GitHubAppSettings{Permissions: out.Permissions, Events: out.Events}, nil
+}
+
+var _ service.GitHubChecksAPI = (*Client)(nil)

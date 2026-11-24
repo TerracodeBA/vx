@@ -114,7 +114,7 @@ func TestVersionCheck(t *testing.T) {
 		if want != "ok" && !strings.Contains(m.Message, "/install.sh | sh") {
 			t.Errorf("message for %q = %q", v, m.Message)
 		}
-		if !strings.Contains(strings.Join(m.Features, ","), "cli-login") {
+		if f := strings.Join(m.Features, ","); !strings.Contains(f, "cli-login") || !strings.Contains(f, "overlaps") || !strings.Contains(f, "close") || !strings.Contains(f, "reviews") || !strings.Contains(f, "auto-rebase") {
 			t.Errorf("features = %v", m.Features)
 		}
 	}

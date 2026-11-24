@@ -334,7 +334,15 @@ type ServerInfo struct {
 
 // Features this server has, for CLIs that need to tell "your server is
 // too old" apart from other errors.
-var Features = []string{"board", "claims", "tasks", "rebase", "orgs", "github", "cli-login", "install-script", "agent-scopes"}
+var Features = []string{
+	"board", "claims", "tasks", "rebase", "orgs", "github", "cli-login", "install-script",
+	// v0.3: overlap forecasts, vx.toml rules, reservations, closing efforts,
+	// agent scopes and budgets, landing policies, merge by declaration
+	"overlaps", "rules", "reserve", "close", "agent-scopes", "policies", "merge-by-declaration",
+	// v0.4: review comments and CI results reach agents (Inbox.notes,
+	// Shipment.ci_*), automatic rebases, the vx evidence check run
+	"reviews", "ci", "auto-rebase", "evidence-check",
+}
 
 // CLI version states in ServerInfo answers.
 const (

@@ -60,7 +60,7 @@
       {{if not $.Shipments}}<p class="muted small">Not shipped yet.</p>{{end}}
       <ul class="plain-list">
       {{range $.Shipments}}
-        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}{{if eq $.Repo.Provider "gitlab"}}Merge request !{{.ProviderRef}}{{else}}Pull request #{{.ProviderRef}}{{end}}{{else}}Open the {{$.Repo.PRName}}{{end}}</a>{{end}}</li>
+        <li><span class="mono">{{.Branch}}</span><span class="muted small">{{len .Changes}} commits · {{.State}} · {{ago .UpdatedAt}}</span>{{if .URL}}<a class="small" href="{{.URL}}" target="_blank" rel="noopener">{{if .ProviderRef}}{{if eq $.Repo.Provider "gitlab"}}Merge request !{{.ProviderRef}}{{else}}Pull request #{{.ProviderRef}}{{end}}{{else}}Open the {{$.Repo.PRName}}{{end}}</a>{{end}}{{with index $.CI .ID}}{{if .State}}<span class="small ci ci-{{.State}}">CI: {{.State}}{{if .Failed}} ({{range $i, $c := .Failed}}{{if $i}}; {{end}}{{if $c.URL}}<a href="{{$c.URL}}" target="_blank" rel="noopener">{{$c.Name}}</a>{{else}}{{$c.Name}}{{end}}{{end}}){{end}}</span>{{end}}{{end}}</li>
       {{end}}
       </ul>
     </section>

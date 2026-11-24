@@ -106,7 +106,8 @@ func TestParseRulesErrors(t *testing.T) {
 		want      string
 	}{
 		{"syntax", "[[unique]]\nname = \"m\nglob = \"x\"\n", 2, "vx.toml line 2:"},
-		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks], [[policy]])`},
+		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks], [automation], [[policy]])`},
+		{"bad rebase mode", "[checks]\nrequired = [\"go test\"]\n\n[automation]\nrebase = \"always\"\n", 5, `[automation] rebase is "always"; use "auto"`},
 		{"unknown table", "\n[merge]\nstrategy = \"ours\"\n", 2, `unknown table or key "merge"`},
 		{"unknown key in unique", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"n\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\npattern = \"x\"\n", 10, `unknown key "pattern" in [[unique]] (known: name, glob, key)`},
 		{"unknown key in generated", "[[generated]]\nglob = \"gen/**\"\ncmd = \"make\"\n", 3, `unknown key "cmd" in [[generated]] (known: glob, command)`},
@@ -326,5 +327,22 @@ func TestGeneratedMatcher(t *testing.T) {
 	}
 	if _, ok := m("internal/x.go"); ok {
 		t.Fatal("not generated")
+	}
+}
+
+func TestParseRulesAutomation(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                                    RebaseAuto,
+		"[automation]\nrebase = \"auto\"\n":   RebaseAuto,
+		"[automation]\nrebase = \"notify\"\n": RebaseNotify,
+		"[automation]\nrebase = \"off\"\n":    RebaseOff,
+	} {
+		r, err := Parse([]byte(in))
+		if err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		if got := r.RebaseMode(); got != want {
+			t.Errorf("%q: rebase mode %q, want %q", in, got, want)
+		}
 	}
 }

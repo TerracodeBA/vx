@@ -32,6 +32,9 @@ type Shipment struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Changes   []ShipmentChange
+	// BaseTree is the target's tree the commits were made on; zero for
+	// shipments made before v0.4.
+	BaseTree hash.Hash
 }
 
 // ShipmentChange is one changeset in a shipment and the commit made for it.
@@ -40,6 +43,9 @@ type ShipmentChange struct {
 	Changeset hash.Hash
 	ChangeID  string
 	GitSHA    string
+	// Tree is the tree of the pushed commit; zero for shipments made
+	// before v0.4. Review comments on lines map to changes through it.
+	Tree hash.Hash
 }
 
 const shipmentCols = `id, effort_id, title, branch, target, base_git_sha, head_git_sha, provider_ref, url, state, split, part, created_by, created_at, updated_at`
@@ -71,12 +77,15 @@ func (q Q) SaveShipment(ctx context.Context, s Shipment) (Shipment, error) {
 		return Shipment{}, err
 	}
 	for _, c := range s.Changes {
-		if _, err := q.db.Exec(ctx, `insert into shipment_changes (shipment_id, position, changeset_hash, change_id, git_sha)
-			values ($1, $2, $3, $4, $5)`, out.ID, c.Position, c.Changeset, c.ChangeID, c.GitSHA); err != nil {
+		if _, err := q.db.Exec(ctx, `insert into shipment_changes (shipment_id, position, changeset_hash, change_id, git_sha, tree)
+			values ($1, $2, $3, $4, $5, $6)`, out.ID, c.Position, c.Changeset, c.ChangeID, c.GitSHA, c.Tree); err != nil {
 			return Shipment{}, err
 		}
 	}
-	out.Changes = s.Changes
+	if _, err := q.db.Exec(ctx, `update shipments set base_tree = $2 where id = $1`, out.ID, s.BaseTree); err != nil {
+		return Shipment{}, err
+	}
+	out.Changes, out.BaseTree = s.Changes, s.BaseTree
 	return out, nil
 }
 
@@ -139,14 +148,17 @@ func (q Q) shipmentsWithChanges(ctx context.Context, rows pgx.Rows) ([]Shipment,
 		return nil, err
 	}
 	for i := range out {
-		crow, err := q.db.Query(ctx, `select position, changeset_hash, change_id, git_sha from shipment_changes
+		if err := q.db.QueryRow(ctx, `select base_tree from shipments where id = $1`, out[i].ID).Scan(&out[i].BaseTree); err != nil {
+			return nil, err
+		}
+		crow, err := q.db.Query(ctx, `select position, changeset_hash, change_id, git_sha, tree from shipment_changes
 			where shipment_id = $1 order by position`, out[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		for crow.Next() {
 			var c ShipmentChange
-			if err := crow.Scan(&c.Position, &c.Changeset, &c.ChangeID, &c.GitSHA); err != nil {
+			if err := crow.Scan(&c.Position, &c.Changeset, &c.ChangeID, &c.GitSHA, &c.Tree); err != nil {
 				crow.Close()
 				return nil, err
 			}

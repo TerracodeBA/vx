@@ -60,13 +60,31 @@ type Rules struct {
 	Unique         []Unique
 	Generated      []Generated
 	RequiredChecks []string
-	Policies       []Policy
-	Source         string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
+	// Rebase is [automation] rebase: what vx does with an open effort when
+	// its base branch moves. Empty means RebaseAuto.
+	Rebase   string
+	Policies []Policy
+	Source   string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
+}
+
+// [automation] rebase values.
+const (
+	RebaseAuto   = "auto"   // rebase when it replays cleanly, else say which files conflict
+	RebaseNotify = "notify" // only say that the effort is behind, and whether it would conflict
+	RebaseOff    = "off"    // do nothing
+)
+
+// RebaseMode is the [automation] rebase setting, RebaseAuto by default.
+func (r Rules) RebaseMode() string {
+	if r.Rebase == "" {
+		return RebaseAuto
+	}
+	return r.Rebase
 }
 
 // IsEmpty reports whether there are no rules.
 func (r Rules) IsEmpty() bool {
-	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && len(r.Policies) == 0
+	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && r.Rebase == "" && len(r.Policies) == 0
 }
 
 // UniqueRule returns the [[unique]] rule called name.
@@ -127,19 +145,25 @@ type tomlPolicy struct {
 	Approvers []string  `toml:"approvers"`
 }
 
+type tomlAutomation struct {
+	Rebase string `toml:"rebase"`
+}
+
 type tomlFile struct {
-	Unique    []tomlUnique    `toml:"unique"`
-	Generated []tomlGenerated `toml:"generated"`
-	Checks    tomlChecks      `toml:"checks"`
-	Policy    []tomlPolicy    `toml:"policy"`
+	Unique     []tomlUnique    `toml:"unique"`
+	Generated  []tomlGenerated `toml:"generated"`
+	Checks     tomlChecks      `toml:"checks"`
+	Automation tomlAutomation  `toml:"automation"`
+	Policy     []tomlPolicy    `toml:"policy"`
 }
 
 var known = map[string][]string{
-	"":          {"[[unique]]", "[[generated]]", "[checks]", "[[policy]]"},
-	"unique":    {"name", "glob", "key"},
-	"generated": {"glob", "command"},
-	"checks":    {"required"},
-	"policy":    {"paths", "mode", "require", "approvers"},
+	"":           {"[[unique]]", "[[generated]]", "[checks]", "[automation]", "[[policy]]"},
+	"unique":     {"name", "glob", "key"},
+	"generated":  {"glob", "command"},
+	"checks":     {"required"},
+	"automation": {"rebase"},
+	"policy":     {"paths", "mode", "require", "approvers"},
 }
 
 var arrayTables = map[string]bool{"unique": true, "generated": true, "policy": true}
@@ -242,6 +266,12 @@ func Parse(data []byte) (Rules, error) {
 			seen[c] = true
 			r.RequiredChecks = append(r.RequiredChecks, c)
 		}
+	}
+	switch rb := strings.TrimSpace(f.Automation.Rebase); rb {
+	case "", RebaseAuto, RebaseNotify, RebaseOff:
+		r.Rebase = rb
+	default:
+		probs = append(probs, Problem{loc.at("automation", 0, "rebase"), fmt.Sprintf("[automation] rebase is %q; use \"auto\" (rebase when it replays cleanly), \"notify\" (only tell the effort) or \"off\"", rb)})
 	}
 	var pprobs []Problem
 	r.Policies, pprobs = parsePolicies(f.Policy, r.RequiredChecks, loc)

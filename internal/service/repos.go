@@ -151,7 +151,14 @@ func (s *Service) SyncBranch(ctx context.Context, actor Actor, repoName, branch 
 	if err != nil {
 		return store.Branch{}, 0, err
 	}
-	return s.syncBranch(ctx, actor, repo, branch)
+	b, n, err := s.syncBranch(ctx, actor, repo, branch)
+	if err == nil && repo.Provider != store.ProviderNone {
+		if branch == "" {
+			branch = repo.DefaultBranch
+		}
+		s.autoRebase(ctx, repo, branch, "vx repo sync by "+actor.Ref())
+	}
+	return b, n, err
 }
 
 // syncBranch is SyncBranch for a repository the caller was authorized on.
@@ -172,9 +179,11 @@ func (s *Service) syncBranch(ctx context.Context, actor Actor, repo store.Repo, 
 	}
 	if n > 0 {
 		_ = s.Store.LogOp(ctx, &repo.ID, &actor.ID, "branch.sync", branch, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n})
-		s.markMergedEfforts(ctx, repo, branch)
 		s.scheduleBranchForecast(repo, branch)
 	}
+	// On every sync, not only when commits came in: an effort's changes may
+	// have reached the branch through an import vx did earlier.
+	s.markMergedEfforts(ctx, repo, branch)
 	return b, n, nil
 }
 

@@ -118,6 +118,7 @@ func (h *Handlers) Inbox(ctx context.Context, _ *connect.Request[vxv1.InboxReque
 	}
 	return connect.NewResponse(&vxv1.InboxResponse{
 		Questions: notesPB(actor, in.Questions), Answers: notesPB(actor, in.Answers), Escalated: notesPB(actor, in.Escalated),
+		Notes: notesPB(actor, in.Notes),
 	}), nil
 }
 

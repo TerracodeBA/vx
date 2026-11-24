@@ -49,11 +49,16 @@ var (
 	GitHubAppPermissions = map[string]string{
 		"metadata":      "read",
 		"contents":      "write",
-		"pull_requests": "write",
-		"checks":        "read",
-		"members":       "read", // organization members, for GitHub-backed roles
+		"pull_requests": "write", // also delivers reviews and comments on pull requests
+		"checks":        "write", // CI results, and the "vx evidence" check run vx posts
+		"statuses":      "read",  // commit statuses of CI systems that do not use checks
+		"members":       "read",  // organization members, for GitHub-backed roles
 	}
-	GitHubAppEvents = []string{"repository", "member", "membership", "organization", "team", "team_add", "push", "pull_request"}
+	GitHubAppEvents = []string{
+		"repository", "member", "membership", "organization", "team", "team_add", "push", "pull_request",
+		// review comments and CI results reach the agents (v0.4)
+		"pull_request_review", "pull_request_review_comment", "issue_comment", "check_run", "check_suite", "status",
+	}
 )
 
 // githubState is the App loaded from the database.
@@ -254,6 +259,7 @@ func (s *Service) SaveGitHubApp(ctx context.Context, creds GitHubAppCredentials,
 		return err
 	}
 	s.gh.app = nil
+	_ = s.Store.ClearGitHubAppGap(ctx, "") // a new App starts from its manifest
 	return s.useGitHubApp(row, creds)
 }
 

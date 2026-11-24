@@ -72,7 +72,7 @@ func TestGitHubManifestRoundTrip(t *testing.T) {
 		m.SetupURL != "https://vx.example.com/ui/github/installed" || m.OAuth {
 		t.Fatalf("manifest %s", manifest)
 	}
-	if m.Perms["contents"] != "write" || m.Perms["pull_requests"] != "write" || m.Perms["metadata"] != "read" || m.Perms["checks"] != "read" || m.Perms["members"] != "read" {
+	if m.Perms["contents"] != "write" || m.Perms["pull_requests"] != "write" || m.Perms["metadata"] != "read" || m.Perms["checks"] != "write" || m.Perms["statuses"] != "read" || m.Perms["members"] != "read" {
 		t.Fatalf("permissions %v", m.Perms)
 	}
 	if !strings.Contains(strings.Join(m.Events, ","), "push,pull_request") || !strings.Contains(strings.Join(m.Events, ","), "team_add") {

@@ -280,6 +280,9 @@ Branches are vx/<effort>/<n>-<name>. vx ship plan --split shows the parts;
 					part = fmt.Sprintf("  part %d, %s", s.Part, s.Split)
 				}
 				a.printf("%-28s -> %-12s %-7s %d commit(s)  %s%s\n", s.Branch, s.Target, s.State, len(s.ChangeIds), s.Url, part)
+				if line := ciLine(s); line != "" {
+					a.printf("  %s\n", line)
+				}
 			}
 			a.emit(resp.Msg)
 			return nil

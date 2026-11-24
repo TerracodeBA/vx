@@ -935,7 +935,7 @@ after an event.`,
 					var err error
 					switch {
 					case watch != nil:
-						err = fmt.Errorf("timed out: nothing landed in %s, no question or answer arrived for you and no decision or interface was posted on your changed files within %s", wc.Config.Effort, timeout)
+						err = fmt.Errorf("timed out: nothing landed in %s, no question or answer arrived for you and no decision or interface was posted on your changed files and no review comment or CI result arrived for you within %s", wc.Config.Effort, timeout)
 					case seen != nil:
 						err = fmt.Errorf("timed out: nothing landed in %s and no question or answer arrived for you within %s", wc.Config.Effort, timeout)
 					default:

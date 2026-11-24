@@ -118,9 +118,20 @@ func (h *Handlers) ListShipments(ctx context.Context, req *connect.Request[vxv1.
 	if err != nil {
 		return nil, toConnect(err)
 	}
+	cis, err := h.svc.ShipmentsCI(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Effort)
+	if err != nil {
+		return nil, toConnect(err)
+	}
 	out := &vxv1.ListShipmentsResponse{}
 	for _, s := range list {
-		out.Shipments = append(out.Shipments, shipmentPB(req.Msg.Effort, s))
+		pb := shipmentPB(req.Msg.Effort, s)
+		if ci, ok := cis[s.ID]; ok {
+			pb.CiState, pb.CiSha = ci.State, ci.HeadSHA
+			for _, c := range ci.Checks {
+				pb.CiChecks = append(pb.CiChecks, &vxv1.ShipmentCheck{Name: c.Name, Source: c.Source, Status: c.Status, Conclusion: c.Conclusion, Url: c.URL})
+			}
+		}
+		out.Shipments = append(out.Shipments, pb)
 	}
 	return connect.NewResponse(out), nil
 }

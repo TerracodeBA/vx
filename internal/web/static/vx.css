@@ -512,3 +512,8 @@ input[type=number] { font: 14px var(--mono); padding: 8px 11px; border: 1px soli
 .admin-form .field-num { flex: 1 1 120px; min-width: 110px; }
 .scope-head { border-top: 1px solid var(--line-soft); }
 .scope-head h3 { font-size: 13px; }
+
+/* CI results of a shipment (v0.4) */
+.ci { margin-left: 6px; }
+.ci-passed { color: var(--ok); }
+.ci-failed { color: var(--bad); }

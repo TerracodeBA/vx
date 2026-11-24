@@ -883,8 +883,14 @@ func (s *Service) openSplit(ctx context.Context, actor Actor, in ShipInput) (Shi
 			if prs[i].Number > 0 {
 				sh.ProviderRef = strconv.Itoa(prs[i].Number)
 			}
+			// The trees of the pushed commits map review comments on lines
+			// to changes (feedback_blame.go).
+			sh.BaseTree = plan.TargetHead.Tree
+			if plan.Split == SplitStacked && i > 0 {
+				sh.BaseTree = plan.Groups[i-1].Tree
+			}
 			for k, st := range g.Commits() {
-				sh.Changes = append(sh.Changes, store.ShipmentChange{Position: k, Changeset: st.Changeset.Hash, ChangeID: st.Changeset.ChangeID, GitSHA: shas[i][k]})
+				sh.Changes = append(sh.Changes, store.ShipmentChange{Position: k, Changeset: st.Changeset.Hash, ChangeID: st.Changeset.ChangeID, GitSHA: shas[i][k], Tree: st.Tree})
 			}
 			saved, err := tx.SaveShipment(ctx, sh)
 			if err != nil {
@@ -910,6 +916,11 @@ func (s *Service) openSplit(ctx context.Context, actor Actor, in ShipInput) (Shi
 		return res, err
 	}
 	res.Shipment, res.PR = res.Parts[0].Shipment, res.Parts[0].PR
+	for _, p := range res.Parts {
+		if p.PR.Number > 0 {
+			s.postEvidenceCheck(ctx, ShipPlan{Repo: plan.Repo, Effort: plan.Effort, Steps: p.Group.Steps, Warnings: p.Group.Warnings}, p.Shipment.HeadGitSHA, p.PR.URL)
+		}
+	}
 	return res, nil
 }
 

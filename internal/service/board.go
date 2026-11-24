@@ -122,6 +122,10 @@ type Inbox struct {
 	Questions []Note // open questions to the caller (people: also to their agents)
 	Answers   []Note // answers to the caller's questions, newest first
 	Escalated []Note // people only: overdue questions in their efforts or to their agents
+	// Notes are system notes addressed to the caller (people: also to their
+	// agents) that no newer note replaced, newest first: review comments
+	// and CI results from the git host (v0.4).
+	Notes []Note
 }
 
 // ContextWorkspace is an open workspace with its owner.
@@ -315,7 +319,7 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 	var kinds []string
 	for _, k := range in.Kinds {
 		if !allKinds[k] {
-			return nil, errf(CodeInvalid, "note kind %q is not one of plan, decision, interface, question, answer, blocker, handoff", k)
+			return nil, errf(CodeInvalid, "note kind %q is not one of plan, decision, interface, question, answer, blocker, handoff, overlap, review, ci, rebase", k)
 		}
 		kinds = append(kinds, string(k))
 	}
@@ -369,6 +373,12 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 		return Inbox{}, err
 	}
 	if in.Answers, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
+		return Inbox{}, err
+	}
+	if rows, err = s.Store.SystemNotesTo(ctx, ids, now.Add(-inboxSystemNoteAge), maxInboxNotes); err != nil {
+		return Inbox{}, err
+	}
+	if in.Notes, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
 		return Inbox{}, err
 	}
 	if person {

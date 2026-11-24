@@ -99,7 +99,7 @@ func (s *Service) markMergedEfforts(ctx context.Context, repo store.Repo, branch
 		}
 		all := true
 		for _, c := range mine {
-			if c.Origin == object.OriginVX && !onBranch[c.ChangeID] {
+			if c.Origin == object.OriginVX && !onBranch[c.ChangeID] && !s.emptyChange(ctx, repo, c) {
 				all = false
 				break
 			}
@@ -114,4 +114,15 @@ func (s *Service) markMergedEfforts(ctx context.Context, repo store.Repo, branch
 		marked++
 	}
 	return marked
+}
+
+// emptyChange reports whether c changes nothing on its parent: a change a
+// rebase replayed onto a branch that already had it (an earlier part of a
+// split, merged), which the branch's new commits will not carry again.
+func (s *Service) emptyChange(ctx context.Context, repo store.Repo, c store.ChangesetRow) bool {
+	if c.Rebase == nil {
+		return false
+	}
+	parent, err := s.Store.GetChangeset(ctx, repo.ID, c.FirstParent())
+	return err == nil && parent.Tree == c.Tree
 }

@@ -107,6 +107,9 @@ type Server struct {
 	deny       bool   // the signed-in person clicks Cancel on the authorize page
 	calls      map[string]int
 	failures   []failure
+	appPerms   map[string]string // nil: from the manifest (checks.go)
+	appEvents  []string
+	checkRuns  []CheckRun
 }
 
 type oauthGrant struct {
@@ -196,6 +199,7 @@ func (s *Server) createApp(manifest map[string]any) service.GitHubAppCredentials
 	s.app = &creds
 	s.appKey = &key.PublicKey
 	s.manifest = manifest
+	s.appPerms, s.appEvents = nil, nil
 	return creds
 }
 
@@ -883,6 +887,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getMembership(w, r, seg[1], seg[3])
 	case r.Method == http.MethodGet && len(seg) == 3 && seg[0] == "repos":
 		s.getRepo(w, r, seg[1], seg[2])
+	case r.Method == http.MethodPost && len(seg) == 4 && seg[0] == "repos" && seg[3] == "check-runs":
+		s.createCheckRun(w, r, seg[1], seg[2])
 	default:
 		writeMsg(w, http.StatusNotFound, "Not Found")
 	}
@@ -1135,7 +1141,15 @@ func (s *Server) getApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	creds, _ := s.App()
-	writeJSON(w, http.StatusOK, map[string]any{"id": creds.AppID, "slug": creds.Slug, "html_url": creds.HTMLURL, "client_id": creds.ClientID})
+	s.mu.Lock()
+	perms := map[string]string{}
+	for k, v := range s.appPermissionsLocked() {
+		perms[k] = v
+	}
+	events := append([]string{}, s.appEventsLocked()...)
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"id": creds.AppID, "slug": creds.Slug, "html_url": creds.HTMLURL, "client_id": creds.ClientID,
+		"permissions": perms, "events": events})
 }
 
 func (s *Server) installationJSON(in *Installation) map[string]any {
