@@ -45,6 +45,12 @@ type LandResult struct {
 	// declared twice in one package after a clean text merge. They never
 	// stop a land.
 	Warnings []engine.Warning
+	// OverlappingClaims are active claims of other principals on files this
+	// land changed. They never stop a land.
+	OverlappingClaims []Claim
+	// KeptBoth lists paths where both sides inserted different lines at the
+	// same place and the merge kept both; worth a look.
+	KeptBoth []string
 }
 
 // ErrNothingToLand is returned when a snapshot has no changes.

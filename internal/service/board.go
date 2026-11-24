@@ -114,6 +114,7 @@ type NoteContext struct {
 	Notes         []Note
 	Working       []ContextWorkspace
 	RecentChanges []LogEntry // landed changes touching the targets, newest first, with files
+	Claims        []Claim    // active claims on the targets (all when no targets)
 }
 
 // Everyone signed in may read and write every effort's board for now, the

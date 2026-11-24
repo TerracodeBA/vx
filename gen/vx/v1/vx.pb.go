@@ -3602,17 +3602,19 @@ func (x *LandRequest) GetRequireUpToDate() bool {
 }
 
 type LandResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Landed        bool                   `protobuf:"varint,1,opt,name=landed,proto3" json:"landed,omitempty"`
-	Changeset     *Changeset             `protobuf:"bytes,2,opt,name=changeset,proto3" json:"changeset,omitempty"`
-	Rebased       bool                   `protobuf:"varint,3,opt,name=rebased,proto3" json:"rebased,omitempty"`                        // the effort had moved and the snapshot was merged onto it
-	AutoMerged    []string               `protobuf:"bytes,4,rep,name=auto_merged,json=autoMerged,proto3" json:"auto_merged,omitempty"` // paths changed on both sides that merged cleanly
-	Conflicts     []*Conflict            `protobuf:"bytes,5,rep,name=conflicts,proto3" json:"conflicts,omitempty"`                     // set when landed is false
-	EffortHead    string                 `protobuf:"bytes,6,opt,name=effort_head,json=effortHead,proto3" json:"effort_head,omitempty"`
-	EffortMoved   bool                   `protobuf:"varint,7,opt,name=effort_moved,json=effortMoved,proto3" json:"effort_moved,omitempty"` // require_up_to_date was set and the effort had moved
-	Warnings      []*Warning             `protobuf:"bytes,8,rep,name=warnings,proto3" json:"warnings,omitempty"`                           // problems found in the landed tree; they never block a land
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Landed            bool                   `protobuf:"varint,1,opt,name=landed,proto3" json:"landed,omitempty"`
+	Changeset         *Changeset             `protobuf:"bytes,2,opt,name=changeset,proto3" json:"changeset,omitempty"`
+	Rebased           bool                   `protobuf:"varint,3,opt,name=rebased,proto3" json:"rebased,omitempty"`                        // the effort had moved and the snapshot was merged onto it
+	AutoMerged        []string               `protobuf:"bytes,4,rep,name=auto_merged,json=autoMerged,proto3" json:"auto_merged,omitempty"` // paths changed on both sides that merged cleanly
+	Conflicts         []*Conflict            `protobuf:"bytes,5,rep,name=conflicts,proto3" json:"conflicts,omitempty"`                     // set when landed is false
+	EffortHead        string                 `protobuf:"bytes,6,opt,name=effort_head,json=effortHead,proto3" json:"effort_head,omitempty"`
+	EffortMoved       bool                   `protobuf:"varint,7,opt,name=effort_moved,json=effortMoved,proto3" json:"effort_moved,omitempty"`                  // require_up_to_date was set and the effort had moved
+	Warnings          []*Warning             `protobuf:"bytes,8,rep,name=warnings,proto3" json:"warnings,omitempty"`                                            // problems found in the landed tree; they never block a land
+	OverlappingClaims []*Claim               `protobuf:"bytes,9,rep,name=overlapping_claims,json=overlappingClaims,proto3" json:"overlapping_claims,omitempty"` // active claims of others on files this land changed; they never block a land
+	KeptBoth          []string               `protobuf:"bytes,10,rep,name=kept_both,json=keptBoth,proto3" json:"kept_both,omitempty"`                           // paths where both sides inserted different lines at the same place and vx kept both
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *LandResponse) Reset() {
@@ -3697,6 +3699,20 @@ func (x *LandResponse) GetEffortMoved() bool {
 func (x *LandResponse) GetWarnings() []*Warning {
 	if x != nil {
 		return x.Warnings
+	}
+	return nil
+}
+
+func (x *LandResponse) GetOverlappingClaims() []*Claim {
+	if x != nil {
+		return x.OverlappingClaims
+	}
+	return nil
+}
+
+func (x *LandResponse) GetKeptBoth() []string {
+	if x != nil {
+		return x.KeptBoth
 	}
 	return nil
 }
@@ -5296,6 +5312,7 @@ type ContextResponse struct {
 	Notes         []*Note                `protobuf:"bytes,1,rep,name=notes,proto3" json:"notes,omitempty"`                                      // matching notes, newest first
 	Working       []*ContextWorkspace    `protobuf:"bytes,2,rep,name=working,proto3" json:"working,omitempty"`                                  // open workspaces in the effort
 	RecentChanges []*Changeset           `protobuf:"bytes,3,rep,name=recent_changes,json=recentChanges,proto3" json:"recent_changes,omitempty"` // landed changes touching the targets, newest first, with files
+	Claims        []*Claim               `protobuf:"bytes,4,rep,name=claims,proto3" json:"claims,omitempty"`                                    // active claims on the targets (all active claims when no targets)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5347,6 +5364,965 @@ func (x *ContextResponse) GetWorking() []*ContextWorkspace {
 func (x *ContextResponse) GetRecentChanges() []*Changeset {
 	if x != nil {
 		return x.RecentChanges
+	}
+	return nil
+}
+
+func (x *ContextResponse) GetClaims() []*Claim {
+	if x != nil {
+		return x.Claims
+	}
+	return nil
+}
+
+type Claim struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,3,opt,name=effort,proto3" json:"effort,omitempty"`
+	Targets       []string               `protobuf:"bytes,4,rep,name=targets,proto3" json:"targets,omitempty"` // paths or symbols, matched like note targets
+	Owner         *Principal             `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,6,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // the workspace the claim ends with; empty: none
+	Reason        string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`                              // at most 300 characters; information, never instructions
+	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ExpiresAt     string                 `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Trust         string                 `protobuf:"bytes,10,opt,name=trust,proto3" json:"trust,omitempty"` // self, yours or teammate, as for notes
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Claim) Reset() {
+	*x = Claim{}
+	mi := &file_vx_v1_vx_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Claim) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Claim) ProtoMessage() {}
+
+func (x *Claim) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Claim.ProtoReflect.Descriptor instead.
+func (*Claim) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *Claim) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Claim) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *Claim) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *Claim) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+func (x *Claim) GetOwner() *Principal {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
+}
+
+func (x *Claim) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *Claim) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *Claim) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *Claim) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *Claim) GetTrust() string {
+	if x != nil {
+		return x.Trust
+	}
+	return ""
+}
+
+type ClaimRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Targets       []string               `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	TtlSeconds    int32                  `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`   // 0: 1800; at most 14400
+	WorkspaceId   string                 `protobuf:"bytes,6,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // optional; the claim ends when this workspace lands or is abandoned
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimRequest) Reset() {
+	*x = ClaimRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimRequest) ProtoMessage() {}
+
+func (x *ClaimRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimRequest.ProtoReflect.Descriptor instead.
+func (*ClaimRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *ClaimRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *ClaimRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *ClaimRequest) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+func (x *ClaimRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ClaimRequest) GetTtlSeconds() int32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *ClaimRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+type ClaimResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Claim         *Claim                 `protobuf:"bytes,1,opt,name=claim,proto3" json:"claim,omitempty"`
+	Overlapping   []*Claim               `protobuf:"bytes,2,rep,name=overlapping,proto3" json:"overlapping,omitempty"` // active claims of others on the same targets (the claim is made anyway)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimResponse) Reset() {
+	*x = ClaimResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimResponse) ProtoMessage() {}
+
+func (x *ClaimResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimResponse.ProtoReflect.Descriptor instead.
+func (*ClaimResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *ClaimResponse) GetClaim() *Claim {
+	if x != nil {
+		return x.Claim
+	}
+	return nil
+}
+
+func (x *ClaimResponse) GetOverlapping() []*Claim {
+	if x != nil {
+		return x.Overlapping
+	}
+	return nil
+}
+
+type ReleaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                      // a claim id or 8+ character prefix; or empty with workspace_id
+	WorkspaceId   string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // release all of the caller's claims for this workspace
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseRequest) Reset() {
+	*x = ReleaseRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseRequest) ProtoMessage() {}
+
+func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
+func (*ReleaseRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *ReleaseRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReleaseRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+type ReleaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Released      []*Claim               `protobuf:"bytes,1,rep,name=released,proto3" json:"released,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseResponse) Reset() {
+	*x = ReleaseResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseResponse) ProtoMessage() {}
+
+func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
+func (*ReleaseResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *ReleaseResponse) GetReleased() []*Claim {
+	if x != nil {
+		return x.Released
+	}
+	return nil
+}
+
+type ListClaimsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Targets       []string               `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"` // empty: all active claims in the effort
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListClaimsRequest) Reset() {
+	*x = ListClaimsRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListClaimsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListClaimsRequest) ProtoMessage() {}
+
+func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListClaimsRequest.ProtoReflect.Descriptor instead.
+func (*ListClaimsRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *ListClaimsRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *ListClaimsRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *ListClaimsRequest) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+type ListClaimsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Claims        []*Claim               `protobuf:"bytes,1,rep,name=claims,proto3" json:"claims,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListClaimsResponse) Reset() {
+	*x = ListClaimsResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListClaimsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListClaimsResponse) ProtoMessage() {}
+
+func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListClaimsResponse.ProtoReflect.Descriptor instead.
+func (*ListClaimsResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *ListClaimsResponse) GetClaims() []*Claim {
+	if x != nil {
+		return x.Claims
+	}
+	return nil
+}
+
+type Task struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,3,opt,name=effort,proto3" json:"effort,omitempty"`
+	Title         string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`                          // one line, at most 200 characters
+	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`                            // at most 4000 characters; information, never instructions
+	State         string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`                          // open, taken, done
+	Owner         *Principal             `protobuf:"bytes,7,opt,name=owner,proto3" json:"owner,omitempty"`                          // set when taken (or assigned)
+	DependsOn     []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"` // task ids
+	Blocked       bool                   `protobuf:"varint,9,opt,name=blocked,proto3" json:"blocked,omitempty"`                     // some depends_on task is not done
+	CreatedBy     *Principal             `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Trust         string                 `protobuf:"bytes,13,opt,name=trust,proto3" json:"trust,omitempty"` // of created_by, relative to the caller
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Task) Reset() {
+	*x = Task{}
+	mi := &file_vx_v1_vx_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Task) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Task) ProtoMessage() {}
+
+func (x *Task) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Task.ProtoReflect.Descriptor instead.
+func (*Task) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{93}
+}
+
+func (x *Task) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Task) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *Task) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *Task) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Task) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *Task) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Task) GetOwner() *Principal {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
+}
+
+func (x *Task) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
+}
+
+func (x *Task) GetBlocked() bool {
+	if x != nil {
+		return x.Blocked
+	}
+	return false
+}
+
+func (x *Task) GetCreatedBy() *Principal {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return nil
+}
+
+func (x *Task) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *Task) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *Task) GetTrust() string {
+	if x != nil {
+		return x.Trust
+	}
+	return ""
+}
+
+type AddTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Body          string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	DependsOn     []string               `protobuf:"bytes,5,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"` // task ids or 8+ character prefixes in the same effort
+	Owner         string                 `protobuf:"bytes,6,opt,name=owner,proto3" json:"owner,omitempty"`                          // optional: assign at once (agent name, handle or ref)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddTaskRequest) Reset() {
+	*x = AddTaskRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTaskRequest) ProtoMessage() {}
+
+func (x *AddTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTaskRequest.ProtoReflect.Descriptor instead.
+func (*AddTaskRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *AddTaskRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *AddTaskRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *AddTaskRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *AddTaskRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *AddTaskRequest) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
+}
+
+func (x *AddTaskRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type AddTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Task          *Task                  `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddTaskResponse) Reset() {
+	*x = AddTaskResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTaskResponse) ProtoMessage() {}
+
+func (x *AddTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTaskResponse.ProtoReflect.Descriptor instead.
+func (*AddTaskResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *AddTaskResponse) GetTask() *Task {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
+type UpdateTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`         // task id or 8+ character prefix
+	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"` // take, release, done, reopen, assign
+	Owner         string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`   // for assign: agent name, handle or ref
+	Force         bool                   `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`  // take or done a blocked task anyway
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTaskRequest) Reset() {
+	*x = UpdateTaskRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskRequest) ProtoMessage() {}
+
+func (x *UpdateTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskRequest.ProtoReflect.Descriptor instead.
+func (*UpdateTaskRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *UpdateTaskRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateTaskRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *UpdateTaskRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *UpdateTaskRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+type UpdateTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Task          *Task                  `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
+	Unblocked     []*Task                `protobuf:"bytes,2,rep,name=unblocked,proto3" json:"unblocked,omitempty"` // tasks this change unblocked (on done)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTaskResponse) Reset() {
+	*x = UpdateTaskResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskResponse) ProtoMessage() {}
+
+func (x *UpdateTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskResponse.ProtoReflect.Descriptor instead.
+func (*UpdateTaskResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{97}
+}
+
+func (x *UpdateTaskResponse) GetTask() *Task {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
+func (x *UpdateTaskResponse) GetUnblocked() []*Task {
+	if x != nil {
+		return x.Unblocked
+	}
+	return nil
+}
+
+type ListTasksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	States        []string               `protobuf:"bytes,3,rep,name=states,proto3" json:"states,omitempty"` // empty: all
+	Mine          bool                   `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`    // only tasks the caller owns
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTasksRequest) Reset() {
+	*x = ListTasksRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTasksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTasksRequest) ProtoMessage() {}
+
+func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
+func (*ListTasksRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *ListTasksRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *ListTasksRequest) GetEffort() string {
+	if x != nil {
+		return x.Effort
+	}
+	return ""
+}
+
+func (x *ListTasksRequest) GetStates() []string {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+func (x *ListTasksRequest) GetMine() bool {
+	if x != nil {
+		return x.Mine
+	}
+	return false
+}
+
+type ListTasksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tasks         []*Task                `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTasksResponse) Reset() {
+	*x = ListTasksResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTasksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTasksResponse) ProtoMessage() {}
+
+func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
+func (*ListTasksResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *ListTasksResponse) GetTasks() []*Task {
+	if x != nil {
+		return x.Tasks
 	}
 	return nil
 }
@@ -5615,7 +6591,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"depends_on\x18\x06 \x03(\tR\tdependsOn\x12\x14\n" +
 	"\x05model\x18\a \x01(\tR\x05model\x12\x18\n" +
 	"\asession\x18\b \x01(\tR\asession\x12+\n" +
-	"\x12require_up_to_date\x18\t \x01(\bR\x0frequireUpToDate\"\xb0\x02\n" +
+	"\x12require_up_to_date\x18\t \x01(\bR\x0frequireUpToDate\"\x8a\x03\n" +
 	"\fLandResponse\x12\x16\n" +
 	"\x06landed\x18\x01 \x01(\bR\x06landed\x12.\n" +
 	"\tchangeset\x18\x02 \x01(\v2\x10.vx.v1.ChangesetR\tchangeset\x12\x18\n" +
@@ -5626,7 +6602,10 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\veffort_head\x18\x06 \x01(\tR\n" +
 	"effortHead\x12!\n" +
 	"\feffort_moved\x18\a \x01(\bR\veffortMoved\x12*\n" +
-	"\bwarnings\x18\b \x03(\v2\x0e.vx.v1.WarningR\bwarnings\" \n" +
+	"\bwarnings\x18\b \x03(\v2\x0e.vx.v1.WarningR\bwarnings\x12;\n" +
+	"\x12overlapping_claims\x18\t \x03(\v2\f.vx.v1.ClaimR\x11overlappingClaims\x12\x1b\n" +
+	"\tkept_both\x18\n" +
+	" \x03(\tR\bkeptBoth\" \n" +
 	"\x0eAbandonRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"A\n" +
 	"\x0fAbandonResponse\x12.\n" +
@@ -5750,11 +6729,92 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12\x1b\n" +
 	"\tchange_id\x18\x03 \x01(\tR\bchangeId\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\tR\tcreatedAt\"\xa0\x01\n" +
+	"created_at\x18\x04 \x01(\tR\tcreatedAt\"\xc6\x01\n" +
 	"\x0fContextResponse\x12!\n" +
 	"\x05notes\x18\x01 \x03(\v2\v.vx.v1.NoteR\x05notes\x121\n" +
 	"\aworking\x18\x02 \x03(\v2\x17.vx.v1.ContextWorkspaceR\aworking\x127\n" +
-	"\x0erecent_changes\x18\x03 \x03(\v2\x10.vx.v1.ChangesetR\rrecentChanges2\xfc\x03\n" +
+	"\x0erecent_changes\x18\x03 \x03(\v2\x10.vx.v1.ChangesetR\rrecentChanges\x12$\n" +
+	"\x06claims\x18\x04 \x03(\v2\f.vx.v1.ClaimR\x06claims\"\x94\x02\n" +
+	"\x05Claim\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x03 \x01(\tR\x06effort\x12\x18\n" +
+	"\atargets\x18\x04 \x03(\tR\atargets\x12&\n" +
+	"\x05owner\x18\x05 \x01(\v2\x10.vx.v1.PrincipalR\x05owner\x12!\n" +
+	"\fworkspace_id\x18\x06 \x01(\tR\vworkspaceId\x12\x16\n" +
+	"\x06reason\x18\a \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\t \x01(\tR\texpiresAt\x12\x14\n" +
+	"\x05trust\x18\n" +
+	" \x01(\tR\x05trust\"\xb0\x01\n" +
+	"\fClaimRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x18\n" +
+	"\atargets\x18\x03 \x03(\tR\atargets\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1f\n" +
+	"\vttl_seconds\x18\x05 \x01(\x05R\n" +
+	"ttlSeconds\x12!\n" +
+	"\fworkspace_id\x18\x06 \x01(\tR\vworkspaceId\"c\n" +
+	"\rClaimResponse\x12\"\n" +
+	"\x05claim\x18\x01 \x01(\v2\f.vx.v1.ClaimR\x05claim\x12.\n" +
+	"\voverlapping\x18\x02 \x03(\v2\f.vx.v1.ClaimR\voverlapping\"C\n" +
+	"\x0eReleaseRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\";\n" +
+	"\x0fReleaseResponse\x12(\n" +
+	"\breleased\x18\x01 \x03(\v2\f.vx.v1.ClaimR\breleased\"Y\n" +
+	"\x11ListClaimsRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x18\n" +
+	"\atargets\x18\x03 \x03(\tR\atargets\":\n" +
+	"\x12ListClaimsResponse\x12$\n" +
+	"\x06claims\x18\x01 \x03(\v2\f.vx.v1.ClaimR\x06claims\"\xe8\x02\n" +
+	"\x04Task\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x03 \x01(\tR\x06effort\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x05 \x01(\tR\x04body\x12\x14\n" +
+	"\x05state\x18\x06 \x01(\tR\x05state\x12&\n" +
+	"\x05owner\x18\a \x01(\v2\x10.vx.v1.PrincipalR\x05owner\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\b \x03(\tR\tdependsOn\x12\x18\n" +
+	"\ablocked\x18\t \x01(\bR\ablocked\x12/\n" +
+	"\n" +
+	"created_by\x18\n" +
+	" \x01(\v2\x10.vx.v1.PrincipalR\tcreatedBy\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\f \x01(\tR\tupdatedAt\x12\x14\n" +
+	"\x05trust\x18\r \x01(\tR\x05trust\"\x9b\x01\n" +
+	"\x0eAddTaskRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x04 \x01(\tR\x04body\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\x05 \x03(\tR\tdependsOn\x12\x14\n" +
+	"\x05owner\x18\x06 \x01(\tR\x05owner\"2\n" +
+	"\x0fAddTaskResponse\x12\x1f\n" +
+	"\x04task\x18\x01 \x01(\v2\v.vx.v1.TaskR\x04task\"g\n" +
+	"\x11UpdateTaskRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x14\n" +
+	"\x05owner\x18\x03 \x01(\tR\x05owner\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\"`\n" +
+	"\x12UpdateTaskResponse\x12\x1f\n" +
+	"\x04task\x18\x01 \x01(\v2\v.vx.v1.TaskR\x04task\x12)\n" +
+	"\tunblocked\x18\x02 \x03(\v2\v.vx.v1.TaskR\tunblocked\"j\n" +
+	"\x10ListTasksRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x16\n" +
+	"\x06states\x18\x03 \x03(\tR\x06states\x12\x12\n" +
+	"\x04mine\x18\x04 \x01(\bR\x04mine\"6\n" +
+	"\x11ListTasksResponse\x12!\n" +
+	"\x05tasks\x18\x01 \x03(\v2\v.vx.v1.TaskR\x05tasks2\xfc\x03\n" +
 	"\vAuthService\x127\n" +
 	"\x06WhoAmI\x12\x14.vx.v1.WhoAmIRequest\x1a\x15.vx.v1.WhoAmIResponse\"\x00\x12F\n" +
 	"\vCreateAgent\x12\x19.vx.v1.CreateAgentRequest\x1a\x1a.vx.v1.CreateAgentResponse\"\x00\x12C\n" +
@@ -5800,7 +6860,16 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06Answer\x12\x14.vx.v1.AnswerRequest\x1a\x15.vx.v1.AnswerResponse\"\x00\x12@\n" +
 	"\tListNotes\x12\x17.vx.v1.ListNotesRequest\x1a\x18.vx.v1.ListNotesResponse\"\x00\x124\n" +
 	"\x05Inbox\x12\x13.vx.v1.InboxRequest\x1a\x14.vx.v1.InboxResponse\"\x00\x12:\n" +
-	"\aContext\x12\x15.vx.v1.ContextRequest\x1a\x16.vx.v1.ContextResponse\"\x00Bs\n" +
+	"\aContext\x12\x15.vx.v1.ContextRequest\x1a\x16.vx.v1.ContextResponse\"\x002\x8f\x03\n" +
+	"\x13CoordinationService\x124\n" +
+	"\x05Claim\x12\x13.vx.v1.ClaimRequest\x1a\x14.vx.v1.ClaimResponse\"\x00\x12:\n" +
+	"\aRelease\x12\x15.vx.v1.ReleaseRequest\x1a\x16.vx.v1.ReleaseResponse\"\x00\x12C\n" +
+	"\n" +
+	"ListClaims\x12\x18.vx.v1.ListClaimsRequest\x1a\x19.vx.v1.ListClaimsResponse\"\x00\x12:\n" +
+	"\aAddTask\x12\x15.vx.v1.AddTaskRequest\x1a\x16.vx.v1.AddTaskResponse\"\x00\x12C\n" +
+	"\n" +
+	"UpdateTask\x12\x18.vx.v1.UpdateTaskRequest\x1a\x19.vx.v1.UpdateTaskResponse\"\x00\x12@\n" +
+	"\tListTasks\x12\x17.vx.v1.ListTasksRequest\x1a\x18.vx.v1.ListTasksResponse\"\x00Bs\n" +
 	"\tcom.vx.v1B\aVxProtoP\x01Z(github.com/TerracodeBA/vx/gen/vx/v1;vxv1\xa2\x02\x03VXX\xaa\x02\x05Vx.V1\xca\x02\x05Vx\\V1\xe2\x02\x11Vx\\V1\\GPBMetadata\xea\x02\x06Vx::V1b\x06proto3"
 
 var (
@@ -5815,7 +6884,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 86)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 100)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),               // 0: vx.v1.Principal
 	(*Branch)(nil),                  // 1: vx.v1.Branch
@@ -5903,134 +6972,173 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*ContextRequest)(nil),          // 83: vx.v1.ContextRequest
 	(*ContextWorkspace)(nil),        // 84: vx.v1.ContextWorkspace
 	(*ContextResponse)(nil),         // 85: vx.v1.ContextResponse
+	(*Claim)(nil),                   // 86: vx.v1.Claim
+	(*ClaimRequest)(nil),            // 87: vx.v1.ClaimRequest
+	(*ClaimResponse)(nil),           // 88: vx.v1.ClaimResponse
+	(*ReleaseRequest)(nil),          // 89: vx.v1.ReleaseRequest
+	(*ReleaseResponse)(nil),         // 90: vx.v1.ReleaseResponse
+	(*ListClaimsRequest)(nil),       // 91: vx.v1.ListClaimsRequest
+	(*ListClaimsResponse)(nil),      // 92: vx.v1.ListClaimsResponse
+	(*Task)(nil),                    // 93: vx.v1.Task
+	(*AddTaskRequest)(nil),          // 94: vx.v1.AddTaskRequest
+	(*AddTaskResponse)(nil),         // 95: vx.v1.AddTaskResponse
+	(*UpdateTaskRequest)(nil),       // 96: vx.v1.UpdateTaskRequest
+	(*UpdateTaskResponse)(nil),      // 97: vx.v1.UpdateTaskResponse
+	(*ListTasksRequest)(nil),        // 98: vx.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),       // 99: vx.v1.ListTasksResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
-	1,  // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
-	5,  // 1: vx.v1.Evidence.checks:type_name -> vx.v1.Check
-	4,  // 2: vx.v1.Changeset.author:type_name -> vx.v1.Author
-	6,  // 3: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
-	7,  // 4: vx.v1.Changeset.files:type_name -> vx.v1.FileChange
-	11, // 5: vx.v1.Changeset.warnings:type_name -> vx.v1.Warning
-	0,  // 6: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
-	16, // 7: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
-	0,  // 8: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
-	15, // 9: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
-	15, // 10: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
-	0,  // 11: vx.v1.CreateTokenResponse.principal:type_name -> vx.v1.Principal
-	15, // 12: vx.v1.CreateTokenResponse.token:type_name -> vx.v1.Token
-	0,  // 13: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
-	0,  // 14: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
-	12, // 15: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
-	12, // 16: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
-	2,  // 17: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
-	2,  // 18: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
-	2,  // 19: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
-	1,  // 20: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
-	3,  // 21: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
-	3,  // 22: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
-	9,  // 23: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
-	3,  // 24: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
-	8,  // 25: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
-	8,  // 26: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
-	9,  // 27: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,  // 28: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,  // 29: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
-	6,  // 30: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
-	8,  // 31: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
-	10, // 32: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
-	11, // 33: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
-	9,  // 34: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
-	8,  // 35: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
-	63, // 36: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
-	10, // 37: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
-	11, // 38: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
-	64, // 39: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	65, // 40: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
-	64, // 41: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	65, // 42: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
-	0,  // 43: vx.v1.Note.author:type_name -> vx.v1.Principal
-	72, // 44: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
-	72, // 45: vx.v1.AskResponse.question:type_name -> vx.v1.Note
-	72, // 46: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
-	72, // 47: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
-	72, // 48: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
-	72, // 49: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
-	72, // 50: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
-	72, // 51: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
-	72, // 52: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
-	84, // 53: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
-	8,  // 54: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
-	25, // 55: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	27, // 56: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	17, // 57: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	19, // 58: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	21, // 59: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	23, // 60: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	13, // 61: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	29, // 62: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	31, // 63: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	33, // 64: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	35, // 65: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	37, // 66: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	39, // 67: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	41, // 68: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	43, // 69: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	45, // 70: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	47, // 71: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	49, // 72: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	51, // 73: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	53, // 74: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	55, // 75: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	57, // 76: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	59, // 77: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	61, // 78: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	66, // 79: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	68, // 80: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	70, // 81: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	73, // 82: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	75, // 83: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	77, // 84: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	79, // 85: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	81, // 86: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	83, // 87: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	26, // 88: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	28, // 89: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	18, // 90: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	20, // 91: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	22, // 92: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	24, // 93: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	14, // 94: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	30, // 95: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	32, // 96: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	34, // 97: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	36, // 98: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	38, // 99: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	40, // 100: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	42, // 101: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	44, // 102: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	46, // 103: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	48, // 104: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	50, // 105: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	52, // 106: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	54, // 107: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	56, // 108: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	58, // 109: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	60, // 110: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	62, // 111: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	67, // 112: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	69, // 113: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	71, // 114: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	74, // 115: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	76, // 116: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	78, // 117: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	80, // 118: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	82, // 119: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	85, // 120: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	88, // [88:121] is the sub-list for method output_type
-	55, // [55:88] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	1,   // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
+	5,   // 1: vx.v1.Evidence.checks:type_name -> vx.v1.Check
+	4,   // 2: vx.v1.Changeset.author:type_name -> vx.v1.Author
+	6,   // 3: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
+	7,   // 4: vx.v1.Changeset.files:type_name -> vx.v1.FileChange
+	11,  // 5: vx.v1.Changeset.warnings:type_name -> vx.v1.Warning
+	0,   // 6: vx.v1.AgentSummary.agent:type_name -> vx.v1.Principal
+	16,  // 7: vx.v1.ListAgentsResponse.agents:type_name -> vx.v1.AgentSummary
+	0,   // 8: vx.v1.ListTokensResponse.principal:type_name -> vx.v1.Principal
+	15,  // 9: vx.v1.ListTokensResponse.tokens:type_name -> vx.v1.Token
+	15,  // 10: vx.v1.RevokeTokenResponse.token:type_name -> vx.v1.Token
+	0,   // 11: vx.v1.CreateTokenResponse.principal:type_name -> vx.v1.Principal
+	15,  // 12: vx.v1.CreateTokenResponse.token:type_name -> vx.v1.Token
+	0,   // 13: vx.v1.WhoAmIResponse.principal:type_name -> vx.v1.Principal
+	0,   // 14: vx.v1.CreateAgentResponse.agent:type_name -> vx.v1.Principal
+	12,  // 15: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
+	12,  // 16: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
+	2,   // 17: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
+	2,   // 18: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
+	2,   // 19: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
+	1,   // 20: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
+	3,   // 21: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
+	3,   // 22: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
+	9,   // 23: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
+	3,   // 24: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
+	8,   // 25: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
+	8,   // 26: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
+	9,   // 27: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 28: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 29: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
+	6,   // 30: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
+	8,   // 31: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
+	10,  // 32: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
+	11,  // 33: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
+	86,  // 34: vx.v1.LandResponse.overlapping_claims:type_name -> vx.v1.Claim
+	9,   // 35: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
+	8,   // 36: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
+	63,  // 37: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
+	10,  // 38: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
+	11,  // 39: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
+	64,  // 40: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	65,  // 41: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
+	64,  // 42: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	65,  // 43: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
+	0,   // 44: vx.v1.Note.author:type_name -> vx.v1.Principal
+	72,  // 45: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
+	72,  // 46: vx.v1.AskResponse.question:type_name -> vx.v1.Note
+	72,  // 47: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
+	72,  // 48: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
+	72,  // 49: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
+	72,  // 50: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
+	72,  // 51: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
+	72,  // 52: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
+	72,  // 53: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
+	84,  // 54: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
+	8,   // 55: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
+	86,  // 56: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
+	0,   // 57: vx.v1.Claim.owner:type_name -> vx.v1.Principal
+	86,  // 58: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
+	86,  // 59: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
+	86,  // 60: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
+	86,  // 61: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
+	0,   // 62: vx.v1.Task.owner:type_name -> vx.v1.Principal
+	0,   // 63: vx.v1.Task.created_by:type_name -> vx.v1.Principal
+	93,  // 64: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
+	93,  // 65: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
+	93,  // 66: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
+	93,  // 67: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
+	25,  // 68: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	27,  // 69: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	17,  // 70: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	19,  // 71: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	21,  // 72: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	23,  // 73: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	13,  // 74: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	29,  // 75: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	31,  // 76: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	33,  // 77: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	35,  // 78: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	37,  // 79: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	39,  // 80: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	41,  // 81: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	43,  // 82: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	45,  // 83: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	47,  // 84: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	49,  // 85: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	51,  // 86: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	53,  // 87: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	55,  // 88: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	57,  // 89: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	59,  // 90: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	61,  // 91: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	66,  // 92: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	68,  // 93: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	70,  // 94: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	73,  // 95: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	75,  // 96: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	77,  // 97: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	79,  // 98: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	81,  // 99: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	83,  // 100: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	87,  // 101: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	89,  // 102: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	91,  // 103: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	94,  // 104: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	96,  // 105: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	98,  // 106: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	26,  // 107: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	28,  // 108: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	18,  // 109: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	20,  // 110: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	22,  // 111: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	24,  // 112: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	14,  // 113: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	30,  // 114: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	32,  // 115: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	34,  // 116: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	36,  // 117: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	38,  // 118: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	40,  // 119: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	42,  // 120: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	44,  // 121: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	46,  // 122: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	48,  // 123: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	50,  // 124: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	52,  // 125: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	54,  // 126: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	56,  // 127: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	58,  // 128: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	60,  // 129: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	62,  // 130: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	67,  // 131: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	69,  // 132: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	71,  // 133: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	74,  // 134: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	76,  // 135: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	78,  // 136: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	80,  // 137: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	82,  // 138: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	85,  // 139: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	88,  // 140: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	90,  // 141: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	92,  // 142: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	95,  // 143: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	97,  // 144: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	99,  // 145: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	107, // [107:146] is the sub-list for method output_type
+	68,  // [68:107] is the sub-list for method input_type
+	68,  // [68:68] is the sub-list for extension type_name
+	68,  // [68:68] is the sub-list for extension extendee
+	0,   // [0:68] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -6044,9 +7152,9 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   86,
+			NumMessages:   100,
 			NumExtensions: 0,
-			NumServices:   7,
+			NumServices:   8,
 		},
 		GoTypes:           file_vx_v1_vx_proto_goTypes,
 		DependencyIndexes: file_vx_v1_vx_proto_depIdxs,
