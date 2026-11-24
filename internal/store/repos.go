@@ -92,12 +92,11 @@ func (r Repo) HostName() string { return r.Provider.HostName() }
 // PRName is what the repository's host calls a pull request.
 func (r Repo) PRName() string { return r.Provider.PRName() }
 
-// WebURL is the repository's page on its host, or "" when vx cannot tell.
+// WebURL is the page of a GitLab, Gitea, Forgejo or Bitbucket repository
+// on its host, or "" for other providers (a GitHub repository may be on
+// GitHub Enterprise, which only the service knows).
 func (r Repo) WebURL() string {
-	switch {
-	case r.Provider == ProviderGitHub:
-		return "https://github.com/" + r.Remote
-	case r.Provider.Hosted() && r.BaseURL != "":
+	if r.Provider.Hosted() && r.BaseURL != "" {
 		return r.BaseURL + "/" + r.Remote
 	}
 	return ""

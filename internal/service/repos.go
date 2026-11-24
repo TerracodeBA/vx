@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/TerracodeBA/vx/internal/object"
@@ -80,7 +81,11 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	if repo.DefaultBranch == "" && in.Provider != store.ProviderNone {
 		b, err := s.Upstream.DefaultBranch(ctx, repo)
 		if err != nil {
-			return store.Repo{}, errf(CodeUnavailable, "could not reach %s: %v", in.Remote, err)
+			hint := ""
+			if in.Provider.Hosted() && in.Token == "" {
+				hint = fmt.Sprintf("; for a private repository give vx a token: --token-file FILE (or VX_%s_TOKEN on the server)", strings.ToUpper(string(in.Provider)))
+			}
+			return store.Repo{}, errf(CodeUnavailable, "could not reach %s: %v%s", in.Remote, err, hint)
 		}
 		repo.DefaultBranch = b
 	}
