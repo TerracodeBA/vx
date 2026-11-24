@@ -45,7 +45,7 @@ git clone https://github.com/TerracodeBA/vx ~/vx
 
 The CLI comes later, from the running server (step 5).
 
-## 3. Decide how vx reaches GitHub
+## 3. Decide how vx reaches GitHub (or GitLab, Gitea, Forgejo, Bitbucket)
 
 Ask the user once, only if they will connect GitHub repositories:
 
@@ -53,6 +53,8 @@ Ask the user once, only if they will connect GitHub repositories:
 - **Token:** vx also opens and updates pull requests itself. The user creates a fine-grained token with Contents and Pull requests read/write on the repos they want, and puts it in `~/vx/deploy/.env` as `VX_GITHUB_TOKEN=...` themselves. Then `chmod 600 ~/vx/deploy/.env`.
 
 For SSH mode inside Docker, the container needs the user's SSH agent. If they choose SSH, it is simpler to run the server outside Docker (see "Without Docker" below).
+
+For GitLab, Gitea, Forgejo or Bitbucket Cloud vx always goes over HTTPS with a token: either one per repository (given at `vx repo create ... --token-file FILE`, step 6) or one for the whole host in `~/vx/deploy/.env`, which the user adds themselves: `VX_GITLAB_TOKEN` (scope `api`; self-managed also `VX_GITLAB_URL=https://gitlab.example.com`), `VX_GITEA_TOKEN` and `VX_GITEA_URL`, `VX_FORGEJO_TOKEN` and `VX_FORGEJO_URL`, or `VX_BITBUCKET_TOKEN` (an access token, or `USERNAME:APP_PASSWORD`). Per-repository tokens need `VX_SECRET_KEY` in `.env` (`openssl rand -hex 32`, once). Never ask the user to paste a token into the chat.
 
 ## 4. Start the server
 
@@ -114,9 +116,15 @@ Ask which repository to connect. Then one of:
 
 ```sh
 vx repo create OWNER/NAME --github OWNER/NAME        # a GitHub repo
+vx repo create OWNER/NAME --gitlab GROUP/PROJECT [--gitlab-url https://gitlab.example.com] [--token-file FILE]
+vx repo create OWNER/NAME --gitea OWNER/REPO --gitea-url https://gitea.example.com [--token-file FILE]
+vx repo create OWNER/NAME --forgejo OWNER/REPO --forgejo-url https://codeberg.org [--token-file FILE]
+vx repo create OWNER/NAME --bitbucket WORKSPACE/REPO [--token-file FILE]
 vx repo create NAME --git /path/or/url/to/repo       # any git remote or local path
 vx repo create NAME                                  # vx only, no upstream
 ```
+
+For GitLab, Gitea, Forgejo and Bitbucket the user writes the token to a file themselves (`chmod 600`), and you pass only the path. `vx repo create` then prints a webhook URL, a secret (shown once) and the events to pick: show them to the user and ask them to add the webhook on the host (GitLab: Settings > Webhooks; Gitea and Forgejo: Settings > Webhooks; Bitbucket: Repository settings > Webhooks). The server must be reachable from the host at `VX_PUBLIC_URL`. Lost the secret: `vx repo host OWNER/NAME --rotate-webhook-secret`. Roles on these repositories are vx's own (`vx repo grant`), not the host's.
 
 The repository goes into the organization named like OWNER when the user owns or administers it (`--org ORG` picks one), else into their personal organization. To let others in: `vx repo grant OWNER/NAME bob --role write`.
 
@@ -152,5 +160,6 @@ Run `vx-server serve` in the background (a terminal, tmux, or a systemd user ser
 - `this vx ... is too old for this server` or a `vx: notice:` about a newer server: run the installer again, `curl -fsSL SERVER/install.sh | sh`.
 - `connect to database`: Postgres is not up; `docker compose ps` and `docker compose logs postgres`.
 - Repo create fails with an SSH error: `ssh -T git@github.com` must succeed for the user running the server, and github.com must be in `known_hosts`.
+- GitLab, Gitea, Forgejo or Bitbucket: `the token was refused` means a wrong or expired token (`vx repo host NAME --token-file FILE`); a 404 means a wrong path or a token that cannot see the repository. Webhook deliveries answered 401 have no or the wrong secret.
 - `repo X: not found` for a repository that exists: the user has no role on it. An owner or admin of its organization grants one: `vx repo grant X USER --role write`.
 - Everything else: `docker compose logs vx`.

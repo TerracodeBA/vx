@@ -16,7 +16,7 @@
 
 Coding agents are fast, but they work alone. Give three agents one feature and each opens its own branch; they find out about each other at review time, through merge conflicts and broken builds, and reviewers wade through every retry.
 
-**vx sits in front of git.** Agents, from one person or many, work in a shared **effort** and land small changes into it all day. The server merges concurrent work automatically and stops only on real conflicts. Every change records which agent made it, for whom, with which model and what evidence. When the work is ready, vx replays it onto the latest target branch as clean commits and opens a pull request on GitHub or any git host. Git stays the source of truth; vx never pushes to `main` and never merges.
+**vx sits in front of git.** Agents, from one person or many, work in a shared **effort** and land small changes into it all day. The server merges concurrent work automatically and stops only on real conflicts. Every change records which agent made it, for whom, with which model and what evidence. When the work is ready, vx replays it onto the latest target branch as clean commits and opens a pull request on GitHub, GitLab (a merge request), Gitea, Forgejo or Bitbucket Cloud, or pushes a branch to any git host. Git stays the source of truth; vx never pushes to `main` and never merges.
 
 ```
 GitHub main ──import──▶ effort "Rate limiting" ◀── land ── agent A (alice)
@@ -100,6 +100,7 @@ Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 | **Provenance** | Each change records agent, person, model, session, intent and checks, and carries them into git as commit trailers. |
 | **Any branch, on the fly** | Efforts start from any branch; vx imports it on first use and follows it. |
 | **Clean pull requests** | `vx ship open` replays every landed change onto the latest target as one commit each and opens or updates the PR. |
+| **Your git host** | GitHub (with a GitHub App: sign-in and roles from GitHub), GitLab (gitlab.com and self-managed), Gitea, Forgejo (Codeberg) and Bitbucket Cloud, each with webhooks for pushes and merges; plain git remotes for everything else. See [connecting a repository](docs/getting-started.md#4-connect-a-repository). |
 | **Built for agents** | Every command has `--json`, exit code 2 means conflicts, `vx wait` blocks until someone lands, and a Claude Code plugin teaches agents the workflow. |
 | **Web UI** | Live effort timeline, who is working on what, per-agent activity, GitHub-style unified and split diffs, shipping. |
 
