@@ -44,9 +44,12 @@ type App struct {
 	checked  bool // the server's version was checked in this run
 	chdir    string
 	exitCode int
-	// landResult is the one line vx land ends with: what landed, or why
-	// nothing did.
+	// landResult is the one line vx land and vx sync end with: what
+	// landed or synced, or why nothing did. landTail are the lines right
+	// before it: the conflicts to resolve.
 	landResult string
+	landTail   []string
+	printed    bool // printf wrote something in this run
 	// noGenerate (--no-generate) stops vx from running [[generated]]
 	// commands after a merge kept generated files from one side.
 	noGenerate bool
@@ -198,6 +201,7 @@ func (a *App) workingCopy() (*workcopy.WorkingCopy, error) {
 func (a *App) printf(format string, args ...any) {
 	if !a.jsonOut {
 		fmt.Fprintf(a.Out, format, args...)
+		a.printed = true
 	}
 }
 

@@ -43,7 +43,7 @@ func TestLandResultLine(t *testing.T) {
 	b.write("x.go", "package x\n\nfunc X() int { return 3 }\n")
 	a.must("land")
 	out, code = b.run("land")
-	if code != cli.ExitConflict || lastLine(out) != "Not landed: conflicts in 1 file(s) (exit 2)" {
+	if code != cli.ExitConflict || lastLine(out) != "Not landed: conflicts in x.go (exit 2). Run vx sync, resolve them, then `vx land`." {
 		t.Fatalf("conflicting land = %d:\n%s", code, out)
 	}
 }

@@ -275,7 +275,7 @@ func TestVerifiedLandAndHonestEvidence(t *testing.T) {
 	if !strings.Contains(out, "evidence was gathered before that merge") {
 		t.Fatalf("land output should flag the merge: %s", out)
 	}
-	show := b.must("show", "--repo", "svc", strings.Fields(out)[1])
+	show := b.must("show", "--repo", "svc", strings.Fields(lastLine(out))[1])
 	if !strings.Contains(show, "merged onto newer work") || !strings.Contains(show, "check unit: pass (reported, 3 passed, 0 failed)") {
 		t.Fatalf("show = %s", show)
 	}

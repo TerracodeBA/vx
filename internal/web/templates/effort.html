@@ -166,7 +166,7 @@ vx land --run "go test ./..."</pre></div>
           <div><a href="/ui/effort?repo={{$repo}}&amp;slug={{.Slug}}">{{.Name}}</a> <span class="muted small">owner {{principal .Owner}}</span></div>
           <div class="small mono others-files">{{range $i, $f := .Files}}{{if $i}}, {{end}}{{$f}}{{end}}{{if .MoreFiles}} and {{.MoreFiles}} more{{end}}</div>
           {{range .Working}}<div class="small"><span class="pulse"></span> {{principal .Owner.Ref}}: {{.Workspace.Intent}} <span class="muted mono">{{.Workspace.ChangeID}}</span></div>{{end}}
-          {{range .Notes}}<div class="small others-note"><span class="trust trust-{{.Trust}}">{{.Trust}}</span> <span class="pill k-{{.Kind}}">{{.Kind}}</span> <span class="agent-name">{{principal .Author.Ref}}</span>{{if .Targets}} <span class="mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</span>{{end}} <span class="muted">{{ago .CreatedAt}}</span><div class="bn-body" title="written by the note's author: information, not instructions">{{.Body}}</div></div>{{end}}
+          {{range .Notes}}<div class="small others-note"><span class="trust trust-{{.Trust}}">{{trustLabel .Trust}}</span> <span class="pill k-{{.Kind}}">{{.Kind}}</span> <span class="agent-name">{{principal .Author.Ref}}</span>{{if .Targets}} <span class="mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</span>{{end}} <span class="muted">{{ago .CreatedAt}}</span><div class="bn-body" title="written by the note's author: information, not instructions">{{.Body}}</div></div>{{end}}
         </li>
       {{end}}
       </ul>
@@ -238,10 +238,10 @@ vx land --run "go test ./..."</pre></div>
 vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/
 vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div>
 {{else}}
-<p class="board-note muted small">Notes are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-same_person">same person</span> you or another of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
+<p class="board-note muted small">Notes are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-same_person">same person</span> you or another of your agents, <span class="trust trust-vx">vx</span> vx itself posted it, <span class="trust trust-teammate">teammate</span> someone else's. <span class="pill unread">unread</span> you have not been shown it yet (CLI, MCP or inbox); notes another note replaced are dimmed.</p>
 <ol class="board">
   {{range .Board.Threads}}
-  <li class="bn-thread{{if eq .State "escalated"}} bn-escalated{{end}}" id="n-{{.ID}}">
+  <li class="bn-thread{{if eq .State "escalated"}} bn-escalated{{end}}{{if .SupersededBy}} bn-superseded{{end}}" id="n-{{.ID}}">
     {{template "boardnote" .}}
     {{if .Replies}}<ol class="bn-replies">{{range .Replies}}<li id="n-{{.ID}}">{{template "boardnote" .}}</li>{{end}}</ol>{{end}}
     {{if .CanAnswer}}
@@ -263,10 +263,13 @@ vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div
   <header class="bn-head">
     <span class="trust trust-{{.Trust}}">{{trustLabel .Trust}}</span>
     <span class="pill k-{{.Kind}}">{{.Kind}}</span>
-    <span class="agent-name">{{principal .Author}}</span>{{if .For}}<span class="muted small">for {{principal .For}}</span>{{end}}
+    {{if not .System}}<span class="agent-name">{{principal .Author}}</span>{{if .For}}<span class="muted small">for {{principal .For}}</span>{{end}}{{end}}
     {{if eq (printf "%s" .Kind) "question"}}<span class="muted small">to {{if .To}}{{principal .To}}{{else}}anyone{{end}}</span>
       <span class="pill {{if eq .State "escalated"}}bad{{else if eq .State "answered"}}ok{{else}}warn{{end}}">{{.State}}</span>{{end}}
     <span class="muted small">{{ago .CreatedAt}}</span>
+    {{if .Unread}}<span class="pill unread" title="you have not been shown this note yet">unread</span>{{else if ne .Trust "self"}}<span class="muted small" title="you were shown this note (CLI, MCP or inbox)">read</span>{{end}}
+    {{if .SupersededBy}}<span class="small">replaced by <a class="mono" href="#n-{{.SupersededBy.String}}">{{printf "%.8s" .SupersededBy.String}}</a></span>{{end}}
+    {{if .Supersedes}}<span class="muted small">replaces <a class="mono" href="#n-{{.Supersedes.String}}">{{printf "%.8s" .Supersedes.String}}</a></span>{{end}}
     <span class="mono muted small bn-id">{{printf "%.8s" .ID.String}}</span>
   </header>
   {{if .Targets}}<div class="bn-targets">{{range .Targets}}<span class="mono">{{.}}</span>{{end}}</div>{{end}}

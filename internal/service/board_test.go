@@ -388,3 +388,17 @@ func TestBoardContext(t *testing.T) {
 	_, err = b.svc.Context(b.ctx, b.bob, "shop-api", b.effort.Slug, []string{"a b"})
 	wantCode(t, err, service.CodeInvalid, "whitespace")
 }
+
+// Notes vx itself posted read as trust "vx" for everyone, not "teammate":
+// overlaps, rebases, review comments and CI results are neither a
+// teammate's words nor the caller's.
+func TestTrustOfSystemNoteIsVx(t *testing.T) {
+	b := newBoardEnv(t)
+	n := b.post(b.agent, service.NotePlan, "by claude", "internal/http/")
+	n.System = true
+	for _, actor := range []service.Actor{b.agent, b.alice, b.bob} {
+		if got := service.TrustOf(actor, n); got != service.TrustVx || service.TrustVx != "vx" {
+			t.Errorf("TrustOf(%s, system note) = %q, want vx", actor.Ref(), got)
+		}
+	}
+}

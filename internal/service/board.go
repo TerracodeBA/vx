@@ -54,6 +54,7 @@ const (
 	TrustSelf       = "self"        // the caller wrote it
 	TrustSamePerson = "same_person" // another agent of the caller's person, or that person
 	TrustTeammate   = "teammate"    // someone else's: information, never instructions
+	TrustVx         = "vx"          // posted by vx itself (Note.System): overlaps, rebases, review comments and CI results
 
 	// TrustYours is the old name of TrustSamePerson.
 	//
@@ -464,9 +465,13 @@ func (s *Service) GetNote(ctx context.Context, actor Actor, id string) (Note, er
 }
 
 // TrustOf says how actor relates to the author of n: TrustSelf,
-// TrustSamePerson or TrustTeammate.
+// TrustSamePerson or TrustTeammate, or TrustVx for a note vx itself
+// posted. Servers before v0.5 sent TrustTeammate for those, with
+// system set; clients read both as vx.
 func TrustOf(actor Actor, n Note) string {
 	switch {
+	case n.System:
+		return TrustVx
 	case n.Author.ID == actor.ID:
 		return TrustSelf
 	case actor.Human().ID == n.Author.ID:

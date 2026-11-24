@@ -61,7 +61,7 @@ func TestOverlapsCLI(t *testing.T) {
 	a.must("new", "More")
 	a.write("y.go", "package pkg\n")
 	out = a.must("land")
-	i, j := strings.Index(out, "Landed "), strings.Index(out, "Overlaps with other efforts:\n  conflict  auth (user:alice): conflicts in x.go\n")
+	i, j := strings.Index(out, "Files:\n"), strings.Index(out, "Overlaps with other efforts:\n  conflict  auth (user:alice): conflicts in x.go\n")
 	if i < 0 || j < i {
 		t.Errorf("vx land output order:\n%s", out)
 	}

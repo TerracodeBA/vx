@@ -120,8 +120,11 @@ type UI struct {
 // trustLabel is how a trust value reads on a page: "same person" for
 // another agent of the viewer's person.
 func trustLabel(trust string) string {
-	if trust == service.TrustSamePerson {
+	switch trust {
+	case service.TrustSamePerson:
 		return "same person"
+	case service.TrustVx:
+		return "vx"
 	}
 	return trust
 }
@@ -895,6 +898,9 @@ type boardNote struct {
 	Author string
 	For    string // the person an agent author acts for
 	To     string // a question's addressee; empty: anyone
+	// Unread: the viewer was not shown this note yet (by the CLI, MCP or
+	// the inbox); their own notes always count as read.
+	Unread bool
 }
 
 type boardThread struct {
@@ -917,6 +923,8 @@ func (u *UI) board(r *http.Request, actor service.Actor, repoName, slug string, 
 	in := service.ListNotesInput{Repo: repoName, Effort: slug}
 	if !full {
 		in.Kinds = []service.NoteKind{service.NoteQuestion}
+	} else {
+		in.IncludeSuperseded = true // shown dimmed, with "replaced by"
 	}
 	notes, err := u.svc.ListNotes(r.Context(), actor, in)
 	if err != nil {
@@ -940,6 +948,7 @@ func (u *UI) board(r *http.Request, actor service.Actor, repoName, slug string, 
 	}
 	show := func(n service.Note) boardNote {
 		bn := boardNote{Note: n, Trust: service.TrustOf(actor, n), Author: n.Author.Ref()}
+		bn.Unread = !n.Read && bn.Trust != service.TrustSelf
 		if n.AuthorOwner != nil {
 			bn.For = n.AuthorOwner.Ref()
 		}

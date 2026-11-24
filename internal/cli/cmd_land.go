@@ -192,12 +192,13 @@ the result.`,
 					if err != nil {
 						return err
 					}
+					a.printf("%s\n", syncSummary(res))
 					if len(res.conflicts) > 0 {
-						a.printConflicts(wc, res.conflicts)
 						out := res.json()
 						out["board"] = a.syncFeed(ctx, c, wc)
 						a.emit(out)
-						a.landResult = notLandedConflicts(len(res.conflicts))
+						a.landTail = conflictLines(res.conflicts)
+						a.landResult = fmt.Sprintf("Not landed: the sync brought conflicts in %s (exit 2). Resolve them, then %s.", conflictPaths(res.conflicts), landAgain(wc))
 						return errConflict
 					}
 					opts.keptBoth = unionSorted(opts.keptBoth, res.keptBoth)
@@ -337,9 +338,9 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		if len(o.ran) > 0 {
 			return errEffortMoved
 		}
-		a.printf("Not landed: the effort moved on to %s since your last sync.\nRun `vx sync`, check your work again, then %s.\n", short(r.EffortHead), landAgain(wc))
+		a.printf("The effort moved on to %s since your last sync.\nRun `vx sync`, check your work again, then %s.\n", short(r.EffortHead), landAgain(wc))
 		a.emit(r)
-		a.landResult = fmt.Sprintf("Not landed: the effort moved on to %s since your last sync (exit 2)", short(r.EffortHead))
+		a.landResult = fmt.Sprintf("Not landed: the effort moved on to %s since your last sync (exit 2). Run vx sync, then %s.", short(r.EffortHead), landAgain(wc))
 		return errConflict
 	}
 	if r.Review != nil {
@@ -349,13 +350,16 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		if r.Status == "" {
 			r.Status = "conflicts"
 		}
-		a.printf("Not landed: your changes conflict with changes already in the effort (now at %s).\n\n", short(r.EffortHead))
-		for _, cf := range r.Conflicts {
-			a.printf("  %-14s %s %s\n", cf.Kind, cf.Path, cf.Detail)
-		}
-		a.printf("\nRun `vx sync` to bring in those changes and mark the conflicts, fix them, then %s again.\n", landAgain(wc))
+		a.printf("Your changes conflict with changes already in the effort (now at %s).\n", short(r.EffortHead))
+		a.printf("Run `vx sync` to bring in those changes and mark the conflicts, fix them, then %s again.\n", landAgain(wc))
 		a.emit(r)
-		a.landResult = notLandedConflicts(len(r.Conflicts))
+		var paths []string
+		a.landTail = []string{"Conflicts with the effort:"}
+		for _, cf := range r.Conflicts {
+			paths = append(paths, cf.Path)
+			a.landTail = append(a.landTail, strings.TrimRight(fmt.Sprintf("  %-14s %s %s", cf.Kind, cf.Path, cf.Detail), " "))
+		}
+		a.landResult = fmt.Sprintf("Not landed: conflicts in %s (exit 2). Run vx sync, resolve them, then %s.", longTargets(paths), landAgain(wc))
 		return errConflict
 	}
 	if r.Status == "" {
@@ -388,7 +392,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		added += f.Added
 		deleted += f.Deleted
 	}
-	a.printf("Landed %s (%s): %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent))
+	a.printf("Files:\n")
 	for _, f := range cs.Files {
 		a.printf("  %s %-48s +%d -%d\n", opLetter(object.Op(f.Op)), f.Path, f.Added, f.Deleted)
 	}
@@ -475,16 +479,53 @@ func (a *App) landPending(ctx context.Context, c *client.Client, wc *workcopy.Wo
 	return nil
 }
 
-func notLandedConflicts(n int) string {
-	return fmt.Sprintf("Not landed: conflicts in %d file(s) (exit 2)", n)
+// printLandResult ends vx land and vx sync with their one-line result,
+// set by the command, after the board section: the conflicts to resolve
+// first (landTail), so `| tail -3` still shows them, then the result. It
+// prints once.
+func (a *App) printLandResult() {
+	if a.landResult == "" {
+		return
+	}
+	if a.printed {
+		a.printf("\n")
+	}
+	for _, l := range a.landTail {
+		a.printf("%s\n", l)
+	}
+	a.printf("%s\n", a.landResult)
+	a.landResult, a.landTail = "", nil
 }
 
-// printLandResult ends vx land with its one-line result, set by the land.
-func (a *App) printLandResult() {
-	if a.landResult != "" {
-		a.printf("\n%s\n", a.landResult)
-		a.landResult = ""
+// syncSummary is what a sync did, on one line: "Synced to HASH: 12
+// file(s) updated, your 3 local change(s) kept." or "Up to date at HASH."
+func syncSummary(r syncResult) string {
+	if r.upToDate {
+		return fmt.Sprintf("Up to date at %s.", short(r.head))
 	}
+	s := fmt.Sprintf("Synced to %s: %d file(s) updated", short(r.head), r.updated)
+	if r.local > 0 {
+		s += fmt.Sprintf(", your %d local change(s) kept", r.local)
+	}
+	return s + "."
+}
+
+// syncResultLine is the line vx sync ends with.
+func syncResultLine(wc *workcopy.WorkingCopy, r syncResult) string {
+	if len(r.conflicts) > 0 {
+		return fmt.Sprintf("Not synced cleanly: conflicts in %s (exit 2). Resolve them, then %s.", conflictPaths(r.conflicts), landAgain(wc))
+	}
+	return syncSummary(r)
+}
+
+// conflictPaths names conflicted files for a result line: "a.go, b.go",
+// or "a.go, b.go, c.go and 4 more".
+func conflictPaths(conflicts []engine.Conflict) string {
+	paths := make([]string, 0, len(conflicts))
+	for _, cf := range conflicts {
+		paths = append(paths, cf.Path)
+	}
+	return longTargets(paths)
 }
 
 // printWarnings shows problems the server found in a landed or planned
@@ -670,11 +711,6 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	merged := mergedFiles(local, incoming, conflicts)
 	sort.Strings(keptBoth)
 	sort.Strings(byDecl)
-	a.printf("Synced to %s: %d file(s) updated", short(head), len(incoming))
-	if len(local) > 0 {
-		a.printf(", your %d local change(s) kept", len(local))
-	}
-	a.printf(".\n")
 	a.printPaths("Merged with your edits", merged)
 	a.printKeptBoth(keptBoth)
 	a.printPaths("Merged by declaration (the lines conflicted, the Go declarations did not; check the result)", byDecl)
@@ -831,8 +867,10 @@ func landAgain(wc *workcopy.WorkingCopy) string {
 	return "`vx land`"
 }
 
-func (a *App) printConflicts(wc *workcopy.WorkingCopy, conflicts []engine.Conflict) {
-	a.printf("\nConflicts to resolve:\n")
+// conflictLines lists the conflicts a sync wrote into the working copy,
+// with what to do about each, for the lines right before the result.
+func conflictLines(conflicts []engine.Conflict) []string {
+	out := []string{"Conflicts to resolve:"}
 	for _, cf := range conflicts {
 		hint := "edit the file and remove the markers"
 		switch cf.Kind {
@@ -843,9 +881,9 @@ func (a *App) printConflicts(wc *workcopy.WorkingCopy, conflicts []engine.Confli
 		case engine.ConflictBinary, engine.ConflictMode:
 			hint = "your version is kept"
 		}
-		a.printf("  %-14s %s (%s)\n", cf.Kind, cf.Path, hint)
+		out = append(out, fmt.Sprintf("  %-14s %s (%s)", cf.Kind, cf.Path, hint))
 	}
-	a.printf("\nThen run %s.\n", landAgain(wc))
+	return out
 }
 
 func (a *App) syncCmd() *cobra.Command {
@@ -862,7 +900,12 @@ changed are never merged: vx keeps yours and, when no file has conflict
 markers, runs the rule's command (for example buf generate) to regenerate
 them from the merged sources, and says so. If the command is not on PATH
 or fails, the warning stays and says what to run. --no-generate turns
-this off (vx land and vx effort rebase take it too).`,
+this off (vx land and vx effort rebase take it too).
+
+vx sync always ends with one result line, after the board section:
+"Synced to HASH: N file(s) updated, your M local change(s) kept.", "Up to
+date at HASH." or "Not synced cleanly: conflicts in a.go, b.go (exit 2)",
+with the conflicts listed right above it, so vx sync | tail -3 shows them.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -883,12 +926,6 @@ this off (vx land and vx effort rebase take it too).`,
 			if pending != nil {
 				a.printWaiting(pending)
 			}
-			if res.upToDate {
-				a.printf("Up to date at %s.\n", short(res.head))
-			}
-			if len(res.conflicts) > 0 {
-				a.printConflicts(wc, res.conflicts)
-			}
 			out := res.json()
 			if wc.Config.Workspace == "" {
 				if changes, err := wc.Status(ctx); err == nil && len(changes) > 0 {
@@ -896,8 +933,12 @@ this off (vx land and vx effort rebase take it too).`,
 					out["no_workspace"] = true
 				}
 			}
-			out["board"] = a.syncFeed(ctx, c, wc) // the board comes last
+			out["board"] = a.syncFeed(ctx, c, wc) // the board, then the result
 			a.emit(out)
+			if len(res.conflicts) > 0 {
+				a.landTail = conflictLines(res.conflicts)
+			}
+			a.landResult = syncResultLine(wc, res)
 			if len(res.conflicts) > 0 {
 				return errConflict
 			}
@@ -905,14 +946,22 @@ this off (vx land and vx effort rebase take it too).`,
 		},
 	}
 	cmd.Flags().BoolVar(&a.noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files the merge kept from your side")
+	sync := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		err := sync(cmd, args)
+		if err == nil || errors.Is(err, errConflict) {
+			a.printLandResult()
+		}
+		return err
+	}
 	return cmd
 }
 
 // ---------- wait ----------
 
 func (a *App) waitCmd() *cobra.Command {
-	var timeout, interval time.Duration
-	var noNotes bool
+	var timeout, interval, heartbeat time.Duration
+	var noNotes, quiet bool
 	cmd := &cobra.Command{
 		Use:   "wait",
 		Short: "Wait until someone lands, asks or answers you, or posts a decision on your files",
@@ -928,6 +977,10 @@ question, answer, note or review). When your last land waits for a person
 or reject it (reason review). --no-notes waits for lands only. The note or
 answer that woke it counts as read, so vx sync and vx inbox do not repeat it.
 
+While it waits, vx wait prints one short line a minute ("still waiting:
+nothing new in effort X (2m)"), so whoever runs it sees it is alive;
+--quiet turns that off. --json prints only the result.
+
 Exit codes: 0 when something happened, 4 when nothing did within
 --timeout, 1 on errors. So vx wait --timeout 15m && vx sync syncs only
 after an event.`,
@@ -938,7 +991,9 @@ after an event.`,
 				return err
 			}
 			ctx := ctxOf(cmd)
-			deadline := time.Now().Add(timeout)
+			start := time.Now()
+			deadline := start.Add(timeout)
+			nextBeat := start.Add(heartbeat)
 			var seen *inboxSeen
 			var watch *noteWatch
 			if !noNotes {
@@ -1006,6 +1061,12 @@ after an event.`,
 					}
 					return &exitError{code: ExitTimeout, err: err}
 				}
+				if now := time.Now(); !quiet && heartbeat > 0 && !now.Before(nextBeat) {
+					a.printf("still waiting: nothing new in effort %s (%s)\n", wc.Config.Effort, waited(now.Sub(start)))
+					for !now.Before(nextBeat) {
+						nextBeat = nextBeat.Add(heartbeat)
+					}
+				}
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -1017,5 +1078,20 @@ after an event.`,
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "give up after this long")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "how often to check")
 	cmd.Flags().BoolVar(&noNotes, "no-notes", false, "wait for lands only, not for questions, answers and notes")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "do not print a line every minute while waiting")
+	cmd.Flags().DurationVar(&heartbeat, "heartbeat", time.Minute, "how often to print that vx wait is still waiting")
+	_ = cmd.Flags().MarkHidden("heartbeat")
 	return cmd
+}
+
+// waited is how long vx wait has waited, for its heartbeat: "45s", "2m",
+// "1h5m".
+func waited(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 }

@@ -99,7 +99,7 @@ func TestNotesReadOnceShown(t *testing.T) {
 	if strings.Contains(out, "Per user id") || !strings.Contains(out, "1 read (vx inbox --all)") {
 		t.Errorf("second inbox repeats the answer:\n%s", out)
 	}
-	if out := b.must("inbox", "--all"); !strings.Contains(out, "│ Per user id") {
+	if out := b.must("inbox", "--all"); !strings.Contains(out, "[teammate] answer alice/backend in rate-limiting just now re ") || !strings.Contains(out, ": Per user id\n") {
 		t.Errorf("inbox --all:\n%s", out)
 	}
 }
