@@ -208,6 +208,10 @@ func (a *App) statusCmd() *cobra.Command {
 							recent = append(recent, map[string]string{"hash": cs.Hash, "change_id": cs.ChangeId, "intent": cs.Intent, "author": cs.Author.Principal})
 						}
 						out["recent"] = recent
+						if warned := recentWarnings(log.Msg.Changesets); len(warned) > 0 {
+							a.printf("\nWarnings in recent lands: %s\n", strings.Join(warned, "; "))
+							out["warnings"] = warned
+						}
 					}
 				}
 			}
@@ -434,6 +438,19 @@ func (a *App) showCmd() *cobra.Command {
 	return cmd
 }
 
+// recentWarnings lists the warnings stored with changes, each naming the
+// change it landed with: "duplicate func clientIP in internal/httpapi
+// (audit.go, limit.go) (change qx9b-mwns)".
+func recentWarnings(css []*vxv1.Changeset) []string {
+	var out []string
+	for _, cs := range css {
+		for _, w := range cs.Warnings {
+			out = append(out, fmt.Sprintf("%s (change %s)", w.Detail, cs.ChangeId))
+		}
+	}
+	return out
+}
+
 // printDetails prints a change's evidence, new tests, dependencies and
 // whether the server merged it onto newer work.
 func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
@@ -458,5 +475,8 @@ func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
 	}
 	if len(cs.DependsOn) > 0 {
 		a.printf("%sdepends on: %s\n", indent, strings.Join(cs.DependsOn, ", "))
+	}
+	for _, w := range cs.Warnings {
+		a.printf("%swarning: %s\n", indent, w.Detail)
 	}
 }
