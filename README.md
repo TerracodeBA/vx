@@ -118,11 +118,12 @@ More in [docs/architecture.md](docs/architecture.md).
 - [Deploying for a team](docs/deploy.md): one shared server with HTTPS, users, backups
 - [Organizations](docs/organizations.md): what larger organizations need, and the roadmap
 - [Architecture](docs/architecture.md): data model, landing, the git bridge, shipping
+- [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status
 
-vx is early. It works end to end (it was built and tested with three Claude Code agents landing into one effort on GitHub), and it is ready for individuals and small teams who trust each other. It is not yet ready for large organizations: see [docs/organizations.md](docs/organizations.md) for the gaps and the plan.
+vx is early. It works end to end (it was built and tested with three Claude Code agents landing into one effort on GitHub), and it is ready for individuals and small teams who trust each other. It is not yet ready for large organizations: see the [roadmap](ROADMAP.md) for what comes next.
 
 ## License
 
