@@ -23,6 +23,10 @@ func TestTasksTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	bob, _ := e.st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "bob"})
+	// bob works in alice's repo: under repository roles he needs a grant.
+	if _, err := e.svc.GrantRepo(ctx, e.alice, "acme/shop", "bob", service.RoleWrite); err != nil {
+		t.Fatal(err)
+	}
 	bobActor, _ := e.svc.ResolveActor(ctx, bob)
 	auditP, _, err := e.svc.CreateAgent(ctx, bobActor, "audit", "")
 	if err != nil {

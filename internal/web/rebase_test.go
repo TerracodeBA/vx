@@ -9,6 +9,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
+	"github.com/TerracodeBA/vx/internal/store/storetest"
 )
 
 // The effort page shows a rebase in progress, and rebased changes carry
@@ -33,6 +34,7 @@ func TestRebaseShownInEffortAndChangePages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		storetest.AddTree(t, e.st, e.svc.Blobs, repo.ID, row.Tree, tree) // objects are scoped per repo
 		return tree
 	}
 	ws, _ := e.svc.OpenWorkspace(e.ctx, e.alice, "acme/shop", eff.Slug, "Add limiter")

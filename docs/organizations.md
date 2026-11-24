@@ -91,7 +91,7 @@ and can then create more tokens and their own agents from Settings, and revoke t
 
 ## Upgrading from v0.1
 
-v0.1 had no access control: everyone saw everything. The upgrade (migration 008) changes nobody's access:
+v0.1 had no access control: everyone saw everything. The upgrade (migrations 009 and 010) changes nobody's access:
 
 - each distinct owner part of an existing repository name becomes an organization (lowercased: `Acme/api` goes to `acme`); repositories without an owner part go to an organization named `default`,
 - every existing person becomes an owner of every one of those organizations,
@@ -170,8 +170,11 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Read the board, context and notes | `vx board`, `vx context`, `vx_board`, `vx_context` | read |
 | Inbox and wait (only items in repositories you can read) | `vx inbox`, `vx wait`, `vx_inbox` | read |
 | List shipments | `vx ship list` | read |
+| List claims and tasks, see a rebase | `vx claims`, `vx tasks`, `vx status`, `vx_claims`, `vx_tasks` | read |
 | Import upstream commits | `vx repo sync` | write |
 | Start an effort | `vx effort new` | write |
+| Claim, add and change tasks (also by id) | `vx claim`, `vx release`, `vx task ...`, `vx_claim`, `vx_task_add`, `vx_task_update` | write |
+| Rebase an effort, continue or abort | `vx effort rebase` | write |
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
