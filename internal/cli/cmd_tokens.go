@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"text/tabwriter"
 	"time"
 
 	"connectrpc.com/connect"
@@ -27,18 +28,22 @@ func (a *App) agentListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tw := tabwriter.NewWriter(a.Out, 0, 0, 2, ' ', 0)
 			if len(resp.Msg.Agents) == 0 {
 				a.printf("No agents yet. Create one with: vx agent add NAME\n")
-			} else {
-				a.printf("%-32s %-20s %s\n", "AGENT", "TOKENS", "LAST USED")
+			} else if !a.jsonOut {
+				fmt.Fprintln(tw, "AGENT\tTOKENS\tLAST USED")
 			}
 			for _, ag := range resp.Msg.Agents {
 				tokens := plural(int(ag.ActiveTokens), "active")
 				if ag.RevokedTokens > 0 {
 					tokens += ", " + plural(int(ag.RevokedTokens), "revoked")
 				}
-				a.printf("%-32s %-20s %s\n", ag.Agent.Handle, tokens, when(ag.LastUsedAt, "never"))
+				if !a.jsonOut {
+					fmt.Fprintf(tw, "%s\t%s\t%s\n", ag.Agent.Handle, tokens, when(ag.LastUsedAt, "never"))
+				}
 			}
+			tw.Flush()
 			a.emit(resp.Msg)
 			return nil
 		},
@@ -82,10 +87,11 @@ whose token is in use). Use an id from here with: vx token revoke ID`,
 				return err
 			}
 			a.printf("Tokens of %s\n", resp.Msg.Principal.Ref)
+			tw := tabwriter.NewWriter(a.Out, 0, 0, 2, ' ', 0)
 			if len(resp.Msg.Tokens) == 0 {
 				a.printf("  none\n")
-			} else {
-				a.printf("%-10s %-24s %-17s %-17s %s\n", "ID", "NAME", "CREATED", "LAST USED", "STATE")
+			} else if !a.jsonOut {
+				fmt.Fprintln(tw, "ID\tNAME\tCREATED\tLAST USED\tSTATE")
 			}
 			for _, t := range resp.Msg.Tokens {
 				state := "active"
@@ -95,8 +101,11 @@ whose token is in use). Use an id from here with: vx token revoke ID`,
 				if t.Current {
 					state += " (in use now)"
 				}
-				a.printf("%-10s %-24s %-17s %-17s %s\n", t.Id[:shortID], t.Name, when(t.CreatedAt, ""), when(t.LastUsedAt, "never"), state)
+				if !a.jsonOut {
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Id[:shortID], t.Name, when(t.CreatedAt, ""), when(t.LastUsedAt, "never"), state)
+				}
 			}
+			tw.Flush()
 			a.emit(resp.Msg)
 			return nil
 		},

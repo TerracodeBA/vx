@@ -11,7 +11,7 @@
   {{if .Token.Current}}
   <p class="note warn">This is the token this browser is signed in with. Revoking it signs you out here, and anything else using it stops working too.</p>
   {{else}}
-  <p class="muted">Anything using it stops working at once{{if ne .Owner.ID .Actor.ID}}, so {{principal .Owner.Ref}} will need a new token from <code>vx agent add</code>{{end}}. This cannot be undone.</p>
+  <p class="muted">Anything using it stops working at once{{if ne .Owner.ID .Actor.ID}}: {{principal .Owner.Ref}} cannot reach vx again until it gets another token{{end}}. This cannot be undone.</p>
   {{end}}
   <form method="post" action="/ui/settings/revoke" class="confirm-actions">
     <input type="hidden" name="id" value="{{.Token.ID}}">
