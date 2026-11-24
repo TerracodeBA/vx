@@ -65,6 +65,12 @@ from the default branch (or --effort).`,
 				a.printf(": no rules. See docs/agents.md, \"Repository rules (vx.toml)\".\n")
 			} else {
 				a.printf("Rules from %s\n", r.Source)
+				if len(r.Ignored) > 0 {
+					a.printf("\nIgnored: written for a newer vx than this server; update vx-server to apply them:\n")
+					for _, msg := range r.Ignored {
+						a.printf("  %s\n", msg)
+					}
+				}
 				if len(r.Unique) > 0 {
 					a.printf("\nUnique (two files may not share the key; content: two lines may not share the value):\n")
 					for _, u := range r.Unique {

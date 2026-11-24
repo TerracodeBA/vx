@@ -11306,8 +11306,11 @@ type RepoRules struct {
 	RequiredChecks []string               `protobuf:"bytes,3,rep,name=required_checks,json=requiredChecks,proto3" json:"required_checks,omitempty"`
 	Source         string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"` // where they came from, e.g. "vx.toml at 3f2a1c9d0e7b"; empty: no vx.toml
 	Policies       []*LandingPolicy       `protobuf:"bytes,5,rep,name=policies,proto3" json:"policies,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// What of vx.toml this server does not know (keys or tables of a newer
+	// vx), left out: a rule with an unknown key is ignored as a whole.
+	Ignored       []string `protobuf:"bytes,6,rep,name=ignored,proto3" json:"ignored,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RepoRules) Reset() {
@@ -11371,6 +11374,13 @@ func (x *RepoRules) GetSource() string {
 func (x *RepoRules) GetPolicies() []*LandingPolicy {
 	if x != nil {
 		return x.Policies
+	}
+	return nil
+}
+
+func (x *RepoRules) GetIgnored() []string {
+	if x != nil {
+		return x.Ignored
 	}
 	return nil
 }
@@ -13517,13 +13527,14 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x05scope\x18\x05 \x01(\tR\x05scope\"=\n" +
 	"\rGeneratedRule\x12\x12\n" +
 	"\x04glob\x18\x01 \x01(\tR\x04glob\x12\x18\n" +
-	"\acommand\x18\x02 \x01(\tR\acommand\"\xdd\x01\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\"\xf7\x01\n" +
 	"\tRepoRules\x12)\n" +
 	"\x06unique\x18\x01 \x03(\v2\x11.vx.v1.UniqueRuleR\x06unique\x122\n" +
 	"\tgenerated\x18\x02 \x03(\v2\x14.vx.v1.GeneratedRuleR\tgenerated\x12'\n" +
 	"\x0frequired_checks\x18\x03 \x03(\tR\x0erequiredChecks\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06source\x120\n" +
-	"\bpolicies\x18\x05 \x03(\v2\x14.vx.v1.LandingPolicyR\bpolicies\"\x85\x01\n" +
+	"\bpolicies\x18\x05 \x03(\v2\x14.vx.v1.LandingPolicyR\bpolicies\x12\x18\n" +
+	"\aignored\x18\x06 \x03(\tR\aignored\"\x85\x01\n" +
 	"\rLandingPolicy\x12\x14\n" +
 	"\x05paths\x18\x01 \x03(\tR\x05paths\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\x12\x18\n" +

@@ -71,6 +71,11 @@ type Rules struct {
 	Rebase   string
 	Policies []Policy
 	Source   string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
+	// Ignored says what of vx.toml this vx does not know (keys or tables
+	// of a newer vx) and so left out: a rule with an unknown key is
+	// ignored as a whole. "vx.toml line 15: rule [[unique]] "proto-field"
+	// uses key "scope", which this vx does not know; ...".
+	Ignored []string
 }
 
 // [automation] rebase values.
@@ -193,6 +198,17 @@ func Parse(data []byte) (Rules, error) {
 	}
 	loc := locate(data)
 	var probs []Problem
+	// Keys and tables this vx does not know may come from a newer vx: they
+	// switch off only the rule they are in (or, outside rules, only
+	// themselves), with a notice in Rules.Ignored, instead of making the
+	// whole file unreadable for older servers and CLIs.
+	var ignored []Problem
+	skip := map[string]map[int]bool{} // array table -> indices of rules to ignore
+	type pending struct {
+		table, key string
+		idx        int
+	}
+	var later []pending
 	reported := map[string]bool{}
 	for _, k := range md.Undecoded() {
 		if len(k) > 1 && reported[k[:len(k)-1].String()] {
@@ -204,27 +220,51 @@ func Parse(data []byte) (Rules, error) {
 		if len(k) > 1 {
 			table = k[:len(k)-1].String()
 		}
-		where := table
-		if arrayTables[table] {
-			where = "[[" + table + "]]"
-		} else if table != "" {
-			where = "[" + table + "]"
-		}
-		msg := fmt.Sprintf("unknown key %q", key)
-		if table == "" {
-			msg = fmt.Sprintf("unknown table or key %q", key)
-		} else {
-			msg += " in " + where
-		}
+		knownList := ""
 		if ks, ok := known[table]; ok {
-			msg += " (known: " + strings.Join(ks, ", ") + ")"
+			knownList = " (known: " + strings.Join(ks, ", ") + ")"
 		}
-		probs = append(probs, Problem{Line: loc.find(table, key), Msg: msg})
+		switch {
+		case table == "":
+			ignored = append(ignored, Problem{Line: loc.find(table, key), Msg: fmt.Sprintf("table or key %q is unknown to this vx; ignored: update vx if it is new%s", key, knownList)})
+		case arrayTables[table]:
+			idxs := loc.indices(table, key)
+			if len(idxs) == 0 { // not found (an inline table): name the key at least
+				ignored = append(ignored, Problem{Line: loc.find(table, key), Msg: fmt.Sprintf("[[%s]] uses key %q, which this vx does not know; ignored: update vx%s", table, key, knownList)})
+			}
+			for _, i := range idxs {
+				if skip[table] == nil {
+					skip[table] = map[int]bool{}
+				}
+				skip[table][i] = true
+				later = append(later, pending{table, key, i})
+			}
+		default:
+			where := "[" + table + "]"
+			ignored = append(ignored, Problem{Line: loc.find(table, key), Msg: fmt.Sprintf("%s uses key %q, which this vx does not know; ignored: update vx%s", where, key, knownList)})
+		}
 	}
+	for _, p := range later {
+		label := fmt.Sprintf("[[%s]] #%d", p.table, p.idx+1)
+		switch {
+		case p.table == "unique" && p.idx < len(f.Unique) && f.Unique[p.idx].Name != "":
+			label = fmt.Sprintf("[[unique]] %q", f.Unique[p.idx].Name)
+		case p.table == "policy" && p.idx < len(f.Policy) && len(f.Policy[p.idx].Paths) > 0:
+			label = fmt.Sprintf("[[policy]] %q", f.Policy[p.idx].Paths[0])
+		case p.table == "generated" && p.idx < len(f.Generated) && f.Generated[p.idx].Glob != "":
+			label = fmt.Sprintf("[[generated]] %q", f.Generated[p.idx].Glob)
+		}
+		ignored = append(ignored, Problem{Line: loc.at(p.table, p.idx, p.key),
+			Msg: fmt.Sprintf("rule %s uses key %q, which this vx does not know; the rule is ignored: update vx (known: %s)", label, p.key, strings.Join(known[p.table], ", "))})
+	}
+	sort.SliceStable(ignored, func(i, j int) bool { return ignored[i].Line < ignored[j].Line })
 
 	var r Rules
 	names := map[string]bool{}
 	for i, u := range f.Unique {
+		if skip["unique"][i] {
+			continue
+		}
 		line := func(key string) int { return loc.at("unique", i, key) }
 		label := fmt.Sprintf("[[unique]] #%d", i+1)
 		if u.Name != "" {
@@ -271,6 +311,9 @@ func Parse(data []byte) (Rules, error) {
 		r.Unique = append(r.Unique, Unique(u))
 	}
 	for i, g := range f.Generated {
+		if skip["generated"][i] {
+			continue
+		}
 		line := func(key string) int { return loc.at("generated", i, key) }
 		label := fmt.Sprintf("[[generated]] #%d", i+1)
 		if g.Glob == "" {
@@ -299,21 +342,27 @@ func Parse(data []byte) (Rules, error) {
 		probs = append(probs, Problem{loc.at("automation", 0, "rebase"), fmt.Sprintf("[automation] rebase is %q; use \"auto\" (rebase when it replays cleanly), \"notify\" (only tell the effort) or \"off\"", rb)})
 	}
 	var pprobs []Problem
-	r.Policies, pprobs = parsePolicies(f.Policy, r.RequiredChecks, loc)
+	r.Policies, pprobs = parsePolicies(f.Policy, r.RequiredChecks, loc, skip["policy"])
 	probs = append(probs, pprobs...)
 	if len(probs) > 0 {
 		sort.SliceStable(probs, func(i, j int) bool { return probs[i].Line < probs[j].Line })
 		return Rules{}, &Error{Problems: probs}
+	}
+	for _, p := range ignored {
+		r.Ignored = append(r.Ignored, p.String())
 	}
 	return r, nil
 }
 
 // parsePolicies checks the [[policy]] tables; required are the [checks]
 // required commands, the default of require.
-func parsePolicies(ps []tomlPolicy, required []string, loc locator) ([]Policy, []Problem) {
+func parsePolicies(ps []tomlPolicy, required []string, loc locator, skip map[int]bool) ([]Policy, []Problem) {
 	var out []Policy
 	var probs []Problem
 	for i, tp := range ps {
+		if skip[i] {
+			continue
+		}
 		line := func(key string) int { return loc.at("policy", i, key) }
 		label := fmt.Sprintf("[[policy]] #%d", i+1)
 		if len(tp.Paths) > 0 {
@@ -493,6 +542,26 @@ func (l locator) at(table string, idx int, key string) int {
 		}
 	}
 	return l.headers[table+"#"+strconv.Itoa(idx)]
+}
+
+// indices are the positions of the tables called table that set key.
+func (l locator) indices(table, key string) []int {
+	var out []int
+	for id := range l.keys {
+		t, rest, ok := strings.Cut(id, "#")
+		if !ok || t != table {
+			continue
+		}
+		n, k, ok := strings.Cut(rest, ".")
+		if !ok || k != key {
+			continue
+		}
+		if i, err := strconv.Atoi(n); err == nil {
+			out = append(out, i)
+		}
+	}
+	sort.Ints(out)
+	return out
 }
 
 // find is the first line of key in any table called table; a top-level

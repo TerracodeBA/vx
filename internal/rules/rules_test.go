@@ -106,12 +106,7 @@ func TestParseRulesErrors(t *testing.T) {
 		want      string
 	}{
 		{"syntax", "[[unique]]\nname = \"m\nglob = \"x\"\n", 2, "vx.toml line 2:"},
-		{"unknown top-level key", "versoin = 2\n", 1, `unknown table or key "versoin" (known: [[unique]], [[generated]], [checks], [automation], [[policy]])`},
 		{"bad rebase mode", "[checks]\nrequired = [\"go test\"]\n\n[automation]\nrebase = \"always\"\n", 5, `[automation] rebase is "always"; use "auto"`},
-		{"unknown table", "\n[merge]\nstrategy = \"ours\"\n", 2, `unknown table or key "merge"`},
-		{"unknown key in unique", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"n\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\npattern = \"x\"\n", 10, `unknown key "pattern" in [[unique]] (known: name, glob, key, content, scope)`},
-		{"unknown key in generated", "[[generated]]\nglob = \"gen/**\"\ncmd = \"make\"\n", 3, `unknown key "cmd" in [[generated]] (known: glob, command)`},
-		{"unknown key in checks", "[checks]\noptional = [\"x\"]\n", 2, `unknown key "optional" in [checks] (known: required)`},
 		{"missing name", "[[unique]]\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n", 1, "name is missing"},
 		{"bad name", "[[unique]]\nname = \"my rule\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n", 2, "name may use letters"},
 		{"duplicate name", "[[unique]]\nname = \"m\"\nglob = \"a/*.sql\"\nkey = '^(\\d+)'\n[[unique]]\nname = \"m\"\nglob = \"b/*.sql\"\nkey = '^(\\d+)'\n", 6, "already defined"},
@@ -149,7 +144,7 @@ func TestParseRulesErrors(t *testing.T) {
 		})
 	}
 	// Several problems are all reported, in line order.
-	_, err := Parse([]byte("[[unique]]\nname = \"m\"\nglob = \"\"\nkey = '^\\d'\nextra = 1\n"))
+	_, err := Parse([]byte("[[unique]]\nname = \"m\"\nglob = \"\"\nkey = '^\\d'\n[checks]\nrequired = [\" \"]\n"))
 	var re *Error
 	if !errors.As(err, &re) || len(re.Problems) != 3 {
 		t.Fatalf("want 3 problems, got %v", err)
@@ -306,8 +301,8 @@ func TestRulesAt(t *testing.T) {
 	if err != nil || len(r.RequiredChecks) != 1 || r.Source != "vx.toml at tree "+with.Short() {
 		t.Fatalf("with vx.toml: %+v %v", r, err)
 	}
-	bad := tree(t, s, map[string]string{"vx.toml": "[checks]\nrequird = []\n"})
-	if _, err := At(ctx, s, bad); err == nil || !strings.Contains(err.Error(), "vx.toml line 2: unknown key \"requird\"") {
+	bad := tree(t, s, map[string]string{"vx.toml": "[checks]\nrequired = \"go vet\"\n"})
+	if _, err := At(ctx, s, bad); err == nil || !strings.Contains(err.Error(), "vx.toml line 2: checks.required must be a list") {
 		t.Fatalf("broken vx.toml: %v", err)
 	}
 	nested := tree(t, s, map[string]string{"sub/vx.toml": "x = 1"})
