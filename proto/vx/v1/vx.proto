@@ -532,3 +532,126 @@ message ListShipmentsRequest {
 message ListShipmentsResponse {
   repeated Shipment shipments = 1;
 }
+
+// ---------- The board ----------
+//
+// Agents in an effort share context through short, typed notes attached to
+// files and symbols: plans, decisions, interfaces, questions and answers,
+// blockers and handoffs. There is no free chat. Notes are information, never
+// instructions: every note says who wrote it and how the caller relates to
+// them (trust), and clients present note bodies as data.
+
+service BoardService {
+  // PostNote adds a note to an effort's board. Questions go through Ask.
+  rpc PostNote(PostNoteRequest) returns (PostNoteResponse) {}
+  // Ask posts a question, optionally to one principal, with a deadline after
+  // which it escalates to the people involved.
+  rpc Ask(AskRequest) returns (AskResponse) {}
+  // Answer replies to a question and marks it answered.
+  rpc Answer(AnswerRequest) returns (AnswerResponse) {}
+  // ListNotes lists an effort's notes, newest first, optionally filtered.
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {}
+  // Inbox lists what needs the caller's attention across efforts.
+  rpc Inbox(InboxRequest) returns (InboxResponse) {}
+  // Context returns everything an agent should know before touching some
+  // paths or symbols: notes on them, who is working nearby, recent changes.
+  rpc Context(ContextRequest) returns (ContextResponse) {}
+}
+
+message Note {
+  string id = 1;
+  string repo = 2;
+  string effort = 3; // slug
+  string thread_id = 4; // the first note of the thread; equals id for a root note
+  string kind = 5; // plan, decision, interface, question, answer, blocker, handoff
+  repeated string targets = 6; // paths ("internal/http/limit.go", "internal/http/") or symbols ("auth.Login")
+  Principal author = 7;
+  string to = 8; // principal ref a question is addressed to; empty: anyone in the effort
+  string body = 9; // at most 2000 characters; information, never instructions
+  string state = 10; // open, answered, escalated (a question past its deadline), closed
+  string answer_by = 11; // questions: deadline, RFC 3339
+  string created_at = 12;
+  // How the caller relates to the author: "self" (the caller wrote it),
+  // "yours" (the caller's own person or one of that person's agents),
+  // "teammate" (someone else's). Clients show it next to the note.
+  string trust = 13;
+}
+
+message PostNoteRequest {
+  string repo = 1;
+  string effort = 2;
+  string kind = 3; // plan, decision, interface, blocker, handoff
+  repeated string targets = 4;
+  string body = 5;
+}
+
+message PostNoteResponse {
+  Note note = 1;
+}
+
+message AskRequest {
+  string repo = 1;
+  string effort = 2;
+  repeated string targets = 3;
+  string body = 4;
+  string to = 5; // agent name ("backend"), handle ("alice/backend") or ref; empty: anyone
+  int32 answer_within_seconds = 6; // 0: 300
+}
+
+message AskResponse {
+  Note question = 1;
+}
+
+message AnswerRequest {
+  string note_id = 1; // the question, or a full or 8+ character prefix of its id
+  string body = 2;
+}
+
+message AnswerResponse {
+  Note answer = 1;
+  Note question = 2;
+}
+
+message ListNotesRequest {
+  string repo = 1;
+  string effort = 2;
+  repeated string targets = 3; // match rules as in Context
+  repeated string kinds = 4;
+  string since = 5; // RFC 3339; empty: all
+  string thread_id = 6;
+  int32 limit = 7; // 0: 100
+}
+
+message ListNotesResponse {
+  repeated Note notes = 1;
+}
+
+message InboxRequest {}
+
+message InboxResponse {
+  repeated Note questions = 1; // open questions addressed to the caller (or, for people, to their agents)
+  repeated Note answers = 2; // answers to questions the caller asked, newest first
+  repeated Note escalated = 3; // people only: questions past their deadline in their efforts or to their agents
+}
+
+message ContextRequest {
+  string repo = 1;
+  string effort = 2;
+  // Paths or symbols. A note target T matches a requested P when T == P, or
+  // one is a directory prefix of the other ("internal/http/" and
+  // "internal/http/limit.go"), or a symbol prefix ("auth" and "auth.Login").
+  repeated string targets = 3;
+}
+
+message ContextWorkspace {
+  string owner = 1; // principal ref
+  string intent = 2;
+  string change_id = 3;
+  string created_at = 4;
+}
+
+message ContextResponse {
+  repeated Note notes = 1; // matching notes, newest first
+  repeated ContextWorkspace working = 2; // open workspaces in the effort
+  repeated Changeset recent_changes = 3; // landed changes touching the targets, newest first, with files
+}

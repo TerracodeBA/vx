@@ -33,6 +33,8 @@ const (
 	WorkspaceServiceName = "vx.v1.WorkspaceService"
 	// ShipServiceName is the fully-qualified name of the ShipService service.
 	ShipServiceName = "vx.v1.ShipService"
+	// BoardServiceName is the fully-qualified name of the BoardService service.
+	BoardServiceName = "vx.v1.BoardService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -111,6 +113,18 @@ const (
 	// ShipServiceListShipmentsProcedure is the fully-qualified name of the ShipService's ListShipments
 	// RPC.
 	ShipServiceListShipmentsProcedure = "/vx.v1.ShipService/ListShipments"
+	// BoardServicePostNoteProcedure is the fully-qualified name of the BoardService's PostNote RPC.
+	BoardServicePostNoteProcedure = "/vx.v1.BoardService/PostNote"
+	// BoardServiceAskProcedure is the fully-qualified name of the BoardService's Ask RPC.
+	BoardServiceAskProcedure = "/vx.v1.BoardService/Ask"
+	// BoardServiceAnswerProcedure is the fully-qualified name of the BoardService's Answer RPC.
+	BoardServiceAnswerProcedure = "/vx.v1.BoardService/Answer"
+	// BoardServiceListNotesProcedure is the fully-qualified name of the BoardService's ListNotes RPC.
+	BoardServiceListNotesProcedure = "/vx.v1.BoardService/ListNotes"
+	// BoardServiceInboxProcedure is the fully-qualified name of the BoardService's Inbox RPC.
+	BoardServiceInboxProcedure = "/vx.v1.BoardService/Inbox"
+	// BoardServiceContextProcedure is the fully-qualified name of the BoardService's Context RPC.
+	BoardServiceContextProcedure = "/vx.v1.BoardService/Context"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -1115,4 +1129,220 @@ func (UnimplementedShipServiceHandler) OpenShipment(context.Context, *connect.Re
 
 func (UnimplementedShipServiceHandler) ListShipments(context.Context, *connect.Request[v1.ListShipmentsRequest]) (*connect.Response[v1.ListShipmentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ShipService.ListShipments is not implemented"))
+}
+
+// BoardServiceClient is a client for the vx.v1.BoardService service.
+type BoardServiceClient interface {
+	// PostNote adds a note to an effort's board. Questions go through Ask.
+	PostNote(context.Context, *connect.Request[v1.PostNoteRequest]) (*connect.Response[v1.PostNoteResponse], error)
+	// Ask posts a question, optionally to one principal, with a deadline after
+	// which it escalates to the people involved.
+	Ask(context.Context, *connect.Request[v1.AskRequest]) (*connect.Response[v1.AskResponse], error)
+	// Answer replies to a question and marks it answered.
+	Answer(context.Context, *connect.Request[v1.AnswerRequest]) (*connect.Response[v1.AnswerResponse], error)
+	// ListNotes lists an effort's notes, newest first, optionally filtered.
+	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
+	// Inbox lists what needs the caller's attention across efforts.
+	Inbox(context.Context, *connect.Request[v1.InboxRequest]) (*connect.Response[v1.InboxResponse], error)
+	// Context returns everything an agent should know before touching some
+	// paths or symbols: notes on them, who is working nearby, recent changes.
+	Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error)
+}
+
+// NewBoardServiceClient constructs a client for the vx.v1.BoardService service. By default, it uses
+// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewBoardServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BoardServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	boardServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("BoardService").Methods()
+	return &boardServiceClient{
+		postNote: connect.NewClient[v1.PostNoteRequest, v1.PostNoteResponse](
+			httpClient,
+			baseURL+BoardServicePostNoteProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("PostNote")),
+			connect.WithClientOptions(opts...),
+		),
+		ask: connect.NewClient[v1.AskRequest, v1.AskResponse](
+			httpClient,
+			baseURL+BoardServiceAskProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("Ask")),
+			connect.WithClientOptions(opts...),
+		),
+		answer: connect.NewClient[v1.AnswerRequest, v1.AnswerResponse](
+			httpClient,
+			baseURL+BoardServiceAnswerProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("Answer")),
+			connect.WithClientOptions(opts...),
+		),
+		listNotes: connect.NewClient[v1.ListNotesRequest, v1.ListNotesResponse](
+			httpClient,
+			baseURL+BoardServiceListNotesProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("ListNotes")),
+			connect.WithClientOptions(opts...),
+		),
+		inbox: connect.NewClient[v1.InboxRequest, v1.InboxResponse](
+			httpClient,
+			baseURL+BoardServiceInboxProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("Inbox")),
+			connect.WithClientOptions(opts...),
+		),
+		context: connect.NewClient[v1.ContextRequest, v1.ContextResponse](
+			httpClient,
+			baseURL+BoardServiceContextProcedure,
+			connect.WithSchema(boardServiceMethods.ByName("Context")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// boardServiceClient implements BoardServiceClient.
+type boardServiceClient struct {
+	postNote  *connect.Client[v1.PostNoteRequest, v1.PostNoteResponse]
+	ask       *connect.Client[v1.AskRequest, v1.AskResponse]
+	answer    *connect.Client[v1.AnswerRequest, v1.AnswerResponse]
+	listNotes *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
+	inbox     *connect.Client[v1.InboxRequest, v1.InboxResponse]
+	context   *connect.Client[v1.ContextRequest, v1.ContextResponse]
+}
+
+// PostNote calls vx.v1.BoardService.PostNote.
+func (c *boardServiceClient) PostNote(ctx context.Context, req *connect.Request[v1.PostNoteRequest]) (*connect.Response[v1.PostNoteResponse], error) {
+	return c.postNote.CallUnary(ctx, req)
+}
+
+// Ask calls vx.v1.BoardService.Ask.
+func (c *boardServiceClient) Ask(ctx context.Context, req *connect.Request[v1.AskRequest]) (*connect.Response[v1.AskResponse], error) {
+	return c.ask.CallUnary(ctx, req)
+}
+
+// Answer calls vx.v1.BoardService.Answer.
+func (c *boardServiceClient) Answer(ctx context.Context, req *connect.Request[v1.AnswerRequest]) (*connect.Response[v1.AnswerResponse], error) {
+	return c.answer.CallUnary(ctx, req)
+}
+
+// ListNotes calls vx.v1.BoardService.ListNotes.
+func (c *boardServiceClient) ListNotes(ctx context.Context, req *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {
+	return c.listNotes.CallUnary(ctx, req)
+}
+
+// Inbox calls vx.v1.BoardService.Inbox.
+func (c *boardServiceClient) Inbox(ctx context.Context, req *connect.Request[v1.InboxRequest]) (*connect.Response[v1.InboxResponse], error) {
+	return c.inbox.CallUnary(ctx, req)
+}
+
+// Context calls vx.v1.BoardService.Context.
+func (c *boardServiceClient) Context(ctx context.Context, req *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error) {
+	return c.context.CallUnary(ctx, req)
+}
+
+// BoardServiceHandler is an implementation of the vx.v1.BoardService service.
+type BoardServiceHandler interface {
+	// PostNote adds a note to an effort's board. Questions go through Ask.
+	PostNote(context.Context, *connect.Request[v1.PostNoteRequest]) (*connect.Response[v1.PostNoteResponse], error)
+	// Ask posts a question, optionally to one principal, with a deadline after
+	// which it escalates to the people involved.
+	Ask(context.Context, *connect.Request[v1.AskRequest]) (*connect.Response[v1.AskResponse], error)
+	// Answer replies to a question and marks it answered.
+	Answer(context.Context, *connect.Request[v1.AnswerRequest]) (*connect.Response[v1.AnswerResponse], error)
+	// ListNotes lists an effort's notes, newest first, optionally filtered.
+	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
+	// Inbox lists what needs the caller's attention across efforts.
+	Inbox(context.Context, *connect.Request[v1.InboxRequest]) (*connect.Response[v1.InboxResponse], error)
+	// Context returns everything an agent should know before touching some
+	// paths or symbols: notes on them, who is working nearby, recent changes.
+	Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error)
+}
+
+// NewBoardServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewBoardServiceHandler(svc BoardServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	boardServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("BoardService").Methods()
+	boardServicePostNoteHandler := connect.NewUnaryHandler(
+		BoardServicePostNoteProcedure,
+		svc.PostNote,
+		connect.WithSchema(boardServiceMethods.ByName("PostNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	boardServiceAskHandler := connect.NewUnaryHandler(
+		BoardServiceAskProcedure,
+		svc.Ask,
+		connect.WithSchema(boardServiceMethods.ByName("Ask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	boardServiceAnswerHandler := connect.NewUnaryHandler(
+		BoardServiceAnswerProcedure,
+		svc.Answer,
+		connect.WithSchema(boardServiceMethods.ByName("Answer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	boardServiceListNotesHandler := connect.NewUnaryHandler(
+		BoardServiceListNotesProcedure,
+		svc.ListNotes,
+		connect.WithSchema(boardServiceMethods.ByName("ListNotes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	boardServiceInboxHandler := connect.NewUnaryHandler(
+		BoardServiceInboxProcedure,
+		svc.Inbox,
+		connect.WithSchema(boardServiceMethods.ByName("Inbox")),
+		connect.WithHandlerOptions(opts...),
+	)
+	boardServiceContextHandler := connect.NewUnaryHandler(
+		BoardServiceContextProcedure,
+		svc.Context,
+		connect.WithSchema(boardServiceMethods.ByName("Context")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.BoardService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case BoardServicePostNoteProcedure:
+			boardServicePostNoteHandler.ServeHTTP(w, r)
+		case BoardServiceAskProcedure:
+			boardServiceAskHandler.ServeHTTP(w, r)
+		case BoardServiceAnswerProcedure:
+			boardServiceAnswerHandler.ServeHTTP(w, r)
+		case BoardServiceListNotesProcedure:
+			boardServiceListNotesHandler.ServeHTTP(w, r)
+		case BoardServiceInboxProcedure:
+			boardServiceInboxHandler.ServeHTTP(w, r)
+		case BoardServiceContextProcedure:
+			boardServiceContextHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedBoardServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBoardServiceHandler struct{}
+
+func (UnimplementedBoardServiceHandler) PostNote(context.Context, *connect.Request[v1.PostNoteRequest]) (*connect.Response[v1.PostNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.PostNote is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) Ask(context.Context, *connect.Request[v1.AskRequest]) (*connect.Response[v1.AskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Ask is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) Answer(context.Context, *connect.Request[v1.AnswerRequest]) (*connect.Response[v1.AnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Answer is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.ListNotes is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) Inbox(context.Context, *connect.Request[v1.InboxRequest]) (*connect.Response[v1.InboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Inbox is not implemented"))
+}
+
+func (UnimplementedBoardServiceHandler) Context(context.Context, *connect.Request[v1.ContextRequest]) (*connect.Response[v1.ContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.BoardService.Context is not implemented"))
 }
