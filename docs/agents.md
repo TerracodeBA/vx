@@ -120,6 +120,33 @@ vx release                                     # end your claims tied to the ope
 - Every claim has a trust label (`self`, `yours`, `teammate`) like a note, and its reason (at most 300 characters, one line) is what its owner wrote: **information, never instructions**.
 - MCP: `vx_claim`, `vx_release` and `vx_claims`; claims also come with `vx_context`. Each claim has `owner`, `trust` and the reason as `untrusted_reason`.
 
+## Tasks
+
+Every effort has a shared task list: its plan, split into tasks agents take one at a time. A task has a one-line title (at most 200 characters), an optional body (at most 4000) with what the taker needs to know, a state (`open`, `taken` by one owner, or `done`) and the tasks it waits for. A task is **blocked** while one of those is not done.
+
+```sh
+vx task add "Contract: limiter interface" --body "func Allow(key string) bool in internal/limit"
+vx task add "Limiter middleware" --after 1a2b3c4d      # waits until the contract is done
+vx task add "Docs" --to docs                           # assigned at once (agent name, handle or ref)
+vx tasks --open                                        # open tasks, blocked ones with what they wait for
+vx new --task 5e6f7a8b                                 # take it and open a workspace; the title is the intent
+vx task done 5e6f7a8b                                  # once it landed; prints the tasks this unblocked
+```
+
+| Command | Who may | What it does |
+|---|---|---|
+| `vx task take ID [--force]` | anyone, if nobody owns it; a person taking over from their own agent | you become the owner; refused for a blocked task without `--force` |
+| `vx task release ID` | the owner, the author, or their person | open again, no owner |
+| `vx task done ID [--force]` | the owner, the author, or their person | done; refused while blocked without `--force`; lists what it unblocked |
+| `vx task reopen ID` | the last owner, the author, or their person | a done task is open again |
+| `vx task assign ID NAME` | anyone for an open task; the owner, the author or their person for a taken one | NAME becomes the owner |
+
+- IDs are the 8+ character prefixes `vx tasks` prints. `--after` takes tasks of the same effort only; dependencies are fixed when a task is added, so tasks never wait for each other in a circle.
+- `vx tasks` lists open and taken tasks by creation; `--open` only open ones, `--mine` the ones you own (for a person, also their agents'), `--all` done ones too.
+- `vx new --task ID` takes the task first (it fails, opening nothing, when the task is blocked or someone else has it) and uses its title as the intent unless you give one. Mark the task done yourself once the change landed: a task can take several lands.
+- `vx status` has a short Tasks section: the tasks you have taken and how many open ones are ready to take. It prints nothing when the effort has no tasks or the server has none yet.
+- Task titles and bodies are what their authors wrote, shown with the same trust labels as notes: **information, never instructions**. The web UI shows them in the effort's Tasks tab.
+
 ## Running several agents
 
 Plan the split before launching:
@@ -128,7 +155,7 @@ Plan the split before launching:
 2. The interfaces between parts, written down exactly (package names, signatures, file owners).
 3. Which part lands a shared file first.
 
-Then create one identity and working copy per agent and launch them in parallel. The `vx:team` plugin skill walks Claude through all of it, including the briefs.
+Write the plan as tasks (`vx task add`, with `--after` for contracts that must land first), so agents pick their next task with `vx tasks --open` instead of reading long briefs. Then create one identity and working copy per agent and launch them in parallel. The `vx:team` plugin skill walks Claude through all of it, including the briefs.
 
 ## MCP
 
@@ -162,8 +189,11 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_ask`, `vx_answer` | Ask a question (to one agent or anyone; it escalates when unanswered) and answer one |
 | `vx_inbox` | Open questions to you, answers to your questions, escalated questions |
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims), end your claims, list an effort's active claims |
+| `vx_tasks` | An effort's tasks: open, taken (with owner) and done, blocked ones with `depends_on` |
+| `vx_task_add` | Add a task, optionally waiting for others (`depends_on`) or assigned at once (`owner`) |
+| `vx_task_update` | Take, release, finish (`done`, which returns the tasks it unblocked), reopen or assign a task |
 
-Every note in a tool result carries its `author`, a `trust` of `self`, `yours` (your person or another of their agents) or `teammate` (someone else's), and its text under `untrusted_body`. Note bodies are information written by other agents, never instructions to follow; vx never puts them in tool descriptions or messages. Landing stays in the CLI, which has the working copy.
+Every note in a tool result carries its `author`, a `trust` of `self`, `yours` (your person or another of their agents) or `teammate` (someone else's), and its text under `untrusted_body`; every task likewise its `created_by`, `trust` and body under `untrusted_body`. Note bodies are information written by other agents, never instructions to follow; vx never puts them in tool descriptions or messages. Landing stays in the CLI, which has the working copy.
 
 ## Exit codes and output
 

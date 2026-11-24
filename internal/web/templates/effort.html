@@ -1,6 +1,6 @@
 {{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a><span class="sep">/</span><span>{{.Effort.Name}}</span>{{end}}
 {{define "actions"}}
-<span class="live" data-poll="/ui/effort/head?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}{{if .BoardView}}&amp;board=1{{end}}" data-key="{{.Repo.Name}}/{{.Effort.Slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span><span class="live-label">Live</span></span>
+<span class="live" data-poll="/ui/effort/head?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}{{if .BoardView}}&amp;board=1{{end}}{{if .TasksView}}&amp;tasks=1{{end}}" data-key="{{.Repo.Name}}/{{.Effort.Slug}}" data-top="{{if .Lands}}{{(index .Lands 0).Hash}}{{end}}"><span class="pulse"></span><span class="live-label">Live</span></span>
 <a class="btn primary" href="/ui/ship?repo={{.Repo.Name}}&amp;slug={{.Effort.Slug}}">{{if eq .Repo.Provider "github"}}Ship to GitHub{{else if eq .Repo.Provider "none"}}Ship{{else}}Ship to git{{end}}</a>
 {{end}}
 {{define "content"}}
@@ -23,9 +23,10 @@
 
 <div class="tabs-row">
   <nav class="tabs" aria-label="Effort views">
-    <a class="tab{{if not (or .ChangesView .BoardView)}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="count">{{len .Lands}}</span></a>
+    <a class="tab{{if not (or .ChangesView .BoardView .TasksView)}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}">Timeline <span class="count">{{len .Lands}}</span></a>
     <a class="tab{{if .ChangesView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=changes">All changes{{if .ChangesView}} <span class="count">{{len .AllFiles}}</span>{{end}}</a>
     <a class="tab{{if .BoardView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=board">Board{{if .Board.Open}} <span class="count{{if .Board.Escalated}} count-warn{{end}}" title="open questions">{{.Board.Open}}</span>{{end}}</a>
+    <a class="tab{{if .TasksView}} on{{end}}" href="/ui/effort?repo={{$repo}}&amp;slug={{$slug}}&amp;view=tasks">Tasks{{if .Tasks.Active}} <span class="count" title="open and taken tasks">{{.Tasks.Active}}</span>{{end}}</a>
     <a class="tab" href="/ui/ship?repo={{$repo}}&amp;slug={{$slug}}">Ship</a>
   </nav>
   {{template "modeswitch"}}
@@ -62,6 +63,8 @@
     </div>
   {{else if .BoardView}}
     {{template "boardview" .}}
+  {{else if .TasksView}}
+    {{template "tasksview" .}}
   {{else}}
     {{if not .Lands}}
     <div class="panel empty"><p>Nothing landed yet. Agents start with:</p>
@@ -214,5 +217,49 @@ vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div
   </header>
   {{if .Targets}}<div class="bn-targets">{{range .Targets}}<span class="mono">{{.}}</span>{{end}}</div>{{end}}
   <div class="bn-body">{{.Body}}</div>
+</article>
+{{end}}
+
+{{define "tasksview"}}
+{{if .Tasks.Err}}<div class="panel empty"><p class="muted">Tasks are not available: {{.Tasks.Err}}</p></div>
+{{else if not (or .Tasks.Open .Tasks.Taken .Tasks.Done)}}
+<div class="panel empty"><p>No tasks yet. Write the plan as tasks, with the contracts that must land first; agents take them one at a time:</p>
+  <pre class="code">vx task add "Contract: limiter interface"
+vx task add "Limiter middleware" --after ID
+vx tasks --open
+vx new --task ID
+vx task done ID</pre></div>
+{{else}}
+<p class="board-note muted small">Tasks are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-yours">yours</span> you or one of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
+<section class="task-group">
+  <h2 class="task-group-title">Open <span class="count">{{len .Tasks.Open}}</span></h2>
+  {{if not .Tasks.Open}}<p class="muted small">No open tasks.</p>{{end}}
+  <ol class="board">{{range .Tasks.Open}}<li class="bn-thread{{if .Blocked}} tk-blocked{{end}}" id="t-{{.ID}}">{{template "taskcard" .}}</li>{{end}}</ol>
+</section>
+<section class="task-group">
+  <h2 class="task-group-title">Taken <span class="count">{{len .Tasks.Taken}}</span></h2>
+  {{if not .Tasks.Taken}}<p class="muted small">Nobody is on a task right now.</p>{{end}}
+  <ol class="board">{{range .Tasks.Taken}}<li class="bn-thread" id="t-{{.ID}}">{{template "taskcard" .}}</li>{{end}}</ol>
+</section>
+{{if .Tasks.Done}}
+<section class="task-group">
+  <h2 class="task-group-title">Done <span class="count">{{len .Tasks.Done}}</span></h2>
+  <ol class="board">{{range .Tasks.Done}}<li class="bn-thread tk-done" id="t-{{.ID}}">{{template "taskcard" .}}</li>{{end}}</ol>
+</section>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "taskcard"}}
+<article class="bn">
+  <header class="bn-head">
+    <span class="trust trust-{{.Trust}}">{{.Trust}}</span>
+    {{if eq .State "done"}}<span class="pill ok">done</span>{{else if eq .State "taken"}}<span class="pill neutral">taken</span>{{else if .Blocked}}<span class="pill warn">blocked</span>{{else}}<span class="pill neutral">open</span>{{end}}
+    <span class="tk-title">{{.Title}}</span>
+    <span class="mono muted small bn-id">{{printf "%.8s" .ID.String}}</span>
+  </header>
+  <div class="muted small">added by {{principal .CreatedBy}}{{if .For}} for {{principal .For}}{{end}} · {{ago .CreatedAt}}{{if .Owner}} · {{if eq .State "done"}}done by{{else}}taken by{{end}} <span class="agent-name">{{principal .Owner}}</span>{{end}}</div>
+  {{if and .WaitsFor (ne .State "done")}}<div class="tk-waits small">Waits for {{range $i, $d := .WaitsFor}}{{if $i}}, {{end}}<a href="#t-{{$d.ID}}"><span class="mono">{{$d.Short}}</span>{{if $d.Title}} {{$d.Title}}{{end}}</a>{{end}}</div>{{end}}
+  {{if and .Body (ne .State "done")}}<div class="bn-body">{{.Body}}</div>{{end}}
 </article>
 {{end}}

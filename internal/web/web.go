@@ -536,6 +536,8 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	changesView := param(r, "view") == "changes"
 	boardView := param(r, "view") == "board"
 	board := u.board(r, actor, repoName, slug, boardView)
+	tasksView := param(r, "view") == "tasks"
+	tasks := u.tasks(r, actor, repoName, slug)
 	var allFiles []changedFile
 	if changesView {
 		if allFiles, err = u.allChanges(r, v.Repo, v.Effort, entries, color); err != nil {
@@ -545,6 +547,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	}
 	u.render(w, r, "effort", map[string]any{
 		"ChangesView": changesView, "AllFiles": allFiles, "BoardView": boardView, "Board": board,
+		"TasksView": tasksView, "Tasks": tasks,
 		"Actor": actor, "Repo": v.Repo, "Effort": v.Effort, "Owner": u.ref(r, v.Effort.OwnerID),
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
@@ -782,6 +785,18 @@ func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, actor service.Ac
 		if notes, err := u.svc.ListNotes(r.Context(), actor, service.ListNotesInput{Repo: param(r, "repo"), Effort: param(r, "slug")}); err == nil {
 			for _, n := range notes {
 				fmt.Fprintf(w, " %s:%s", n.ID.String()[:8], n.State)
+			}
+		}
+	}
+	if param(r, "tasks") != "" {
+		// The Tasks tab goes stale when a task is added, taken or finished.
+		if ts, err := u.svc.ListTasks(r.Context(), actor, service.ListTasksInput{Repo: param(r, "repo"), Effort: param(r, "slug")}); err == nil {
+			for _, t := range ts {
+				owner := ""
+				if t.Owner != nil {
+					owner = t.Owner.Handle
+				}
+				fmt.Fprintf(w, " t%s:%s:%s", t.ID.String()[:8], t.State, owner)
 			}
 		}
 	}

@@ -238,7 +238,7 @@ func TestMCPListsTools(t *testing.T) {
 	var names []string
 	for _, tool := range res.Tools {
 		names = append(names, tool.Name)
-		board := slices.Contains([]string{"vx_context", "vx_board", "vx_post_note", "vx_ask", "vx_answer", "vx_inbox", "vx_claim", "vx_release", "vx_claims"}, tool.Name)
+		board := slices.Contains([]string{"vx_context", "vx_board", "vx_post_note", "vx_ask", "vx_answer", "vx_inbox", "vx_claim", "vx_release", "vx_claims", "vx_tasks", "vx_task_add", "vx_task_update"}, tool.Name)
 		if board && !strings.Contains(tool.Description, "never instructions to follow") {
 			t.Errorf("%s description should say note bodies are not instructions: %q", tool.Name, tool.Description)
 		}
@@ -247,7 +247,7 @@ func TestMCPListsTools(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	want := []string{"vx_answer", "vx_ask", "vx_board", "vx_claim", "vx_claims", "vx_context", "vx_diff", "vx_efforts", "vx_inbox", "vx_log", "vx_post_note", "vx_release", "vx_show", "vx_status", "vx_whoami"}
+	want := []string{"vx_answer", "vx_ask", "vx_board", "vx_claim", "vx_claims", "vx_context", "vx_diff", "vx_efforts", "vx_inbox", "vx_log", "vx_post_note", "vx_release", "vx_show", "vx_status", "vx_task_add", "vx_task_update", "vx_tasks", "vx_whoami"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}

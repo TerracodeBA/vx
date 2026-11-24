@@ -430,3 +430,12 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .trust-teammate { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
 .pill.k-plan { color: var(--a1); } .pill.k-decision { color: var(--a4); } .pill.k-interface { color: var(--a6); }
 .pill.k-question { color: var(--a2); } .pill.k-answer { color: var(--a3); } .pill.k-blocker { color: var(--bad); } .pill.k-handoff { color: var(--a5); }
+
+/* ---------- tasks ---------- */
+.task-group { display: grid; gap: 8px; margin: 0 0 18px; }
+.task-group-title { font-size: 14px; margin: 0; display: flex; align-items: center; gap: 6px; }
+.tk-title { font-weight: 600; overflow-wrap: anywhere; }
+.tk-blocked { border-style: dashed; }
+.tk-done { opacity: .75; }
+.tk-waits { color: var(--warn); display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-waits a { color: inherit; }
