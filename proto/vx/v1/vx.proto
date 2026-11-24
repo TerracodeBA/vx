@@ -15,6 +15,7 @@ message Principal {
   string email = 5;
   string on_behalf_of = 6; // the human an agent acts for
   bool site_admin = 7; // may manage people and every organization on this server
+  string github_login = 8; // set for people who signed in with GitHub
 }
 
 message Branch {
@@ -32,6 +33,7 @@ message Repo {
   repeated Branch branches = 5;
   string org = 6; // the organization that owns the repository
   string my_role = 7; // the caller's role: read, write or admin
+  bool github_backed = 8; // roles come from GitHub permissions, not vx grants
 }
 
 message Effort {
@@ -1043,3 +1045,54 @@ message CreatePersonResponse {
 
 message ListPeopleRequest {}
 message ListPeopleResponse { repeated Principal people = 1; }
+
+// ---------- Public: no token needed ----------
+//
+// The only RPCs that work without a token: what the server is, and the
+// browser login of the CLI.
+
+service PublicService {
+  // ServerInfo tells clients the server version and the oldest CLI it works
+  // with, so either side can say "update vx" instead of failing oddly.
+  rpc ServerInfo(ServerInfoRequest) returns (ServerInfoResponse) {}
+  // StartCLILogin begins a browser login: the CLI shows user_code and opens
+  // verification_url; the person signs in and approves there.
+  rpc StartCLILogin(StartCLILoginRequest) returns (StartCLILoginResponse) {}
+  // PollCLILogin returns the token once the person approved (exactly once).
+  rpc PollCLILogin(PollCLILoginRequest) returns (PollCLILoginResponse) {}
+}
+
+message ServerInfoRequest {
+  string cli_version = 1; // the caller's version, for the server's log and answer
+}
+
+message ServerInfoResponse {
+  string version = 1;
+  string min_cli_version = 2; // older CLIs must update
+  repeated string features = 3; // e.g. "board", "claims", "tasks", "rebase", "orgs", "github"
+  bool github_sign_in = 4; // the server has a GitHub App configured
+  string cli_status = 5; // ok, update_recommended, update_required
+  string message = 6; // what to tell the person, when cli_status is not ok
+}
+
+message StartCLILoginRequest {
+  string client_name = 1; // e.g. "vx on alice-laptop"
+}
+
+message StartCLILoginResponse {
+  string device_code = 1; // secret: only the CLI knows it
+  string user_code = 2; // shown to the person, confirmed in the browser
+  string verification_url = 3; // opens the approval page with the code filled in
+  string expires_at = 4;
+  int32 interval_seconds = 5; // poll no faster than this
+}
+
+message PollCLILoginRequest {
+  string device_code = 1;
+}
+
+message PollCLILoginResponse {
+  string status = 1; // pending, approved, denied, expired
+  string token = 2; // set once, when approved
+  Principal principal = 3;
+}

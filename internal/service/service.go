@@ -86,6 +86,10 @@ type Service struct {
 	// land into the same effort at once.
 	MaxLandAttempts int
 
+	// GitHub configures sign-in with GitHub and GitHub-backed repositories;
+	// its API is nil until a GitHub App is set up.
+	GitHub GitHubSettings
+
 	logins  loginCodes  // one-time web sign-in codes (vx ui)
 	objects objectIndex // repositories whose objects need no backfill
 }
