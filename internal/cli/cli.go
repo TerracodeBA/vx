@@ -39,6 +39,9 @@ type App struct {
 	// OpenBrowser opens a URL for vx login and vx ui; nil uses the
 	// system's browser. Tests set it to act as the browser.
 	OpenBrowser func(url string) error
+	// Executable is the path of the running vx, for vx self-update; nil
+	// uses os.Executable. Tests point it at a file of their own.
+	Executable func() (string, error)
 
 	jsonOut  bool
 	checked  bool // the server's version was checked in this run
@@ -121,7 +124,7 @@ Start here:
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
 		a.postCmd(), a.askCmd(), a.answerCmd(), a.boardCmd(), a.inboxCmd(), a.contextCmd(),
 		a.claimCmd(), a.releaseCmd(), a.claimsCmd(), a.overlapsCmd(),
-		a.taskCmd(), a.tasksCmd(), a.rulesCmd(), a.reserveCmd(), a.reviewCmd(),
+		a.taskCmd(), a.tasksCmd(), a.rulesCmd(), a.reserveCmd(), a.reviewCmd(), a.selfUpdateCmd(),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the vx version",

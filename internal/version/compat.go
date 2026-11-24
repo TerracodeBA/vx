@@ -1,6 +1,7 @@
 package version
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -94,4 +95,44 @@ func parse(v string) (semver, bool) {
 		s.n[i] = n
 	}
 	return s, true
+}
+
+// Release is the release a version is or was built from: "v0.4.0" for
+// v0.4.0, 0.4.0 and v0.4.0-12-gabc1234-dirty (a build 12 commits after the
+// tag), "v0.5.0-rc.1" for a pre-release. ok is false for dev builds.
+func Release(v string) (string, bool) {
+	s, ok := parse(v)
+	if !ok {
+		return "", false
+	}
+	out := fmt.Sprintf("v%d.%d.%d", s.n[0], s.n[1], s.n[2])
+	if s.pre != "" {
+		out += "-" + s.pre
+	}
+	return out, true
+}
+
+// OlderThanServer says, in one line, that the CLI version cli is older
+// than the release the server runs, and how to fix it:
+//
+//	vx v0.3.0 is older than the server (v0.4.0): vx self-update
+//
+// It is empty when cli is a dev build, the server's version is not a
+// release, or cli is not older than the server's release.
+func OlderThanServer(cli, server string) string {
+	rel, ok := Release(server)
+	if !ok || IsDev(cli) {
+		return ""
+	}
+	if c, ok := Compare(cli, rel); !ok || c >= 0 {
+		return ""
+	}
+	mine, _ := Release(cli)
+	if c, _ := Compare(cli, mine); c > 0 {
+		mine = strings.TrimSpace(cli) // a build after its tag: say exactly which
+	}
+	if !strings.HasPrefix(mine, "v") {
+		mine = "v" + mine
+	}
+	return fmt.Sprintf("vx %s is older than the server (%s): vx self-update", mine, rel)
 }
