@@ -102,7 +102,9 @@ func (u *UI) githubFinishPost(w http.ResponseWriter, r *http.Request, actor serv
 // installation in too; syncing here makes it show up at once.
 func (u *UI) githubInstalledPage(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"Title": "GitHub App installed", "Installed": true}
-	if id, err := strconv.ParseInt(r.URL.Query().Get("installation_id"), 10, 64); err == nil && id > 0 {
+	// Only installations vx does not know yet: the page needs no session,
+	// so it must not let anyone make vx ask GitHub again and again.
+	if id, err := strconv.ParseInt(r.URL.Query().Get("installation_id"), 10, 64); err == nil && id > 0 && !u.knownInstallation(r, id) {
 		if err := u.svc.SyncInstallation(r.Context(), id); err != nil {
 			u.log.Warn("github installation sync from setup page", "installation", id, "err", err)
 			data["SyncErr"] = "vx could not read this installation from GitHub yet; it will show up when GitHub's webhook arrives."
@@ -148,4 +150,9 @@ func (u *UI) githubWebhook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
 	fmt.Fprintln(w, msg)
+}
+
+func (u *UI) knownInstallation(r *http.Request, id int64) bool {
+	_, err := u.svc.Store.GitHubInstallationByID(r.Context(), id)
+	return err == nil
 }
