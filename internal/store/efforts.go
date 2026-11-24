@@ -54,12 +54,26 @@ func scanEffort(row interface{ Scan(...any) error }) (Effort, error) {
 
 var slugStrip = regexp.MustCompile(`[^a-z0-9]+`)
 
+// Slug length limits: slugs longer than slugMax are cut at the last word
+// boundary at or before slugMax, unless that would leave fewer than slugMin
+// characters, in which case they are cut at slugMax.
+const (
+	slugMax = 40
+	slugMin = 20
+)
+
 // Slugify turns an effort name into a short URL-safe slug.
 func Slugify(name string) string {
 	s := slugStrip.ReplaceAllString(strings.ToLower(name), "-")
 	s = strings.Trim(s, "-")
-	if len(s) > 40 {
-		s = strings.TrimRight(s[:40], "-")
+	if len(s) > slugMax {
+		// s[slugMax] == '-' means s[:slugMax] already ends on a whole word.
+		if i := strings.LastIndexByte(s[:slugMax+1], '-'); i >= slugMin {
+			s = s[:i]
+		} else {
+			s = s[:slugMax]
+		}
+		s = strings.TrimRight(s, "-")
 	}
 	if s == "" {
 		s = "effort"
