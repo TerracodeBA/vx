@@ -366,8 +366,8 @@ func TestBoardContext(t *testing.T) {
 	if len(c.Working) != 1 || c.Working[0].Workspace.ID != open.Workspace.ID || c.Working[0].Owner.Ref() != "agent:bob/backend" {
 		t.Fatalf("working = %+v", c.Working)
 	}
-	// "auth" also matches the file auth.go, as TargetsMatch reads a dot.
-	if len(c.RecentChanges) != 2 || c.RecentChanges[0].Intent != "Add limiter" || c.RecentChanges[1].Intent != "Add auth" ||
+	// The symbol "auth" does not match the file auth.go.
+	if len(c.RecentChanges) != 1 || c.RecentChanges[0].Intent != "Add limiter" ||
 		len(c.RecentChanges[0].Files) != 1 || c.RecentChanges[0].Files[0].Path != "internal/http/limit.go" {
 		t.Fatalf("recent = %+v", c.RecentChanges)
 	}

@@ -400,11 +400,35 @@ func TargetsMatch(target, want string) bool {
 	if target == want {
 		return true
 	}
+	symbols := !looksLikePath(target) && !looksLikePath(want)
 	prefix := func(a, b string) bool {
 		a = trimSep(a)
-		return len(b) > len(a) && b[:len(a)] == a && (b[len(a)] == '/' || b[len(a)] == '.')
+		if len(b) <= len(a) || b[:len(a)] != a {
+			return false
+		}
+		return b[len(a)] == '/' || (symbols && b[len(a)] == '.')
 	}
 	return prefix(target, want) || prefix(want, target)
+}
+
+// fileExts are extensions that make a target without a slash a file name
+// ("auth.go") rather than a symbol ("auth.Login").
+var fileExts = map[string]bool{
+	"go": true, "mod": true, "sum": true, "proto": true, "sql": true, "md": true, "txt": true,
+	"json": true, "yaml": true, "yml": true, "toml": true, "ini": true, "env": true, "lock": true,
+	"js": true, "mjs": true, "cjs": true, "ts": true, "tsx": true, "jsx": true, "css": true, "scss": true, "html": true, "svg": true,
+	"py": true, "rb": true, "rs": true, "java": true, "kt": true, "swift": true, "c": true, "h": true, "cc": true, "cpp": true, "hpp": true,
+	"cs": true, "php": true, "sh": true, "bash": true, "zsh": true, "ps1": true, "tf": true, "xml": true, "csv": true,
+}
+
+// looksLikePath reports whether a target names a file or directory: it has
+// a slash, or its last dot-separated part is a known file extension.
+func looksLikePath(s string) bool {
+	if strings.Contains(s, "/") {
+		return true
+	}
+	i := strings.LastIndexByte(s, '.')
+	return i >= 0 && fileExts[strings.ToLower(s[i+1:])]
 }
 
 func trimSep(s string) string {
