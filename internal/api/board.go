@@ -132,6 +132,7 @@ func (h *Handlers) Context(ctx context.Context, req *connect.Request[vxv1.Contex
 	for _, w := range c.Working {
 		out.Working = append(out.Working, &vxv1.ContextWorkspace{
 			Owner: w.Owner.Ref(), Intent: w.Workspace.Intent, ChangeId: w.Workspace.ChangeID, CreatedAt: ts(w.Workspace.CreatedAt),
+			OnTargets: w.OnTargets, FilesKnown: w.FilesKnown,
 		})
 	}
 	for _, e := range c.RecentChanges {

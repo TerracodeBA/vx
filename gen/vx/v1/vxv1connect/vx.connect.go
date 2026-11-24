@@ -126,6 +126,9 @@ const (
 	// WorkspaceServiceAbandonProcedure is the fully-qualified name of the WorkspaceService's Abandon
 	// RPC.
 	WorkspaceServiceAbandonProcedure = "/vx.v1.WorkspaceService/Abandon"
+	// WorkspaceServiceReportChangesProcedure is the fully-qualified name of the WorkspaceService's
+	// ReportChanges RPC.
+	WorkspaceServiceReportChangesProcedure = "/vx.v1.WorkspaceService/ReportChanges"
 	// ShipServicePlanShipmentProcedure is the fully-qualified name of the ShipService's PlanShipment
 	// RPC.
 	ShipServicePlanShipmentProcedure = "/vx.v1.ShipService/PlanShipment"
@@ -1072,6 +1075,9 @@ type WorkspaceServiceClient interface {
 	// Land merges a snapshot into the effort.
 	Land(context.Context, *connect.Request[v1.LandRequest]) (*connect.Response[v1.LandResponse], error)
 	Abandon(context.Context, *connect.Request[v1.AbandonRequest]) (*connect.Response[v1.AbandonResponse], error)
+	// ReportChanges records the files the working copy of an open workspace
+	// changed, so vx context can say who works on which files.
+	ReportChanges(context.Context, *connect.Request[v1.ReportChangesRequest]) (*connect.Response[v1.ReportChangesResponse], error)
 }
 
 // NewWorkspaceServiceClient constructs a client for the vx.v1.WorkspaceService service. By default,
@@ -1115,6 +1121,12 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(workspaceServiceMethods.ByName("Abandon")),
 			connect.WithClientOptions(opts...),
 		),
+		reportChanges: connect.NewClient[v1.ReportChangesRequest, v1.ReportChangesResponse](
+			httpClient,
+			baseURL+WorkspaceServiceReportChangesProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("ReportChanges")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -1125,6 +1137,7 @@ type workspaceServiceClient struct {
 	setBase       *connect.Client[v1.SetBaseRequest, v1.SetBaseResponse]
 	land          *connect.Client[v1.LandRequest, v1.LandResponse]
 	abandon       *connect.Client[v1.AbandonRequest, v1.AbandonResponse]
+	reportChanges *connect.Client[v1.ReportChangesRequest, v1.ReportChangesResponse]
 }
 
 // OpenWorkspace calls vx.v1.WorkspaceService.OpenWorkspace.
@@ -1152,6 +1165,11 @@ func (c *workspaceServiceClient) Abandon(ctx context.Context, req *connect.Reque
 	return c.abandon.CallUnary(ctx, req)
 }
 
+// ReportChanges calls vx.v1.WorkspaceService.ReportChanges.
+func (c *workspaceServiceClient) ReportChanges(ctx context.Context, req *connect.Request[v1.ReportChangesRequest]) (*connect.Response[v1.ReportChangesResponse], error) {
+	return c.reportChanges.CallUnary(ctx, req)
+}
+
 // WorkspaceServiceHandler is an implementation of the vx.v1.WorkspaceService service.
 type WorkspaceServiceHandler interface {
 	OpenWorkspace(context.Context, *connect.Request[v1.OpenWorkspaceRequest]) (*connect.Response[v1.OpenWorkspaceResponse], error)
@@ -1161,6 +1179,9 @@ type WorkspaceServiceHandler interface {
 	// Land merges a snapshot into the effort.
 	Land(context.Context, *connect.Request[v1.LandRequest]) (*connect.Response[v1.LandResponse], error)
 	Abandon(context.Context, *connect.Request[v1.AbandonRequest]) (*connect.Response[v1.AbandonResponse], error)
+	// ReportChanges records the files the working copy of an open workspace
+	// changed, so vx context can say who works on which files.
+	ReportChanges(context.Context, *connect.Request[v1.ReportChangesRequest]) (*connect.Response[v1.ReportChangesResponse], error)
 }
 
 // NewWorkspaceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1200,6 +1221,12 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		connect.WithSchema(workspaceServiceMethods.ByName("Abandon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workspaceServiceReportChangesHandler := connect.NewUnaryHandler(
+		WorkspaceServiceReportChangesProcedure,
+		svc.ReportChanges,
+		connect.WithSchema(workspaceServiceMethods.ByName("ReportChanges")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.WorkspaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkspaceServiceOpenWorkspaceProcedure:
@@ -1212,6 +1239,8 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceLandHandler.ServeHTTP(w, r)
 		case WorkspaceServiceAbandonProcedure:
 			workspaceServiceAbandonHandler.ServeHTTP(w, r)
+		case WorkspaceServiceReportChangesProcedure:
+			workspaceServiceReportChangesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1239,6 +1268,10 @@ func (UnimplementedWorkspaceServiceHandler) Land(context.Context, *connect.Reque
 
 func (UnimplementedWorkspaceServiceHandler) Abandon(context.Context, *connect.Request[v1.AbandonRequest]) (*connect.Response[v1.AbandonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.WorkspaceService.Abandon is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) ReportChanges(context.Context, *connect.Request[v1.ReportChangesRequest]) (*connect.Response[v1.ReportChangesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.WorkspaceService.ReportChanges is not implemented"))
 }
 
 // ShipServiceClient is a client for the vx.v1.ShipService service.

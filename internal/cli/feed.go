@@ -377,6 +377,7 @@ func (a *App) syncFeed(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	if err != nil {
 		return boardFeed{}.json()
 	}
+	a.reportChanges(ctx, c, wc, changes)
 	f := a.boardFeedFor(ctx, c, wc, changedPaths(changes), true)
 	a.printBoardFeed(ctx, c, f)
 	return f.json()

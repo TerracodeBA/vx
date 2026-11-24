@@ -212,6 +212,9 @@ var authzOps = []authzOp{
 		_, err := e.svc.SetBase(e.ctx, a, id, eff.Head)
 		return err
 	}},
+	{"ReportChanges", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		return e.svc.ReportChanges(e.ctx, a, e.workspace(a), []string{"cart.go"})
+	}},
 	{"Abandon", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.Abandon(e.ctx, a, e.workspace(a))
 		return err

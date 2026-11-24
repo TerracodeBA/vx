@@ -188,7 +188,8 @@ func (t *tools) context(ctx context.Context, req *sdk.CallToolRequest, in contex
 	out := contextOutput{Notes: notes(a, nc.Notes), Working: make([]Workspace, 0, len(nc.Working)), RecentChanges: changes(nc.RecentChanges, true),
 		Claims: claims(a, nc.Claims)}
 	for _, w := range nc.Working {
-		out.Working = append(out.Working, Workspace{Owner: w.Owner.Ref(), Intent: w.Workspace.Intent, ChangeID: w.Workspace.ChangeID, Since: ts(w.Workspace.CreatedAt)})
+		out.Working = append(out.Working, Workspace{Owner: w.Owner.Ref(), Intent: w.Workspace.Intent, ChangeID: w.Workspace.ChangeID, Since: ts(w.Workspace.CreatedAt),
+			OnTargets: w.OnTargets, FilesKnown: w.FilesKnown})
 	}
 	out.OtherEfforts = make([]OtherEffort, 0, len(nc.OtherEfforts))
 	for _, o := range nc.OtherEfforts {

@@ -59,10 +59,12 @@ type Repo struct {
 
 // Workspace is an open task in an effort.
 type Workspace struct {
-	Owner    string `json:"owner"`
-	Intent   string `json:"intent"`
-	ChangeID string `json:"change_id"`
-	Since    string `json:"since"`
+	Owner      string   `json:"owner"`
+	Intent     string   `json:"intent"`
+	ChangeID   string   `json:"change_id"`
+	Since      string   `json:"since"`
+	OnTargets  []string `json:"on_targets,omitempty" jsonschema:"its changed files (or claim targets) among the targets asked about; listed first"`
+	FilesKnown bool     `json:"files_known,omitempty" jsonschema:"its working copy reported which files it changed; false: files unknown"`
 }
 
 // Author is who landed a change.
