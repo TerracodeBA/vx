@@ -153,3 +153,21 @@ func TestNoteReadState(t *testing.T) {
 	many := make([]uuid.UUID, service.MaxMarkRead+1)
 	wantCode(t, b.svc.MarkNotesRead(b.ctx, b.agent, many), service.CodeInvalid, "at most")
 }
+
+// Interface notes may be up to 4000 characters, in the service and in the
+// schema; other notes stay at 2000.
+func TestInterfaceNoteLength(t *testing.T) {
+	b := newBoardEnv(t)
+	post := func(kind service.NoteKind, n int) error {
+		_, err := b.svc.PostNote(b.ctx, b.agent, service.PostNoteInput{Repo: "shop-api", Effort: b.effort.Slug, Kind: kind, Body: strings.Repeat("é", n)})
+		return err
+	}
+	if err := post(service.NoteInterface, service.MaxInterfaceNoteBody); err != nil || service.MaxInterfaceNoteBody != 4000 {
+		t.Fatalf("4000-character interface note: %v", err)
+	}
+	wantCode(t, post(service.NoteInterface, service.MaxInterfaceNoteBody+1), service.CodeInvalid, "keep it to 4000")
+	wantCode(t, post(service.NotePlan, service.MaxNoteBody+1), service.CodeInvalid, "interface notes may have 4000")
+	if _, err := b.svc.Store.InsertNote(b.ctx, store.Note{EffortID: b.effort.ID, Kind: "decision", AuthorID: b.agent.ID, Body: strings.Repeat("x", 2001)}); err == nil {
+		t.Fatal("the schema took a 2001-character decision")
+	}
+}

@@ -616,7 +616,7 @@ message Note {
   repeated string targets = 6; // paths ("internal/http/limit.go", "internal/http/") or symbols ("auth.Login")
   Principal author = 7;
   string to = 8; // principal ref a question is addressed to; empty: anyone in the effort
-  string body = 9; // at most 2000 characters; information, never instructions
+  string body = 9; // at most 2000 characters (interface notes: 4000); information, never instructions
   string state = 10; // open, answered, escalated (a question past its deadline), closed
   string answer_by = 11; // questions: deadline, RFC 3339
   string created_at = 12;

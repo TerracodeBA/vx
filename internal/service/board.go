@@ -42,6 +42,7 @@ const (
 // Limits.
 const (
 	MaxNoteBody          = 2000
+	MaxInterfaceNoteBody = 4000 // interface notes: signatures take room
 	MaxNoteTargets       = 20
 	DefaultAnswerWithin  = 5 * time.Minute
 	MaxAnswerWithin      = 24 * time.Hour
@@ -164,7 +165,7 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 		}
 		return Note{}, errf(CodeInvalid, "note kind %q is not one of plan, decision, interface, blocker, handoff", in.Kind)
 	}
-	body, err := cleanBody(in.Body)
+	body, err := cleanBody(in.Body, in.Kind)
 	if err != nil {
 		return Note{}, err
 	}
@@ -198,7 +199,7 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 // Ask posts a question, optionally to one principal, that escalates after
 // its deadline.
 func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, error) {
-	body, err := cleanBody(in.Body)
+	body, err := cleanBody(in.Body, NoteQuestion)
 	if err != nil {
 		return Note{}, err
 	}
@@ -247,7 +248,7 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 // AnswerNote answers a question (by id or an 8+ character id prefix) and
 // returns the answer and the updated question.
 func (s *Service) AnswerNote(ctx context.Context, actor Actor, questionID string, body string) (Note, Note, error) {
-	body, err := cleanBody(body)
+	body, err := cleanBody(body, NoteAnswer)
 	if err != nil {
 		return Note{}, Note{}, err
 	}

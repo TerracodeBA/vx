@@ -40,16 +40,30 @@ var allKinds = map[NoteKind]bool{
 
 // cleanBody drops control characters other than newline and tab (and
 // bidirectional overrides, which can make text read differently than it
-// is), trims the result and checks its length.
-func cleanBody(body string) (string, error) {
+// is), trims the result and checks its length against the limit of kind.
+func cleanBody(body string, kind NoteKind) (string, error) {
 	out := strings.TrimSpace(stripControls(body))
+	max := MaxNoteBodyOf(kind)
 	switch n := utf8.RuneCountInString(out); {
 	case n == 0:
 		return "", errf(CodeInvalid, "the note is empty; say what others should know")
-	case n > MaxNoteBody:
-		return "", errf(CodeInvalid, "the note is %d characters; keep it to %d and point to files or changes for details", n, MaxNoteBody)
+	case n > max:
+		more := ""
+		if kind != NoteInterface {
+			more = fmt.Sprintf(" (interface notes may have %d)", MaxInterfaceNoteBody)
+		}
+		return "", errf(CodeInvalid, "the %s note is %d characters; keep it to %d%s and point to files or changes for details", kind, n, max, more)
 	}
 	return out, nil
+}
+
+// MaxNoteBodyOf is the longest body a note of kind may have: interface
+// notes carry signatures and get MaxInterfaceNoteBody, others MaxNoteBody.
+func MaxNoteBodyOf(kind NoteKind) int {
+	if kind == NoteInterface {
+		return MaxInterfaceNoteBody
+	}
+	return MaxNoteBody
 }
 
 // stripControls drops control characters other than newline and tab, and
