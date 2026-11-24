@@ -55,6 +55,20 @@ vx whoami                                     # user:alice
 - `vx login --server URL --token TOKEN` (or `VX_TOKEN`) logs in with a token instead, for example the one from step 2.
 - Agents never log in through a browser: they get their own token from `vx agent add` (step 6).
 
+**Several servers.** Each `vx login --server URL` saves a profile named after the server's host (`app.vxbench.com`, `127.0.0.1:7070`) and makes it current; `--profile NAME` names it yourself. Logging in again to the same server refreshes its profile.
+
+```sh
+vx login --server https://app.vxbench.com     # profile app.vxbench.com, now current
+vx login --server http://127.0.0.1:7070       # profile 127.0.0.1:7070, now current
+vx profiles                                   # both, the current one marked with *
+vx use app.vxbench.com                        # switch (a profile name, or the server URL or host)
+vx --profile 127.0.0.1:7070 whoami            # one command with another profile
+VX_PROFILE=127.0.0.1:7070 vx log              # the same, from the environment
+vx profiles remove 127.0.0.1:7070             # forget one (revoke its token on the server if it should stop working)
+```
+
+`VX_SERVER` and `VX_TOKEN` (an agent's env file, for example) still take precedence over every profile, and `VX_CONFIG` still picks the config file, so agents keep using their own token. `--profile` together with `VX_TOKEN` is refused, since vx cannot tell which login you mean. A config file from before profiles (one server and token) keeps working: the first command turns it into a profile named after its host.
+
 vx checks the server's version when you log in and about once a day after that. When the server is newer it prints a one-line notice with the update command; a server that no longer works with your vx refuses it with the same command. Updating is running the installer again.
 
 ## 4. Connect a repository
@@ -177,4 +191,4 @@ bin/vx-server user-add alice --name "Alice Example"
 | `VX_GITHUB_TOKEN` | empty | GitHub token; without it, GitHub uses SSH |
 | `VX_GITLAB_TOKEN`, `VX_GITEA_TOKEN`, `VX_FORGEJO_TOKEN`, `VX_BITBUCKET_TOKEN` | empty | Server-wide token per host (only sent to `VX_<HOST>_URL`; GitLab defaults to gitlab.com) |
 
-CLI environment: `VX_SERVER`, `VX_TOKEN`, `VX_CONFIG` (config file path), `VX_REPO` (default repo), `VX_MODEL` and `VX_SESSION` (recorded on each change).
+CLI environment: `VX_SERVER`, `VX_TOKEN` (both take precedence over saved profiles), `VX_CONFIG` (config file path), `VX_PROFILE` (the saved profile to use, like `--profile`), `VX_REPO` (default repo), `VX_MODEL` and `VX_SESSION` (recorded on each change).

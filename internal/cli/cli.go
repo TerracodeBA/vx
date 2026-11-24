@@ -46,6 +46,7 @@ type App struct {
 	jsonOut  bool
 	checked  bool // the server's version was checked in this run
 	chdir    string
+	profile  string // --profile
 	exitCode int
 	// landResult is the one line vx land and vx sync end with: what
 	// landed or synced, or why nothing did. landTail are the lines right
@@ -117,8 +118,9 @@ Start here:
 	}
 	root.PersistentFlags().BoolVar(&a.jsonOut, "json", false, "print JSON instead of text")
 	root.PersistentFlags().StringVarP(&a.chdir, "dir", "C", "", "run as if started in this directory")
+	root.PersistentFlags().StringVar(&a.profile, "profile", "", "use this saved login (see vx profiles; default: VX_PROFILE, else the current one)")
 	root.AddCommand(
-		a.loginCmd(), a.whoamiCmd(), a.uiCmd(), a.agentCmd(), a.tokenCmd(),
+		a.loginCmd(), a.useCmd(), a.profilesCmd(), a.whoamiCmd(), a.uiCmd(), a.agentCmd(), a.tokenCmd(),
 		a.repoCmd(), a.orgCmd(), a.teamCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
@@ -149,13 +151,18 @@ func (a *App) dir() string {
 
 // ---------- configuration ----------
 
-// Settings is the user's vx configuration file.
+// Settings is the login a command uses: the selected profile of the
+// config file (profiles.go), overridden by VX_SERVER and VX_TOKEN.
 type Settings struct {
 	Server string `json:"server"`
 	Token  string `json:"token"`
 	// ServerInfo is the server's last ServerInfo answer, asked at most
 	// once a day.
 	ServerInfo *serverInfo `json:"server_info,omitempty"`
+	// Profile is the name of the profile in use ("" without one).
+	Profile string `json:"-"`
+	// err is why no usable login was found (an unknown --profile).
+	err error
 }
 
 func (a *App) settingsPath() string {
@@ -173,21 +180,30 @@ func (a *App) settingsPath() string {
 }
 
 func (a *App) settings() Settings {
-	var s Settings
-	if data, err := os.ReadFile(a.settingsPath()); err == nil {
-		_ = json.Unmarshal(data, &s)
+	s := a.fileSettings()
+	server, token := a.Getenv("VX_SERVER"), a.Getenv("VX_TOKEN")
+	if token != "" && a.profile != "" {
+		s.err = errProfileAndToken
 	}
-	if v := a.Getenv("VX_SERVER"); v != "" {
-		s.Server = v
-	}
-	if v := a.Getenv("VX_TOKEN"); v != "" {
-		s.Token = v
+	if server != "" || token != "" {
+		if s.err != nil && token == "" {
+			s.err = nil // VX_SERVER alone: the profile's token on that server
+		}
+		if server != "" {
+			s.Server = server
+		}
+		if token != "" {
+			s.Token = token
+		}
 	}
 	return s
 }
 
 func (a *App) client() (*client.Client, error) {
 	s := a.settings()
+	if s.err != nil {
+		return nil, s.err
+	}
 	if s.Server == "" || s.Token == "" {
 		return nil, errors.New("not logged in: run `vx login --server URL` (it opens your browser), or set VX_SERVER and VX_TOKEN")
 	}

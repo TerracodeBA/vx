@@ -2,11 +2,9 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -47,12 +45,20 @@ Agents never log in through a browser: a person creates an agent with
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := ctxOf(cmd)
 			if server == "" {
-				server = a.settings().Server
+				st := a.settings()
+				if st.err != nil && a.profile == "" {
+					return st.err
+				}
+				server = st.Server
 			}
 			if server == "" {
 				return errors.New("which server? Run vx login --server URL, e.g. vx login --server https://vx.example.com")
 			}
 			server = normalizeServer(server)
+			profileName, err := a.loginProfileName(server)
+			if err != nil {
+				return err
+			}
 			fromEnv := false
 			if token == "" && a.Getenv("VX_TOKEN") != "" {
 				token, fromEnv = a.Getenv("VX_TOKEN"), true
@@ -89,21 +95,19 @@ Agents never log in through a browser: a person creates an agent with
 					return err
 				}
 			}
-			s := a.fileSettings()
-			s.Server, s.Token = server, token
-			if infoErr == nil {
-				s.ServerInfo = info
+			if infoErr != nil {
+				info = nil
 			}
-			if err := a.saveSettings(s); err != nil {
+			if err := a.saveLogin(profileName, Profile{Server: server, Token: token, Principal: principal.Ref}, info); err != nil {
 				return err
 			}
-			a.printf("Logged in to %s as %s\n", server, principal.Ref)
+			a.printf("Logged in to %s as %s (profile %s, now current)\n", server, principal.Ref, profileName)
 			if fromEnv {
 				a.printf("(with the token from VX_TOKEN)\n")
 			} else if a.Getenv("VX_TOKEN") != "" {
 				fmt.Fprintln(a.Err, "vx: notice: VX_TOKEN is set and takes precedence over the saved token; unset it to use this login")
 			}
-			a.emit(map[string]any{"server": server, "principal": principal.Ref, "on_behalf_of": principal.OnBehalfOf, "config": a.settingsPath()})
+			a.emit(map[string]any{"server": server, "principal": principal.Ref, "on_behalf_of": principal.OnBehalfOf, "profile": profileName, "config": a.settingsPath()})
 			return nil
 		},
 	}
@@ -242,43 +246,60 @@ const olderNoticeEvery = time.Hour
 // serverInfoTTL is how often vx asks the server for its version.
 const serverInfoTTL = 24 * time.Hour
 
-// fileSettings is the config file alone, without VX_SERVER and VX_TOKEN.
+// fileSettings is the selected profile of the config file, without
+// VX_SERVER and VX_TOKEN.
 func (a *App) fileSettings() Settings {
-	var s Settings
-	if data, err := os.ReadFile(a.settingsPath()); err == nil {
-		_ = json.Unmarshal(data, &s)
+	cf := a.readConfig()
+	name, source := a.profileChoice(cf)
+	p, ok := cf.Profiles[name]
+	if !ok {
+		s := Settings{}
+		if source != "" {
+			s.err = a.errNoProfile(name, cf)
+		}
+		return s
 	}
-	return s
+	return Settings{Server: p.Server, Token: p.Token, ServerInfo: cf.Servers[strings.TrimRight(p.Server, "/")], Profile: name}
 }
 
-// saveSettings writes the config file (mode 600) through a rename, so a
-// reader never sees half a file.
-func (a *App) saveSettings(s Settings) error {
-	path := a.settingsPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
+// saveLogin saves a login as profile name (made current) and what the
+// server said about itself.
+func (a *App) saveLogin(name string, p Profile, info *serverInfo) error {
+	return a.updateConfig(func(cf *configFile) error {
+		cf.Profiles[name] = &p
+		cf.Current = name
+		if info != nil {
+			cf.Servers[info.Server] = info
+		}
+		return nil
+	})
+}
+
+// loginProfileName is the profile a login to server goes to: --profile,
+// else a saved profile for the same server, else the server's host.
+func (a *App) loginProfileName(server string) (string, error) {
+	if a.profile != "" {
+		return a.profile, validProfileName(a.profile)
 	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
+	cf := a.readConfig()
+	if cur, ok := cf.Profiles[cf.Current]; ok && strings.TrimRight(cur.Server, "/") == server {
+		return cf.Current, nil
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.json")
-	if err != nil {
-		return err
+	var names []string
+	for n, p := range cf.Profiles {
+		if strings.TrimRight(p.Server, "/") == server {
+			names = append(names, n)
+		}
 	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
+	if len(names) > 0 {
+		slices.Sort(names)
+		return names[0], nil
 	}
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
+	name := hostOf(server)
+	if validProfileName(name) != nil {
+		return "default", nil
 	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return name, nil
 }
 
 // fetchServerInfo asks server for its version and features.
@@ -335,13 +356,16 @@ func (a *App) checkServer(server string) {
 	}
 	a.checked = true
 	server = strings.TrimRight(server, "/")
-	s := a.fileSettings()
-	if c := s.ServerInfo; c != nil && c.Server == server && c.CLIVersion == version.Version && time.Since(c.CheckedAt) < serverInfoTTL {
+	if c := a.readConfig().Servers[server]; c != nil && c.CLIVersion == version.Version && time.Since(c.CheckedAt) < serverInfoTTL {
 		// Known: repeat "older than the server" now and then, without asking.
 		if msg := version.OlderThanServer(version.Version, c.Version); msg != "" && time.Since(c.OlderAt) >= olderNoticeEvery {
 			fmt.Fprintln(a.Err, "vx:", msg)
-			c.OlderAt = time.Now()
-			_ = a.saveSettings(s)
+			_ = a.updateConfig(func(cf *configFile) error {
+				if cur := cf.Servers[server]; cur != nil {
+					cur.OlderAt = time.Now()
+				}
+				return nil
+			})
 		}
 		return
 	}
@@ -354,18 +378,15 @@ func (a *App) checkServer(server string) {
 		info = &serverInfo{Server: server, CheckedAt: time.Now(), CLIVersion: version.Version}
 	}
 	a.notice(info)
-	s = a.fileSettings()
-	s.ServerInfo = info
-	_ = a.saveSettings(s)
+	_ = a.updateConfig(func(cf *configFile) error {
+		cf.Servers[server] = info
+		return nil
+	})
 }
 
 // knownServerInfo is the remembered ServerInfo of the current server.
 func (a *App) knownServerInfo() *serverInfo {
-	st := a.settings()
-	if c := a.fileSettings().ServerInfo; c != nil && c.Server == strings.TrimRight(st.Server, "/") {
-		return c
-	}
-	return nil
+	return a.readConfig().Servers[strings.TrimRight(a.settings().Server, "/")]
 }
 
 // featureErr turns "this server does not know this RPC" into one line that
