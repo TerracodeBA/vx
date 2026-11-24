@@ -14,6 +14,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/api"
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/cli"
+	"github.com/TerracodeBA/vx/internal/gitbridge"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 	"github.com/TerracodeBA/vx/internal/store/storetest"
@@ -38,13 +39,24 @@ type user struct {
 
 func newHarness(t *testing.T) (*harness, string) {
 	t.Helper()
+	return newHarnessWith(t, false)
+}
+
+// newHarnessWith is newHarness; with gitBridge the server imports from and
+// ships to git remotes (local paths in tests) through the real git bridge.
+func newHarnessWith(t *testing.T, gitBridge bool) (*harness, string) {
+	t.Helper()
 	ctx := context.Background()
 	st := storetest.New(t)
 	blobs, err := blob.NewDisk(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := service.New(st, blobs, nil)
+	var upstream service.UpstreamSyncer
+	if gitBridge {
+		upstream = gitbridge.New(st, blobs, t.TempDir(), nil)
+	}
+	svc := service.New(st, blobs, upstream)
 	mux := http.NewServeMux()
 	api.Mount(mux, svc)
 	if err := web.Mount(mux, svc, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {

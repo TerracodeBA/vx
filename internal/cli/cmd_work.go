@@ -108,6 +108,9 @@ Claims block nobody; they end when the workspace lands or is abandoned.`,
 			if err != nil {
 				return err
 			}
+			if wc.Config.Rebase != nil {
+				return errRebasing(wc)
+			}
 			if wc.Config.Workspace != "" {
 				return fmt.Errorf("workspace %q is still open: land it with `vx land` or close it with `vx abandon`", wc.Config.Intent)
 			}
@@ -214,46 +217,56 @@ func (a *App) statusCmd() *cobra.Command {
 			if wc.Config.Workspace != "" {
 				a.printf("Workspace %s: %s\n", wc.Config.ChangeID, wc.Config.Intent)
 				out["workspace"] = map[string]string{"id": wc.Config.Workspace, "change_id": wc.Config.ChangeID, "intent": wc.Config.Intent}
-			} else {
+			} else if wc.Config.Rebase == nil {
 				a.printf("No workspace open. Start one with: vx new \"INTENT\"\n")
 			}
-			if c, err := a.client(); err == nil {
-				if eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort})); err == nil {
-					head := eff.Msg.Effort.Head
-					out["effort_head"] = head
-					if head != wc.Config.Base {
-						if wc.Config.Workspace != "" {
-							a.printf("The effort moved on to %s. Run `vx sync`, or `vx land --run` syncs for you.\n", short(head))
-						} else {
-							a.printf("The effort moved on to %s. Run `vx sync` to pick up others' changes.\n", short(head))
-						}
+			var serverRebase *vxv1.Rebase
+			c, cerr := a.client()
+			var eff *connect.Response[vxv1.GetEffortResponse]
+			if cerr == nil {
+				eff, cerr = c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
+				if cerr == nil {
+					serverRebase = eff.Msg.Effort.Rebase
+				}
+			}
+			if rb := a.printRebaseStatus(wc, serverRebase); rb != nil {
+				out["rebase"] = rb
+			}
+			if cerr == nil {
+				head := eff.Msg.Effort.Head
+				out["effort_head"] = head
+				if head != wc.Config.Base && wc.Config.Rebase == nil {
+					if wc.Config.Workspace != "" {
+						a.printf("The effort moved on to %s. Run `vx sync`, or `vx land --run` syncs for you.\n", short(head))
+					} else {
+						a.printf("The effort moved on to %s. Run `vx sync` to pick up others' changes.\n", short(head))
 					}
-					var others []map[string]string
-					for _, w := range eff.Msg.OpenWorkspaces {
-						if w.Id == wc.Config.Workspace {
-							continue
-						}
-						others = append(others, map[string]string{"owner": w.Owner, "intent": w.Intent, "change_id": w.ChangeId})
+				}
+				var others []map[string]string
+				for _, w := range eff.Msg.OpenWorkspaces {
+					if w.Id == wc.Config.Workspace {
+						continue
 					}
-					if len(others) > 0 {
-						a.printf("\nOthers working in this effort:\n")
-						for _, o := range others {
-							a.printf("  %-30s %s\n", o["owner"], o["intent"])
-						}
+					others = append(others, map[string]string{"owner": w.Owner, "intent": w.Intent, "change_id": w.ChangeId})
+				}
+				if len(others) > 0 {
+					a.printf("\nOthers working in this effort:\n")
+					for _, o := range others {
+						a.printf("  %-30s %s\n", o["owner"], o["intent"])
 					}
-					out["others"] = others
-					if log, err := c.Efforts.Log(ctx, connect.NewRequest(&vxv1.LogRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort, Limit: 3})); err == nil && len(log.Msg.Changesets) > 0 {
-						a.printf("\nRecently landed:\n")
-						var recent []map[string]string
-						for _, cs := range log.Msg.Changesets {
-							a.printf("  %s %s  %-44s %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), cs.Author.Principal)
-							recent = append(recent, map[string]string{"hash": cs.Hash, "change_id": cs.ChangeId, "intent": cs.Intent, "author": cs.Author.Principal})
-						}
-						out["recent"] = recent
-						if warned := recentWarnings(log.Msg.Changesets); len(warned) > 0 {
-							a.printf("\nWarnings in recent lands: %s\n", strings.Join(warned, "; "))
-							out["warnings"] = warned
-						}
+				}
+				out["others"] = others
+				if log, err := c.Efforts.Log(ctx, connect.NewRequest(&vxv1.LogRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort, Limit: 3})); err == nil && len(log.Msg.Changesets) > 0 {
+					a.printf("\nRecently landed:\n")
+					var recent []map[string]string
+					for _, cs := range log.Msg.Changesets {
+						a.printf("  %s %s  %-44s %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), cs.Author.Principal)
+						recent = append(recent, map[string]string{"hash": cs.Hash, "change_id": cs.ChangeId, "intent": cs.Intent, "author": cs.Author.Principal})
+					}
+					out["recent"] = recent
+					if warned := recentWarnings(log.Msg.Changesets); len(warned) > 0 {
+						a.printf("\nWarnings in recent lands: %s\n", strings.Join(warned, "; "))
+						out["warnings"] = warned
 					}
 				}
 			}
@@ -272,9 +285,14 @@ func (a *App) statusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(marked) > 0 {
+			switch {
+			case len(marked) > 0 && wc.Config.Rebase != nil:
+				a.printf("\nUnresolved conflict markers in: %s\nvx effort rebase --continue will refuse these files until the markers are gone.\n", strings.Join(marked, ", "))
+			case len(marked) > 0:
 				a.printf("\nUnresolved conflict markers in: %s\nvx land will refuse these files until the markers are gone.\n", strings.Join(marked, ", "))
-			} else if len(changes) > 0 {
+			case wc.Config.Rebase != nil:
+				a.printf("\nNo conflict markers; continue with: vx effort rebase --continue\n")
+			case len(changes) > 0:
 				a.printf("\nNo conflict markers; ready to land.\n")
 			}
 			out["conflict_markers"] = marked

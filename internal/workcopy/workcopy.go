@@ -39,6 +39,27 @@ type Config struct {
 	// board (RFC 3339, the server time of the newest note it was shown), so
 	// vx sync, land and status show only notes that arrived after it.
 	BoardSeenAt string `json:"board_seen_at,omitempty"`
+	// Rebase is set while this working copy holds the conflicts of a
+	// stopped effort rebase (vx effort rebase). Base and BaseTree then point
+	// at the rebased chain so far, not at the effort head.
+	Rebase *Rebasing `json:"rebase,omitempty"`
+}
+
+// Rebasing is a stopped effort rebase whose conflicts are written into the
+// working copy, waiting for vx effort rebase --continue or --abort.
+type Rebasing struct {
+	StoppedAt  string `json:"stopped_at"` // old-chain changeset being replayed
+	ChangeID   string `json:"change_id"`
+	Intent     string `json:"intent"`
+	OntoBranch string `json:"onto_branch"`
+	OntoGitSHA string `json:"onto_git_sha,omitempty"`
+	// Conflicts and Generated (a subset) are the paths that conflicted.
+	Conflicts []string `json:"conflicts,omitempty"`
+	Generated []string `json:"generated,omitempty"`
+	// SavedBase and SavedBaseTree are where the files were before the
+	// rebase wrote its conflicts here; --abort puts them back.
+	SavedBase     string `json:"saved_base"`
+	SavedBaseTree string `json:"saved_base_tree"`
 }
 
 // PendingLand is the evidence a `vx land` asked for, kept until a land in
