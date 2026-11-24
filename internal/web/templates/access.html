@@ -1,0 +1,80 @@
+{{define "crumbs"}}{{with .Repo.Org}}<a href="/ui/orgs/{{.}}">{{.}}</a><span class="sep">/</span>{{end}}<a href="/ui/repo?name={{.Repo.Name}}">{{.Repo.Name}}</a><span class="sep">/</span><span>Access</span>{{end}}
+{{define "content"}}
+{{$repo := .Repo.Name}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Access to <span class="mono">{{.Repo.Name}}</span></h1>
+    <p class="muted">Who may read, write or administer this repository, and why. Roles come from the organization's default role, from teams and from direct grants; the highest one counts. Agents get at most their person's role.</p>
+  </div>
+</div>
+{{template "admin-flash" .Flash}}
+
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Direct grants</span><span class="kpi-value">{{len .Grants}}</span></div>
+  <div class="kpi"><span class="kpi-label">Admins</span><span class="kpi-value">{{.Admins}}</span></div>
+  <div class="kpi"><span class="kpi-label">Can write</span><span class="kpi-value">{{.Writers}}</span><span class="kpi-note">write, not admin</span></div>
+  <div class="kpi"><span class="kpi-label">Read only</span><span class="kpi-value">{{.Readers}}</span></div>
+</div>
+
+<div class="admin">
+<section class="panel" id="grants">
+  <div class="panel-head"><h2>Direct grants</h2><span class="muted small">{{len .Grants}} grant{{if ne (len .Grants) 1}}s{{end}}</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Person or team</th><th>Kind</th><th>Role</th>{{if .IsHuman}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Grants}}
+      <tr>
+        <td class="cell-main mono">{{principal .Subject}}</td>
+        <td>{{if .Team}}team{{else}}person{{end}}</td>
+        <td><span class="badge{{if eq .Role "admin"}} badge-admin{{end}}">{{.Role}}</span></td>
+        {{if $.IsHuman}}
+        <td class="num"><form method="post" action="/ui/repos/{{$repo}}/access/revoke" class="row-form">
+          <input type="hidden" name="subject" value="{{.Subject}}">
+          <button class="btn ghost small-btn" type="submit">Revoke</button>
+        </form></td>
+        {{end}}
+      </tr>
+    {{else}}
+      <tr><td colspan="4" class="muted">No direct grants. Everyone below has access through the organization or a team.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .IsHuman}}
+  <form method="post" action="/ui/repos/{{$repo}}/access/grant" class="admin-form">
+    <div class="field"><label for="grant-kind">Grant to</label>
+      <select id="grant-kind" name="kind"><option value="user"{{if eq .Kind "user"}} selected{{end}}>a person</option><option value="team"{{if eq .Kind "team"}} selected{{end}}>a team</option></select></div>
+    <div class="field"><label for="grant-subject">Handle or team</label>
+      <input id="grant-subject" name="subject" type="text" required maxlength="100" autocomplete="off" placeholder="alice, or a team: backend" value="{{.Form.Get "subject"}}"></div>
+    <div class="field"><label for="grant-role">Role</label>
+      <select id="grant-role" name="role">{{range .GrantRoles}}<option value="{{.}}">{{.}}</option>{{end}}</select></div>
+    <button class="btn primary" type="submit">Grant</button>
+    <p class="field-hint">Teams come from {{if .Repo.Org}}<a href="/ui/orgs/{{.Repo.Org}}#teams">{{.Repo.Org}}</a>{{else}}the repository's organization{{end}}. read: see the repository and its efforts. write: also land and ship. admin: also manage this access. Granting again changes the role.</p>
+  </form>
+  {{else}}
+  <p class="panel-note muted small">Agents see access read-only; sign in as the person to grant or revoke.</p>
+  {{end}}
+</section>
+
+<section class="panel" id="effective">
+  <div class="panel-head"><h2>Everyone with access</h2><span class="muted small">{{len .Entries}} {{if eq (len .Entries) 1}}person{{else}}people{{end}}</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Person</th><th>Effective role</th><th>Via</th></tr></thead>
+    <tbody>
+    {{range .Entries}}
+      <tr>
+        <td class="cell-main"><span class="row-link">{{if .Person.DisplayName}}{{.Person.DisplayName}}{{else}}{{.Person.Handle}}{{end}}</span><div class="cell-sub mono">{{.Person.Handle}}</div></td>
+        <td><span class="badge{{if eq .Role "admin"}} badge-admin{{end}}">{{.Role}}</span></td>
+        <td>{{if .Via}}<span class="chips">{{range .Via}}<span class="chip chip-plain via">{{.}}</span>{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="3" class="muted">Nobody has access yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+</div>
+{{end}}

@@ -1,0 +1,76 @@
+{{define "crumbs"}}<span>Admin</span><span class="sep">/</span>{{if .Secret}}<a href="/ui/admin/people">People</a><span class="sep">/</span><span>New person</span>{{else}}<span>People</span>{{end}}{{end}}
+{{define "content"}}
+{{if .Secret}}
+<section class="panel panel-pad confirm">
+  <h1>{{if .Created.DisplayName}}{{.Created.DisplayName}}{{else}}{{.Created.Handle}}{{end}} can now sign in</h1>
+  <dl class="kv">
+    <dt>Handle</dt><dd class="mono">{{.Created.Handle}}</dd>
+    {{with .Created.Email}}<dt>Email</dt><dd>{{.}}</dd>{{end}}
+    {{with .Org}}<dt>Organization</dt><dd class="mono">{{.}}</dd>{{end}}
+    <dt>Site admin</dt><dd>{{if .MadeAdmin}}yes{{else}}no{{end}}</dd>
+  </dl>
+  <p class="note warn">This is their first token, and the only time vx shows it: only a hash is stored, and reloading this page will not bring it back.</p>
+  <pre class="code token-secret">{{.Secret}}</pre>
+  <p class="muted">Give it to them privately, not in a shared channel. They run</p>
+  <pre class="code">vx login --server {{.Server}} --token {{.Secret}}</pre>
+  <p class="muted">and then <code>vx ui</code> to open this web UI already signed in. From Settings they can create more tokens and their own agents, and revoke this one.</p>
+  <div class="confirm-actions"><a class="btn primary" href="/ui/admin/people">Done</a></div>
+</section>
+{{else}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>People</h1>
+    <p class="muted">Everyone on this server: each person, how many agents act for them, and which organizations they belong to. Only site admins see this page.</p>
+  </div>
+</div>
+{{template "admin-flash" .Flash}}
+{{with .ListErr}}<p class="note bad" role="alert">{{.}}</p>{{end}}
+
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">People</span><span class="kpi-value">{{len .People}}</span></div>
+  <div class="kpi"><span class="kpi-label">Their agents</span><span class="kpi-value">{{.Agents}}</span></div>
+  <div class="kpi"><span class="kpi-label">Site admins</span><span class="kpi-value">{{.Admins}}</span></div>
+  <div class="kpi"><span class="kpi-label">Organizations</span><span class="kpi-value">{{.OrgCount}}</span></div>
+</div>
+
+<section class="panel" id="people">
+  <div class="panel-head"><h2>Everyone</h2><span class="muted small">{{len .People}} {{if eq (len .People) 1}}person{{else}}people{{end}}</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Kind</th><th>Site admin</th><th>Organizations</th><th>Email</th><th>Since</th></tr></thead>
+    <tbody>
+    {{range .People}}
+      <tr>
+        <td class="cell-main"><span class="row-link">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Handle}}{{end}}</span><div class="cell-sub mono">{{principal .Ref}}</div></td>
+        <td class="nowrap">{{if eq .Kind "human"}}person{{else}}{{.Kind}}{{end}}<div class="cell-sub">{{if .Agents}}{{.Agents}} agent{{if ne .Agents 1}}s{{end}}{{else}}no agents{{end}}</div></td>
+        <td>{{if .SiteAdmin}}<span class="badge badge-owner">site admin</span>{{else}}<span class="muted">no</span>{{end}}</td>
+        <td>{{if .Orgs}}<span class="chips">{{range .Orgs}}<span class="chip chip-plain">{{.}}</span>{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+        <td class="small">{{if .Email}}{{.Email}}{{else}}<span class="muted">not set</span>{{end}}</td>
+        <td class="muted small nowrap">{{ago .CreatedAt}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="6" class="muted">Nobody yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .IsHuman}}
+  <form method="post" action="/ui/admin/people" class="admin-form" id="add">
+    <div class="field"><label for="p-handle">Handle</label>
+      <input id="p-handle" name="handle" type="text" required maxlength="39" autocomplete="off" placeholder="alice" value="{{.Form.Get "handle"}}"></div>
+    <div class="field"><label for="p-name">Display name</label>
+      <input id="p-name" name="display_name" type="text" maxlength="100" autocomplete="off" placeholder="Alice Liddell" value="{{.Form.Get "display_name"}}"></div>
+    <div class="field"><label for="p-email">Email</label>
+      <input id="p-email" name="email" type="email" maxlength="200" autocomplete="off" placeholder="alice@example.com" value="{{.Form.Get "email"}}"></div>
+    <div class="field"><label for="p-org">Into organization</label>
+      <select id="p-org" name="org"><option value="">none</option>{{$sel := .Form.Get "org"}}{{range .OrgChoices}}<option value="{{.Handle}}"{{if eq .Handle $sel}} selected{{end}}>{{.Handle}}</option>{{end}}</select></div>
+    <label class="field-check"><input type="checkbox" name="site_admin"{{if eq (.Form.Get "site_admin") "on"}} checked{{end}}> Site admin</label>
+    <button class="btn primary" type="submit">Add person</button>
+    <p class="field-hint">vx creates the person with a first token and shows it once, on the next page. A site admin sees this page and every organization.</p>
+  </form>
+  {{else}}
+  <p class="panel-note muted small">Agents cannot add people; sign in as the person to do that.</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
