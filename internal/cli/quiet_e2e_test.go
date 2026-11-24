@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -187,5 +188,38 @@ func TestWaitHeartbeat(t *testing.T) {
 		if code != cli.ExitTimeout || strings.Contains(out, "still waiting") {
 			t.Errorf("wait %s = %d:\n%s", flag, code, out)
 		}
+	}
+}
+
+// In the feed, another effort's note stays on one line even when an agent
+// of your own person wrote it: it ships separately, and vx board ID
+// --effort has the rest.
+func TestFeedOtherEffortOwnPersonOneLine(t *testing.T) {
+	alice, a, _ := boardPair(t)
+	alice.must("effort", "new", "Auth", "--repo", "shop-api")
+	var added struct{ Token string }
+	if err := json.Unmarshal([]byte(alice.must("agent", "add", "front", "--json")), &added); err != nil || added.Token == "" {
+		t.Fatalf("agent add: %v", err)
+	}
+	work := filepath.Dir(a.dir)
+	f := a.h.user("front", added.Token, work)
+	f.must("clone", "shop-api", "auth", "f")
+	f.dir = filepath.Join(work, "f")
+
+	a.must("new", "Add Func")
+	a.write("x.go", "package pkg\n\nfunc Func() {}\n")
+	a.must("land")
+	body := "func Func() error\nReturns ErrLimited when the caller is over its limit for the current window."
+	a.must("post", "interface", body, "--on", "x.go")
+
+	f.must("new", "Use Func")
+	f.write("x.go", "package pkg\n\nfunc Func() {}\n\nfunc Other() {}\n")
+	out := f.must("sync")
+	line := regexp.MustCompile(`\n  \[same person\] interface backend on x\.go in rate-limiting just now  id ([0-9a-f]{8}): func Func\(\) error Returns ErrLimited when the caller is over its limit for the…\n`).FindStringSubmatch(out)
+	if line == nil || strings.Contains(out, "│ func Func") || !strings.Contains(out, "Read in full: vx board "+line[1]+" --effort rate-limiting\n") {
+		t.Fatalf("sync:\n%s", out)
+	}
+	if full := f.must("board", line[1], "--effort", "rate-limiting"); !strings.Contains(full, "│ Returns ErrLimited when the caller is over its limit for the current window.\n") {
+		t.Errorf("vx board ID --effort:\n%s", full)
 	}
 }
