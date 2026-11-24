@@ -13,27 +13,10 @@
   <a class="brand" href="/ui"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></a>
   <nav class="side-nav" aria-label="Main">
     <a class="side-link{{if eq .Path "/ui"}} on{{end}}" href="/ui"><span class="ico ico-grid" aria-hidden="true"></span>All efforts</a>
+    <a class="side-link{{if or (eq .Path "/ui/repos") .ActiveRepo}} on{{end}}" href="/ui/repos"><span class="ico ico-repo" aria-hidden="true"></span>Repositories</a>
     {{if .NavWelcome}}<a class="side-link{{if eq .Path "/ui/welcome"}} on{{end}}" href="/ui/welcome"><span class="ico ico-start" aria-hidden="true"></span>Set up vx</a>{{end}}
     <a class="side-link{{if eq .Section "orgs"}} on{{end}}" href="/ui/orgs"><span class="ico ico-org" aria-hidden="true"></span>Organizations</a>
     {{if .NavAdmin}}<a class="side-link{{if eq .Section "admin"}} on{{end}}" href="/ui/admin/people"><span class="ico ico-admin" aria-hidden="true"></span>Admin</a>{{end}}
-  </nav>
-  <div class="side-label">Repositories</div>
-  <nav class="side-tree" aria-label="Repositories">
-    {{$ar := .ActiveRepo}}{{$as := .ActiveSlug}}
-    {{range .Nav}}
-    {{$rn := .Name}}
-    <div class="side-repo{{if eq $ar $rn}} open{{end}}">
-      <a class="side-link repo-link{{if and (eq $ar $rn) (not $as)}} on{{end}}" href="/ui/repo?name={{$rn}}"><span class="ico ico-repo" aria-hidden="true"></span><span class="side-text">{{$rn}}</span></a>
-      <div class="side-efforts">
-        {{range .Efforts}}
-        <a class="side-link effort-link{{if and (eq $ar $rn) (eq $as .Slug)}} on{{end}}" href="/ui/effort?repo={{$rn}}&amp;slug={{.Slug}}">
-          <span class="side-text">{{.Name}}</span>
-          {{if .Open}}<span class="side-live" title="{{.Open}} working now">{{.Open}}</span>{{end}}
-        </a>
-        {{end}}
-      </div>
-    </div>
-    {{else}}<p class="side-empty">No repositories yet.</p>{{end}}
   </nav>
   <div class="side-foot">
     <div class="side-user"><span class="avatar" aria-hidden="true">{{slice (principal .Actor.Ref) 0 1}}</span><span class="side-text mono">{{principal .Actor.Ref}}</span></div>

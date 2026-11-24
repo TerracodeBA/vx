@@ -1,0 +1,48 @@
+{{define "crumbs"}}<span>Repositories</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Repositories</h1>
+    <p class="muted">Every repository you can read. For repositories from GitHub, what you can do is decided by your role on GitHub.</p>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="kpi-label">Repositories</span><span class="kpi-value">{{len .Rows}}</span></div>
+  <div class="kpi"><span class="kpi-label">From GitHub</span><span class="kpi-value">{{.GitHub}}</span></div>
+  <div class="kpi"><span class="kpi-label">Open efforts</span><span class="kpi-value">{{.OpenEfforts}}</span></div>
+  <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{.Working}}</span></div>
+</div>
+{{if not .Rows}}
+<div class="panel empty">
+  <h2>No repositories yet</h2>
+  <p class="muted">Install the vx GitHub App on your organization (see <a href="/ui/welcome">Set up vx</a>), or connect one from the command line:</p>
+  <pre class="code">vx repo create acme/shop-api --github acme/shop-api</pre>
+</div>
+{{else}}
+<div class="panel">
+  <div class="panel-head">
+    <h2>All repositories</h2>
+    <input class="filter" type="search" placeholder="Filter by name or organization" aria-label="Filter repositories" data-filter="repo-table">
+  </div>
+  <div class="table-wrap">
+  <table class="table" id="repo-table">
+    <thead><tr><th>Repository</th><th>Organization</th><th>Your role</th><th>Roles from</th><th class="num">Open efforts</th><th>Working now</th><th>Last activity</th></tr></thead>
+    <tbody>
+    {{range .Rows}}
+      <tr data-filter-text="{{.Name}} {{.Org}} {{.Remote}}">
+        <td class="cell-main"><a class="row-link mono" href="/ui/repo?name={{.Name}}">{{.Name}}</a>{{if and .Remote (ne .Remote .Name)}}<div class="cell-sub mono">{{.Remote}}</div>{{end}}</td>
+        <td><a class="small" href="/ui/orgs/{{.Org}}">{{.Org}}</a></td>
+        <td><span class="badge">{{.Role}}</span></td>
+        <td class="small">{{if .GitHubBacked}}GitHub{{else}}vx{{end}}</td>
+        <td class="num">{{.OpenEfforts}}</td>
+        <td>{{if .Working}}<span class="live-text"><span class="pulse"></span>{{.Working}} agent{{if ne .Working 1}}s{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+        <td class="muted small nowrap">{{if not .Activity.IsZero}}{{ago .Activity}}{{else}}no efforts yet{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small filter-empty" hidden>No repository matches the filter.</p>
+</div>
+{{end}}
+{{end}}
