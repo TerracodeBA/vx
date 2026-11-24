@@ -23,6 +23,7 @@ type harness struct {
 	t      *testing.T
 	server string
 	home   string
+	st     *store.Store
 }
 
 type user struct {
@@ -53,7 +54,7 @@ func newHarness(t *testing.T) (*harness, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &harness{t: t, server: srv.URL, home: t.TempDir()}, tok
+	return &harness{t: t, server: srv.URL, home: t.TempDir(), st: st}, tok
 }
 
 func (h *harness) user(label, token, dir string) *user {
