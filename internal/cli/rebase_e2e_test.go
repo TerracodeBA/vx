@@ -175,7 +175,7 @@ func TestEffortRebaseAfterAnotherEffortShipped(t *testing.T) {
 	ids := func(js string) []string {
 		var l struct {
 			Changesets []struct {
-				ChangeId string `json:"changeId"`
+				ChangeID string `json:"change_id"`
 				Rebased  bool   `json:"rebased"`
 			} `json:"changesets"`
 		}
@@ -184,7 +184,10 @@ func TestEffortRebaseAfterAnotherEffortShipped(t *testing.T) {
 		}
 		var out []string
 		for _, c := range l.Changesets {
-			out = append(out, c.ChangeId)
+			if c.ChangeID == "" {
+				t.Fatalf("no change id in %s", js)
+			}
+			out = append(out, c.ChangeID)
 		}
 		return out
 	}
@@ -192,10 +195,49 @@ func TestEffortRebaseAfterAnotherEffortShipped(t *testing.T) {
 		t.Fatalf("change ids before %v, after %v", ids(before), ids(after))
 	}
 
-	// Ship plan is clean now.
+	// Ship plan is clean now, and says the evidence predates the rebase.
 	out = a.must("ship", "plan")
 	if strings.Contains(out, "conflicts") {
 		t.Fatalf("ship plan after the rebase:\n%s", out)
+	}
+	for _, want := range []string{
+		"The effort was rebased onto `main` at " + sha[:12] + " by agent:alice/worker; evidence of the rebased changes was gathered before the rebase.",
+		"true pass (run by vx), before the effort was rebased onto main at " + sha[:12],
+		"conflict resolved during the rebase by agent:alice/worker",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ship plan lacks %q:\n%s", want, out)
+		}
+	}
+	first := ids(after)[1]
+	show := a.must("show", first)
+	for _, want := range []string{"rebased onto main at " + sha[:12] + " by agent:alice/worker; evidence below was gathered before the rebase", "conflict resolved during the rebase by agent:alice/worker"} {
+		if !strings.Contains(show, want) {
+			t.Errorf("vx show lacks %q:\n%s", want, show)
+		}
+	}
+	// Shipping writes the same into the commits.
+	a.must("ship", "open")
+	r, err := git.PlainOpen(up.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := r.Reference(plumbing.NewBranchReferenceName("vx/effort-a"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, _ := r.CommitObject(ref.Hash())
+	parent, _ := head.Parent(0)
+	if parent.ParentHashes[0].String() != sha {
+		t.Fatalf("shipped commits do not sit on main %s", sha)
+	}
+	for _, want := range []string{"Vx-Rebased-Onto: main at " + sha[:12], "Vx-Resolved-By: agent:alice/worker", "Vx-Evidence: true pass (run by vx), before rebase"} {
+		if !strings.Contains(parent.Message, want) {
+			t.Errorf("commit message lacks %q:\n%s", want, parent.Message)
+		}
+	}
+	if !strings.Contains(head.Message, "Vx-Rebased-Onto: main at "+sha[:12]) || strings.Contains(head.Message, "Vx-Resolved-By") {
+		t.Errorf("second commit message:\n%s", head.Message)
 	}
 
 	// The workspace opened before the rebase syncs onto the new head and lands.

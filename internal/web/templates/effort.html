@@ -66,6 +66,13 @@
   {{else if .TasksView}}
     {{template "tasksview" .}}
   {{else}}
+    {{with .Rebase}}
+    <div class="note warn rebase-note" role="status">
+      <p><strong>Rebase onto {{.Onto}} at <span class="mono">{{short .OntoAt}}</span> in progress</strong> by {{principal .By}}: {{if .Stopped}}stopped on a conflict at <a class="mono" href="/ui/change?repo={{$repo}}&amp;ref={{.StoppedHash}}">{{.ChangeID}}</a> ({{.Intent}}){{else}}replaying{{end}}. {{.Replayed}} change(s) replayed, {{.Pending}} to go.</p>
+      {{if .Conflicts}}<p class="small">Conflicts: {{range $i, $c := .Conflicts}}{{if $i}}, {{end}}<span class="mono">{{$c.Path}}</span>{{if $c.Generated}} (generated: regenerate it){{end}}{{end}}</p>{{end}}
+      <p class="small">The timeline below is unchanged until the rebase finishes. Lands still work and are replayed too. Resolve in a working copy with <span class="mono">vx effort rebase --continue</span>, or drop it with <span class="mono">vx effort rebase --abort</span>.</p>
+    </div>
+    {{end}}
     {{if not .Lands}}
     <div class="panel empty"><p>Nothing landed yet. Agents start with:</p>
       <pre class="code">vx clone {{$repo}} {{$slug}}
@@ -104,9 +111,10 @@ vx land --run "go test ./..."</pre></div>
           <footer class="land-foot">
             <div class="pills">
               {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
+              {{with .Rebase}}<span class="pill warn" title="A rebase of the effort replayed this change onto {{.Branch}}{{if .By}} (run by {{.By}}){{end}}; its evidence was gathered before the rebase.">rebased onto {{.Branch}} {{if .OntoGitSHA}}{{short .OntoGitSHA}}{{else}}{{short .Onto.String}}{{end}}</span>{{if .ResolvedBy}}<span class="pill warn" title="This change conflicted during the rebase; this is how it was resolved.">resolved by {{principal .ResolvedBy}}</span>{{end}}{{end}}
               {{range .Warnings}}<span class="pill warn" title="Found by the server when this change landed; the text merged but the code may not build."><span class="pill-dot"></span>warning · {{.Detail}}</span>{{end}}
-              {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
-                <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}"><span class="pill-dot"></span>{{.Name}} · {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}{{if .Notes}} · {{.Notes}}{{end}}</span>
+              {{if .Evidence}}{{$merged := .Merged}}{{$rebased := .Rebased}}{{range .Evidence.Checks}}
+                <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}{{if $rebased}}, before the rebase{{end}}"><span class="pill-dot"></span>{{.Name}} · {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}{{if .Notes}} · {{.Notes}}{{end}}</span>
               {{end}}{{else}}<span class="pill neutral">no evidence</span>{{end}}
             </div>
             <button class="btn ghost small-btn" type="button" data-expand>Show code</button>

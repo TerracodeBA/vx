@@ -526,6 +526,20 @@ func (a *App) printDetails(cs *vxv1.Changeset, indent string) {
 	if cs.Merged {
 		a.printf("%smerged onto newer work by the server; evidence below was gathered before the merge\n", indent)
 	}
+	if cs.Rebased {
+		onto := cs.RebasedOntoBranch
+		if onto == "" {
+			onto = "the target"
+		}
+		a.printf("%srebased onto %s at %s", indent, onto, short(cs.RebasedOnto))
+		if cs.RebasedBy != "" {
+			a.printf(" by %s", cs.RebasedBy)
+		}
+		a.printf("; evidence below was gathered before the rebase\n")
+		if cs.ResolvedBy != "" {
+			a.printf("%sconflict resolved during the rebase by %s\n", indent, cs.ResolvedBy)
+		}
+	}
 	if ev := cs.Evidence; ev != nil {
 		for _, ch := range ev.Checks {
 			how := "reported"

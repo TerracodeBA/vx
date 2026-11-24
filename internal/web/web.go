@@ -5,6 +5,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -552,8 +553,40 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
-		"Claims": claims,
+		"Claims": claims, "Rebase": u.rebaseBanner(ctx, v),
 	})
+}
+
+// rebaseBanner is the effort page's notice of a rebase in progress.
+type rebaseBanner struct {
+	By, Onto, OntoAt  string
+	Stopped           bool
+	ChangeID, Intent  string
+	StoppedHash       string
+	Replayed, Pending int
+	Conflicts         []store.RebaseConflict
+}
+
+func (u *UI) rebaseBanner(ctx context.Context, v service.EffortView) *rebaseBanner {
+	if v.Rebase == nil {
+		return nil
+	}
+	rv, ok, err := u.svc.GetRebase(ctx, v.Repo.Name, v.Effort.Slug)
+	if err != nil || !ok || !rv.Rebase.State.Active() {
+		return nil
+	}
+	b := &rebaseBanner{
+		By: rv.StartedBy, Onto: rv.Rebase.OntoBranch, OntoAt: rv.Rebase.OntoGitSHA,
+		Stopped: rv.Rebase.State == store.RebaseStopped, Replayed: len(rv.Rebase.Replayed), Pending: len(rv.Rebase.Pending),
+		Conflicts: rv.Rebase.Conflicts,
+	}
+	if b.OntoAt == "" {
+		b.OntoAt = rv.Rebase.Onto.String()
+	}
+	if c := rv.StoppedAt; c != nil {
+		b.ChangeID, b.Intent, b.StoppedHash = c.ChangeID, c.Title(), c.Hash.String()
+	}
+	return b
 }
 
 // claimRow is an active claim in the effort page's Working now panel.
