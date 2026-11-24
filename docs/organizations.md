@@ -186,7 +186,7 @@ vx-server quota acme --repos 50 --stored 20GB         # override two defaults
 vx-server quota acme --push default --open-efforts 0  # back to the default; 0 means no limit
 ```
 
-Changes are in the audit log as `org.quota`. Stored data shows "not measured yet" until the server counts object sizes (object storage, v0.5).
+Changes are in the audit log as `org.quota`. Stored data counts bytes as the object store holds them (compressed). New uploads are counted within seconds; repositories imported from a git host, and data from before v0.5, within about 10 minutes, so a big import can go over the stored data quota once before further uploads are refused.
 
 ## Audit log
 

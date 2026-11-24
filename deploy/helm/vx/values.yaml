@@ -44,7 +44,8 @@ secrets:
 blobStore:
   url: ""
   # A Secret whose keys become environment variables, for the store's
-  # credentials (for S3: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY).
+  # credentials: VX_BLOB_ACCESS_KEY_ID and VX_BLOB_SECRET_ACCESS_KEY
+  # (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY also work).
   existingSecret: ""
 
 # Rate limits (token buckets, per process). Each is "N/s", "N/m" or "N/h",

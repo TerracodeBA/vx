@@ -301,7 +301,7 @@ What the values cover (see `values.yaml` for all of them):
 | `database.existingSecret`, `database.urlKey` | The Secret and key with the Postgres URL (`VX_DATABASE_URL`). Required. |
 | `secrets.existingSecret` | One Secret with `secret-key` (`VX_SECRET_KEY`), `github-token` (`VX_GITHUB_TOKEN`) and `metrics-token` (`VX_METRICS_TOKEN`); missing keys leave the setting off. |
 | `publicURL`, `signup` | `VX_PUBLIC_URL` and `VX_SIGNUP`. |
-| `blobStore.url`, `blobStore.existingSecret` | Object storage (`VX_BLOB_URL`) and a Secret with its credentials as environment variables. Empty: objects stay on the data volume. |
+| `blobStore.url`, `blobStore.existingSecret` | Object storage (`VX_BLOB_URL`) and a Secret whose keys become environment variables, such as `VX_BLOB_ACCESS_KEY_ID` and `VX_BLOB_SECRET_ACCESS_KEY` (see [Object storage](#object-storage)). Empty: objects stay on the data volume. |
 | `persistence.*` | The data volume (git mirrors; objects without object storage), 20 GiB by default. With a ReadWriteOnce volume the chart replaces the pod with `Recreate`. |
 | `rateLimits.*`, `quotas.*`, `auditRetention` | The `VX_RATE_*`, `VX_QUOTA_*` and `VX_AUDIT_RETENTION` settings below. |
 | `ingress.*` | Host, class, TLS and annotations. The CLI speaks HTTP/2 through the same host; lands upload up to 64 MiB per request, so raise body size limits (ingress-nginx: `nginx.ingress.kubernetes.io/proxy-body-size: "70m"`). |
