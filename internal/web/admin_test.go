@@ -183,6 +183,10 @@ func TestAdminPagesByRole(t *testing.T) {
 		{"alice", "/ui/repos/acme/nope/access", want{404, nil, nil}},
 		{"alice", "/ui/repos/acme/shop/other", want{404, nil, nil}},
 
+		// The repository page links to access for repo admins only.
+		{"alice", "/ui/repo?name=acme/shop", want{200, []string{`href="/ui/repos/acme/shop/access"`}, nil}},
+		{"bob", "/ui/repo?name=acme/shop", want{200, nil, []string{"/access"}}},
+
 		{"alice", "/ui/admin/people", want{200, []string{"Add person", "alice", "bob", "carol", "site admin", "acme (owner)", "acme (member)"}, nil}},
 		{"bob", "/ui/admin/people", want{404, nil, []string{"Add person"}}},
 		{"carol", "/ui/admin/people", want{404, nil, []string{"Add person"}}},
