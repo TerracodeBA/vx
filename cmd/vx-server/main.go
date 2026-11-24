@@ -43,6 +43,9 @@ func main() {
 	}
 }
 
+// devDatabaseURL is the database of `make db`, for local development.
+const devDatabaseURL = "postgres://vx:vx@127.0.0.1:54329/vx?sslmode=disable"
+
 func root() *cobra.Command {
 	var dbURL, dataDir string
 	cmd := &cobra.Command{
@@ -51,7 +54,15 @@ func root() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	cmd.PersistentFlags().StringVar(&dbURL, "db", env("VX_DATABASE_URL", "postgres://vx:vx@127.0.0.1:54329/vx?sslmode=disable"), "Postgres URL (VX_DATABASE_URL)")
+	// The URL usually holds the database password, so --help must not show
+	// the value from the environment: the flag's default is empty and the
+	// environment is read when a command runs.
+	cmd.PersistentFlags().StringVar(&dbURL, "db", "", "Postgres URL (default: VX_DATABASE_URL, else "+devDatabaseURL+")")
+	cmd.PersistentPreRun = func(*cobra.Command, []string) {
+		if dbURL == "" {
+			dbURL = env("VX_DATABASE_URL", devDatabaseURL)
+		}
+	}
 	cmd.PersistentFlags().StringVar(&dataDir, "data", env("VX_DATA_DIR", ".vxdata"), "data directory for objects and git mirrors (VX_DATA_DIR)")
 
 	var addr string
