@@ -63,6 +63,7 @@ message Check {
   int32 failed = 4;
   bool ran_by_vx = 5; // vx ran the command; false: reported by the author
   int64 duration_ms = 6;
+  string notes = 7; // e.g. "12 of 14 packages from the Go test cache"
 }
 
 message Evidence {
