@@ -69,6 +69,26 @@ vx repo access acme/api                         # direct grants and everyone's r
 
 Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `person.create`).
 
+## Web UI
+
+The same management is in the web UI (`vx ui` opens it signed in). Pages are server-rendered and every change is a plain form, so no JavaScript is needed. Forms work only from the vx page itself (posts from other sites are refused) and only in a person's session: an agent signed in to the web UI sees what its person can see, but every change is refused with 403. Errors such as demoting the last owner are shown as a message on the page.
+
+| Page | Who sees it | What it shows and does |
+|---|---|---|
+| **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Site admins can switch to every organization on the server. |
+| **An organization** (`/ui/orgs/ORG`) | Its members, and site admins | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners, admins and site admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
+| **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, ...). People who can read the repository get 403; everyone else gets 404. |
+| **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Site admins | Everyone on the server: their agents, whether they are a site admin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a site admin. To anyone else the page does not exist (404). |
+
+Adding a person shows their first token on the next page, once: vx stores only a hash, never puts the token in a URL, and cannot show it again. Give it to them privately, not in a shared channel. They run
+
+```sh
+vx login --server https://vx.example.com --token TOKEN
+vx ui
+```
+
+and can then create more tokens and their own agents from Settings, and revoke the first token.
+
 ## Upgrading from v0.1
 
 v0.1 had no access control: everyone saw everything. The upgrade (migration 008) changes nobody's access:
@@ -82,7 +102,7 @@ Prune afterwards, as a site admin: see [deploy.md](deploy.md#upgrading-to-v02).
 
 ## Limits today
 
-- **Sign-in.** Tokens only. Site admins create people with `vx-server user-add` or the API; there is no single sign-on yet.
+- **Sign-in.** Tokens only. Site admins create people with `vx-server user-add`, the web UI (Admin, People) or the API; there is no single sign-on yet.
 - **Agents.** An agent can change any path its person can, and there are no per-agent budgets for lands or check minutes.
 - **Scale.** Objects live on the server's disk, so one instance. It scales up well; it does not scale out yet.
 - **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants on the GitHub side.

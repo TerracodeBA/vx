@@ -1,4 +1,5 @@
 {{define "crumbs"}}<a href="/ui">All efforts</a><span class="sep">/</span><span>{{.Repo.Name}}</span>{{end}}
+{{define "actions"}}{{if eq .Repo.Role "admin"}}<a class="btn ghost small-btn" href="/ui/repos/{{.Repo.Name}}/access">Access</a>{{end}}{{end}}
 {{define "content"}}
 <div class="page-head">
   <div>
