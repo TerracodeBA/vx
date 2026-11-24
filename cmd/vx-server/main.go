@@ -28,8 +28,15 @@ func env(key, def string) string {
 }
 
 func main() {
+	// The first SIGINT or SIGTERM cancels ctx, with a cause naming the
+	// signal, and starts a graceful shutdown. Stopping the notification then
+	// lets a second signal end the process at once.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
 	if err := root().ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "vx-server:", err)
 		os.Exit(1)

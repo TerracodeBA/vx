@@ -88,6 +88,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 func (s *Server) Close() { s.Store.Close() }
 
 // ListenAndServe serves until ctx is cancelled, then shuts down gracefully.
+// It logs why it stopped: context.Cause(ctx), which names the signal when
+// ctx comes from signal.NotifyContext.
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	srv := &http.Server{
 		Addr:              addr,
@@ -103,14 +105,23 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		return err
 	case <-ctx.Done():
 	}
-	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	s.log.Info("vx server shutting down", "reason", context.Cause(ctx).Error(), "grace", shutdownGrace)
+	shutdown, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	err := srv.Shutdown(shutdown)
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
-	return err
+	if err != nil {
+		s.log.Error("vx server did not shut down cleanly", "err", err)
+		return err
+	}
+	s.log.Info("vx server stopped")
+	return nil
 }
+
+// shutdownGrace is how long in-flight requests get to finish on shutdown.
+const shutdownGrace = 20 * time.Second
 
 type statusWriter struct {
 	http.ResponseWriter
