@@ -40,6 +40,22 @@
       {{end}}
       </ul>
     </div>
+    <div class="panel" id="rules">
+      <div class="panel-head"><h2>Rules (vx.toml)</h2></div>
+      {{if .RulesProblem}}<p class="muted small pre">{{.RulesProblem}}</p>
+      {{else if not .Rules.Source}}<p class="muted small">No vx.toml on {{.Repo.DefaultBranch}}. Rules declare what text merges cannot see: unique keys such as migration numbers, generated files, required checks.</p>
+      {{else}}
+      <p class="muted small">From <span class="mono">{{.Rules.Source}}</span></p>
+      {{if .Rules.Unique}}<h3 class="sec">Unique</h3>
+      <ul class="rows">{{range .Rules.Unique}}<li><span class="mono">{{.Name}}</span><span class="muted small mono">{{.Glob}}</span><span class="muted small mono" title="The first group of this regular expression, matched on the file name, may not repeat">key {{.Key}}</span></li>{{end}}</ul>{{end}}
+      {{if .Rules.Generated}}<h3 class="sec">Generated</h3>
+      <ul class="rows">{{range .Rules.Generated}}<li><span class="mono">{{.Glob}}</span><span class="muted small mono" title="vx never text-merges these files; regenerate them with this command">{{if .Command}}{{.Command}}{{else}}no command{{end}}</span></li>{{end}}</ul>{{end}}
+      {{if .Rules.RequiredChecks}}<h3 class="sec">Required checks</h3>
+      <ul class="rows">{{range .Rules.RequiredChecks}}<li><span class="mono small" title="vx land without --run for this command records it as not verified">{{.}}</span></li>{{end}}</ul>{{end}}
+      {{end}}
+      {{if .Reservations}}<h3 class="sec">Open reservations</h3>
+      <ul class="rows">{{$repo := .Repo.Name}}{{range .Reservations}}<li><span class="mono">{{.Rule}} {{.Value}}</span><a class="small" href="/ui/effort?repo={{$repo}}&amp;slug={{.EffortSlug}}">{{.EffortSlug}}</a><span class="muted small">{{principal .ReservedBy}} · {{ago .CreatedAt}}</span></li>{{end}}</ul>{{end}}
+    </div>
   </aside>
 </div>
 {{end}}

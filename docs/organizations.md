@@ -198,12 +198,14 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Inbox and wait (only items in repositories you can read) | `vx inbox`, `vx wait`, `vx_inbox` | read |
 | Mark notes read (notes in repositories you cannot read are skipped) | `vx board`, `vx context`, `vx inbox`, `vx wait`, the sync feed, MCP reads | read |
 | List shipments | `vx ship list` | read |
+| See the vx.toml rules and reservations | `vx rules`, `vx_rules` | read |
 | List claims and tasks, see a rebase | `vx claims`, `vx tasks`, `vx status`, `vx_claims`, `vx_tasks` | read |
 | See overlap forecasts with other efforts (a stale one is recomputed first) | `vx overlaps`, `vx status`, `vx land`, `vx_overlaps`, the web effort page and badges | read |
 | Import upstream commits | `vx repo sync` | write |
 | Start an effort | `vx effort new` | write |
 | Claim, add and change tasks (also by id) | `vx claim`, `vx release`, `vx task ...`, `vx_claim`, `vx_task_add`, `vx_task_update` | write |
 | Rebase an effort, continue or abort | `vx effort rebase` | write |
+| Reserve the next key of a vx.toml `[[unique]]` rule for an effort | `vx reserve`, `vx_reserve` | write |
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |

@@ -422,7 +422,22 @@ func (u *UI) repo(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	for _, e := range effs {
 		rows = append(rows, u.effortRow(r, repo.Repo, e, counts))
 	}
-	u.render(w, r, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name})
+	// vx.toml at the default branch; a broken one is shown as such.
+	rules, rulesErr := u.svc.GetRules(ctx, actor, repo.Name, "")
+	rulesProblem := ""
+	if rulesErr != nil {
+		rulesProblem = rulesErr.Error()
+	}
+	var open []service.Reservation
+	if res, err := u.svc.ListReservations(ctx, actor, repo.Name, ""); err == nil {
+		for _, x := range res {
+			if x.EffortOpen {
+				open = append(open, x)
+			}
+		}
+	}
+	u.render(w, r, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name,
+		"Rules": rules, "RulesProblem": rulesProblem, "Reservations": open})
 }
 
 // ---------- effort ----------

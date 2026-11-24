@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -130,5 +131,113 @@ func TestLandRecordsRequiredChecksNotVerified(t *testing.T) {
 	c = e.land(repo, e.effort(eff), "All", map[string]*string{"c.txt": s("c")}, all)
 	if len(c.Evidence.NotVerified) != 0 {
 		t.Fatalf("all run by vx: %+v", c.Evidence)
+	}
+}
+
+// Reserve hands out the next number after everything in use: the target
+// branch, every open effort, earlier reservations, with the same padding.
+func TestReserve(t *testing.T) {
+	e := newEnv(t)
+	repo, eff := e.setup()
+	e.moveMain(repo, "Main", map[string]*string{
+		"vx.toml":                 s(rulesToml),
+		"db/migrations/001_a.sql": s("a"),
+		"db/migrations/015_b.sql": s("b"),
+		"db/migrations/README.md": s("not a migration"),
+	})
+	if v, err := e.svc.RebaseEffort(e.ctx, e.alice, repo.Name, eff.Slug, ""); err != nil || v.Rebase.State != "done" {
+		t.Fatalf("rebase: %+v %v", v, err)
+	}
+	eff = e.effort(eff)
+	v, ex, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "migration")
+	if err != nil || v != "016" || ex != "db/migrations/016_<name>.sql" {
+		t.Fatalf("first: %q %q %v", v, ex, err)
+	}
+	// Another open effort already added 016 and 017 (one in its head only).
+	other, err := e.svc.CreateEffort(e.ctx, e.alice, service.CreateEffortInput{Repo: repo.Name, Name: "Other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.land(repo, other, "Two migrations", map[string]*string{
+		"db/migrations/016_c.sql": s("c"),
+		"db/migrations/017_d.sql": s("d"),
+	}, nil)
+	v, ex, err = e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "migration")
+	if err != nil || v != "018" || ex != "db/migrations/018_<name>.sql" {
+		t.Fatalf("after the other effort: %q %q %v", v, ex, err)
+	}
+	// Earlier reservations count even when nothing uses them yet.
+	v, _, err = e.svc.Reserve(e.ctx, e.agent, repo.Name, other.Slug, "migration")
+	if err != nil || v != "019" {
+		t.Fatalf("third: %q %v", v, err)
+	}
+	res, err := e.svc.ListReservations(e.ctx, e.alice, repo.Name, "migration")
+	if err != nil || len(res) != 3 || res[0].Value != "019" || res[0].EffortSlug != other.Slug || res[0].ReservedBy != "agent:alice/claude" || !res[0].EffortOpen {
+		t.Fatalf("reservations: %+v %v", res, err)
+	}
+
+	// Errors say what to do.
+	if _, _, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "migrations"); err == nil || !strings.Contains(err.Error(), `vx.toml has no [[unique]] rule "migrations"; its rules: migration`) {
+		t.Fatalf("unknown rule: %v", err)
+	}
+	if _, _, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, "nope", "migration"); err == nil {
+		t.Fatal("unknown effort")
+	}
+
+	// GetRules: the effort head, or the default branch.
+	r, err := e.svc.GetRules(e.ctx, e.alice, repo.Name, eff.Slug)
+	if err != nil || len(r.Unique) != 1 || !strings.HasPrefix(r.Source, "vx.toml at effort "+eff.Slug+" ") {
+		t.Fatalf("rules at the effort: %+v %v", r, err)
+	}
+	r, err = e.svc.GetRules(e.ctx, e.alice, repo.Name, "")
+	if err != nil || len(r.Generated) != 1 || !strings.HasPrefix(r.Source, "vx.toml at main ") {
+		t.Fatalf("rules at main: %+v %v", r, err)
+	}
+}
+
+func TestReserveFormatsAndConcurrency(t *testing.T) {
+	e := newEnv(t)
+	repo, eff := e.setup()
+	toml := "[[unique]]\nname = \"n\"\nglob = \"n/*\"\nkey = '^(\\d+)'\n\n[[unique]]\nname = \"word\"\nglob = \"w/*.txt\"\nkey = '^([a-z]+)'\n\n[[unique]]\nname = \"empty\"\nglob = \"e/*.sql\"\nkey = '^(\\d+)_'\n"
+	e.land(repo, eff, "Rules", map[string]*string{
+		"vx.toml": s(toml), "n/9.txt": s("x"), "n/10.txt": s("x"), "w/abc.txt": s("x"),
+	}, nil)
+	eff = e.effort(eff)
+	if v, ex, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "n"); err != nil || v != "11" || ex != "n/11<name>.txt" {
+		t.Fatalf("unpadded: %q %q %v", v, ex, err)
+	}
+	if v, ex, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "empty"); err != nil || v != "1" || ex != "e/1_<name>.sql" {
+		t.Fatalf("no files yet: %q %q %v", v, ex, err)
+	}
+	if _, _, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "word"); err == nil || !strings.Contains(err.Error(), "not numbers") {
+		t.Fatalf("words: %v", err)
+	}
+
+	// Concurrent calls never get the same value.
+	const n = 12
+	got := make(chan string, n)
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			v, _, err := e.svc.Reserve(e.ctx, e.agent, repo.Name, eff.Slug, "n")
+			got <- v
+			errs <- err
+		}()
+	}
+	seen := map[string]bool{}
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		v := <-got
+		if seen[v] {
+			t.Fatalf("value %s handed out twice", v)
+		}
+		seen[v] = true
+	}
+	for i := 12; i < 12+n; i++ {
+		if !seen[strconv.Itoa(i)] {
+			t.Fatalf("values %v: want 12..%d", seen, 12+n-1)
+		}
 	}
 }

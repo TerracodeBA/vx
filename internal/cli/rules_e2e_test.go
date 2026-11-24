@@ -176,3 +176,58 @@ func TestLandRequiredChecksNotVerified(t *testing.T) {
 		t.Fatalf("all required checks ran:\n%s", out)
 	}
 }
+
+func TestReserveAndRulesCommands(t *testing.T) {
+	h, aliceToken := newHarness(t)
+	work := t.TempDir()
+	alice := h.user("alice", aliceToken, work)
+	alice.must("repo", "create", "svc")
+	alice.must("effort", "new", "Feature", "--repo", "svc")
+	alice.must("clone", "svc", "feature", "a")
+	alice.dir = filepath.Join(work, "a")
+	if out := alice.must("rules"); !strings.Contains(out, "No vx.toml in svc (effort feature): no rules.") {
+		t.Fatalf("rules without vx.toml:\n%s", out)
+	}
+	if out, code := alice.run("reserve", "migration"); code == 0 || !strings.Contains(out, "has no [[unique]] rules") {
+		t.Fatalf("reserve without rules: exit %d\n%s", code, out)
+	}
+	alice.must("new", "Rules")
+	alice.write("vx.toml", e2eRules+"\n[checks]\nrequired = [\"go vet ./...\"]\n")
+	alice.write("db/migrations/016_v03.sql", "x")
+	alice.must("land")
+
+	out := alice.must("reserve", "migration")
+	if !strings.Contains(out, "Reserved migration 017 for this effort: name it db/migrations/017_<name>.sql") {
+		t.Fatalf("reserve:\n%s", out)
+	}
+	var res struct{ Value, Example string }
+	if err := json.Unmarshal([]byte(alice.must("reserve", "migration", "--json")), &res); err != nil || res.Value != "018" {
+		t.Fatalf("reserve --json: %+v %v", res, err)
+	}
+	out = alice.must("rules")
+	for _, want := range []string{
+		"Rules from vx.toml at effort feature ",
+		"migration    db/migrations/*.sql  key ^(\\d+)_",
+		"gen/**", "buf generate",
+		"Required checks (vx land --run each):\n  go vet ./...",
+		"Reservations:", "018", "017",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rules lacks %q:\n%s", want, out)
+		}
+	}
+	var rj struct {
+		Rules struct {
+			Source string `json:"source"`
+		} `json:"rules"`
+		Reservations []struct {
+			Value string `json:"value"`
+		} `json:"reservations"`
+	}
+	if err := json.Unmarshal([]byte(alice.must("rules", "--json")), &rj); err != nil || rj.Rules.Source == "" || len(rj.Reservations) != 2 {
+		t.Fatalf("rules --json: %+v %v", rj, err)
+	}
+	if out, code := alice.run("reserve", "migrations"); code == 0 || !strings.Contains(out, `vx.toml has no [[unique]] rule "migrations"; its rules: migration`) {
+		t.Fatalf("unknown rule: exit %d\n%s", code, out)
+	}
+}
