@@ -22,11 +22,18 @@ builds:
     ldflags:
       - -s -w -X github.com/TerracodeBA/vx/internal/version.Version={{.Version}} -X github.com/TerracodeBA/vx/internal/version.Commit={{.ShortCommit}} -X github.com/TerracodeBA/vx/internal/version.Date={{.Date}}
 archives:
-  - formats: [tar.gz]
+  - id: vx
+    ids: [vx]
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "vx_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+  - id: vx-server
+    ids: [vx-server]
+    formats: [tar.gz]
+    name_template: "vx-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: [LICENSE, README.md]
 checksum:
   name_template: checksums.txt
