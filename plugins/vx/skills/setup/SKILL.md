@@ -24,7 +24,7 @@ If the user's team already has a vx server, skip the server steps: install the C
 curl -fsSL https://SERVER/install.sh | sh      # vx into ~/.local/bin; it says if that is not on PATH
 ```
 
-Then ask the user to run `! vx login --server https://SERVER` themselves: it opens the browser, they sign in (with GitHub, for example), compare the code with the terminal and click Approve. Check with `vx whoami`. If `~/.local/bin` is not on PATH, see step 5.
+Then ask the user to run `! vx login --server https://SERVER` themselves: it opens the browser, they sign in (with GitHub, for example), compare the code with the terminal and click Approve. Check with `vx whoami`. If `~/.local/bin` is not on PATH, see step 5. Each `vx login --server URL` saves a profile named after the host and makes it current, so a user with several servers switches with `vx use HOST` (`vx profiles` lists them, `vx --profile NAME CMD` runs one command elsewhere); `VX_SERVER` and `VX_TOKEN` still take precedence.
 
 ## 1. Check prerequisites
 
@@ -156,6 +156,7 @@ Run `vx-server serve` in the background (a terminal, tmux, or a systemd user ser
 ## Troubleshooting
 
 - `vx: not logged in`: run `vx login --server URL`, or set `VX_SERVER` and `VX_TOKEN`.
+- `vx: no profile "NAME"`: `vx profiles` lists the saved ones; `vx login --server URL --profile NAME` adds it.
 - `vx: command not found` after installing: `~/.local/bin` is not on PATH; add the line the installer printed, or run `~/.local/bin/vx`.
 - `this vx ... is too old for this server` or a `vx: notice:` about a newer server: run the installer again, `curl -fsSL SERVER/install.sh | sh`.
 - `connect to database`: Postgres is not up; `docker compose ps` and `docker compose logs postgres`.

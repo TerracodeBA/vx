@@ -131,7 +131,7 @@ func TestLoginThroughBrowser(t *testing.T) {
 		t.Fatalf("opened %q", opened)
 	}
 	text := out.String()
-	for _, want := range []string{"Your login code: ", "Opened it in your browser.", "Logged in to " + h.server + " as user:alice\n"} {
+	for _, want := range []string{"Your login code: ", "Opened it in your browser.", "Logged in to " + h.server + " as user:alice (profile "} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output lacks %q:\n%s", want, text)
 		}
@@ -141,10 +141,15 @@ func TestLoginThroughBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	var saved struct {
-		Server, Token string
-		ServerInfo    *struct{ Features []string } `json:"server_info"`
+		Current  string `json:"current"`
+		Profiles map[string]struct {
+			Server, Token string
+		} `json:"profiles"`
+		Servers map[string]*struct{ Features []string } `json:"servers"`
 	}
-	if err := json.Unmarshal(data, &saved); err != nil || saved.Server != h.server || !strings.HasPrefix(saved.Token, "vxt_") || saved.Token == aliceToken || saved.ServerInfo == nil {
+	host := strings.TrimPrefix(h.server, "http://")
+	if err := json.Unmarshal(data, &saved); err != nil || saved.Current != host || saved.Profiles[host].Server != h.server ||
+		!strings.HasPrefix(saved.Profiles[host].Token, "vxt_") || saved.Profiles[host].Token == aliceToken || saved.Servers[h.server] == nil {
 		t.Fatalf("config = %s (%v)", data, err)
 	}
 	if fi, _ := os.Stat(filepath.Join(home, "config.json")); fi.Mode().Perm() != 0o600 {
