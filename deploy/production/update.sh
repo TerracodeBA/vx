@@ -6,7 +6,7 @@ REF=${1:-main}
 SRC=/opt/vx/src
 /usr/local/sbin/vx-backup
 git -C $SRC fetch -q --tags origin
-git -C $SRC checkout -q --detach "$(git -C $SRC rev-parse "origin/$REF" 2>/dev/null || git -C $SRC rev-parse "$REF")"
+git -C $SRC checkout -q --detach "$(git -C $SRC rev-parse --verify --quiet "origin/$REF^{commit}" || git -C $SRC rev-parse --verify "$REF^{commit}")"
 cd $SRC/deploy/production
 export VX_COMMIT=$(git -C $SRC rev-parse --short=12 HEAD) VX_VERSION=$(git -C $SRC describe --tags --always)
 docker compose up -d --build

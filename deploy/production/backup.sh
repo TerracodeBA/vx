@@ -11,6 +11,8 @@ mkdir -p $OUT && chmod 700 $OUT
 docker compose exec -T postgres pg_dump -U vx --format=custom vx > $OUT/vx-db-$STAMP.dump
 docker compose exec -T vx tar -czf - -C /data . > $OUT/vx-data-$STAMP.tgz
 find $OUT -name 'vx-*' -mtime +14 -delete
+# Updates take a backup too: keep at most the 20 newest of each kind.
+for kind in db data; do ls -1t $OUT/vx-$kind-* 2>/dev/null | tail -n +21 | xargs -r rm -f --; done
 if rclone listremotes 2>/dev/null | grep -q '^offsite:'; then
   rclone copy $OUT offsite:vx-backups --max-age 2d
 fi
