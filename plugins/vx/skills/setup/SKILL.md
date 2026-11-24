@@ -82,6 +82,16 @@ The command prints a token once. Do not repeat it in chat. Ask the user to run t
 vx whoami
 ```
 
+### With GitHub sign-in
+
+When the server has a GitHub App and `VX_PUBLIC_URL` (Admin > GitHub shows it), people sign in with GitHub: no tokens to hand around, nothing secret in chat. Instead of `user-add`:
+
+```sh
+docker compose exec vx vx-server invite GITHUB_LOGIN --admin    # the first admin; others: Admin > People > Invite by GitHub login
+```
+
+Then the user opens the server URL in a browser, chooses **Sign in with GitHub**, and follows the **Set up vx** page: install the CLI, then `vx login --server URL` (it opens the browser to approve). People who already have a token account link GitHub once from Settings > Connect GitHub. `VX_SIGNUP=open` lets anyone with GitHub sign up; `closed` lets nobody new in.
+
 ## 6. Connect a repository
 
 Ask which repository to connect. Then one of:

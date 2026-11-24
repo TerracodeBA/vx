@@ -134,25 +134,6 @@ func githubNotImplemented() error {
 	return errf(CodeUnavailable, "this part of GitHub sign-in is not implemented yet")
 }
 
-// GitHubSignInStart returns the GitHub authorize URL for a web sign-in and
-// the state and PKCE verifier the web layer keeps in a short-lived cookie.
-func (s *Service) GitHubSignInStart(ctx context.Context, next string) (authorizeURL, state, verifier string, err error) {
-	return "", "", "", githubNotImplemented()
-}
-
-// GitHubSignInFinish completes a web sign-in: it links or creates the
-// person (per the signup mode), syncs their organizations, and returns the
-// person and a new web-session token. isNew is true on first sign-in.
-func (s *Service) GitHubSignInFinish(ctx context.Context, code, verifier string) (p store.Principal, token string, isNew bool, err error) {
-	return store.Principal{}, "", false, githubNotImplemented()
-}
-
-// InviteGitHubUser allows a GitHub login to sign up while sign-up is
-// invite-only (site admins).
-func (s *Service) InviteGitHubUser(ctx context.Context, actor Actor, login, note string) error {
-	return githubNotImplemented()
-}
-
 // HandleGitHubWebhook verifies and applies a webhook delivery:
 // installations, repositories, membership and permission changes.
 func (s *Service) HandleGitHubWebhook(ctx context.Context, event, deliveryID, signature string, body []byte) error {

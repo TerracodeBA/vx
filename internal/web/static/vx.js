@@ -19,6 +19,19 @@
     });
   }
 
+  // Copy buttons: data-copy names the element whose text is copied.
+  document.querySelectorAll("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var src = document.getElementById(b.getAttribute("data-copy"));
+      if (!src || !navigator.clipboard) return;
+      navigator.clipboard.writeText(src.textContent.trim()).then(function () {
+        var was = b.textContent;
+        b.textContent = "Copied";
+        setTimeout(function () { b.textContent = was; }, 1500);
+      });
+    });
+  });
+
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function unstore(k) { try { localStorage.removeItem(k); } catch (e) {} }
 

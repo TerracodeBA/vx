@@ -175,6 +175,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/revoke", u.auth(u.revokePost))
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	u.mountAdmin(mux)
+	u.mountGitHub(mux)
 	return nil
 }
 
@@ -258,6 +259,7 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 		data["Nav"] = u.nav(r)
 		if a, ok := data["Actor"].(service.Actor); ok {
 			data["NavAdmin"] = u.svc.IsSiteAdmin(r.Context(), a)
+			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
 		}
 		if _, ok := data["Section"]; !ok {
 			data["Section"] = ""
@@ -309,7 +311,8 @@ func (u *UI) fail(w http.ResponseWriter, err error) {
 // ---------- login ----------
 
 func (u *UI) loginPage(w http.ResponseWriter, r *http.Request) {
-	u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": r.URL.Query().Get("next"), "Expired": r.URL.Query().Get("expired") != ""})
+	u.render(w, r, "login", map[string]any{"Title": "Sign in", "Next": r.URL.Query().Get("next"), "Expired": r.URL.Query().Get("expired") != "",
+		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Signup": string(u.svc.SignupModeOrDefault())})
 }
 
 func (u *UI) loginPost(w http.ResponseWriter, r *http.Request) {
@@ -1346,6 +1349,7 @@ func (u *UI) settings(w http.ResponseWriter, r *http.Request, actor service.Acto
 		}
 	}
 	data["AlreadyRevoked"] = r.URL.Query().Get("already") != ""
+	u.settingsGitHub(r, actor, data)
 	u.render(w, r, "settings", data)
 }
 
