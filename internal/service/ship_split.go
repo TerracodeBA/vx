@@ -280,6 +280,10 @@ func (s *Service) PlanSplit(ctx context.Context, actor Actor, in SplitInput) (Sh
 				sg.Files = append(sg.Files, d.Path)
 			}
 			sg.Warnings = s.treeWarnings(ctx, rp.Tree, diff)
+			sg.Warnings = append(sg.Warnings, engine.MergedByDeclWarnings(rp.MergedByDecl)...)
+			if rp.Merged {
+				sg.Warnings = append(sg.Warnings, s.partSideWarnings(ctx, plan, base, rp.Tree, sg.Files)...)
+			}
 			sg.Warnings = append(sg.Warnings, engine.GeneratedWarnings(uniqueGenerated(rp.Generated))...)
 			sg.Warnings = append(sg.Warnings, s.ruleWarnings(ctx, base, rp.Tree)...)
 		}
@@ -1042,4 +1046,38 @@ func (s *Service) refuseOverSplit(ctx context.Context, plan ShipPlan) error {
 	}
 	return errf(CodeFailedPrecondition, "effort %s is shipped as %d pull requests (%s): update them with vx ship open --split %s, or close them on the host first",
 		plan.Effort.Slug, len(open), strings.Join(open, ", "), mode)
+}
+
+// partSideWarnings is PlanShipment's semantic check (signature changes that
+// meet new callers) for one part of a split: the effort's own changes
+// against what the part is replayed onto, kept where they touch the part's
+// files.
+func (s *Service) partSideWarnings(ctx context.Context, plan ShipPlan, onto, merged hash.Hash, files []string) []engine.Warning {
+	effBase, err := s.Store.GetChangeset(ctx, plan.Repo.ID, plan.Effort.Base)
+	if err != nil {
+		return nil
+	}
+	effHead, err := s.Store.GetChangeset(ctx, plan.Repo.ID, plan.Effort.Head)
+	if err != nil {
+		return nil
+	}
+	ws := s.sideWarnings(ctx, engine.GoSides{
+		Base: effBase.Tree, Ours: effHead.Tree, Theirs: onto, Merged: merged,
+		OursName: "effort " + plan.Effort.Slug, TheirsName: plan.Target,
+	})
+	in := map[string]bool{}
+	for _, f := range files {
+		in[f] = true
+	}
+	var out []engine.Warning
+	for _, w := range ws {
+		keep := in[w.Path]
+		for _, f := range w.Files {
+			keep = keep || in[f]
+		}
+		if keep || w.Kind == engine.WarningCheck {
+			out = append(out, w)
+		}
+	}
+	return out
 }
