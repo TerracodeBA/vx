@@ -192,13 +192,16 @@ func (x *Branch) GetSyncedAt() string {
 type Repo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"` // github, git, none
+	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"` // github, gitlab, gitea, forgejo, bitbucket, git, none
 	Remote        string                 `protobuf:"bytes,3,opt,name=remote,proto3" json:"remote,omitempty"`
 	DefaultBranch string                 `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"`
 	Branches      []*Branch              `protobuf:"bytes,5,rep,name=branches,proto3" json:"branches,omitempty"`
 	Org           string                 `protobuf:"bytes,6,opt,name=org,proto3" json:"org,omitempty"`                                        // the organization that owns the repository
 	MyRole        string                 `protobuf:"bytes,7,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`                    // the caller's role: read, write or admin
 	GithubBacked  bool                   `protobuf:"varint,8,opt,name=github_backed,json=githubBacked,proto3" json:"github_backed,omitempty"` // roles come from GitHub permissions, not vx grants
+	BaseUrl       string                 `protobuf:"bytes,9,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                 // the host's web address (GitLab, Gitea, Forgejo, Bitbucket)
+	Host          string                 `protobuf:"bytes,10,opt,name=host,proto3" json:"host,omitempty"`                                     // the host as people call it: GitHub, GitLab, Gitea, Forgejo, Bitbucket, git, vx
+	WebUrl        string                 `protobuf:"bytes,11,opt,name=web_url,json=webUrl,proto3" json:"web_url,omitempty"`                   // the repository's page on its host, when known
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -287,6 +290,27 @@ func (x *Repo) GetGithubBacked() bool {
 		return x.GithubBacked
 	}
 	return false
+}
+
+func (x *Repo) GetBaseUrl() string {
+	if x != nil {
+		return x.BaseUrl
+	}
+	return ""
+}
+
+func (x *Repo) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *Repo) GetWebUrl() string {
+	if x != nil {
+		return x.WebUrl
+	}
+	return ""
 }
 
 type Effort struct {
@@ -2436,10 +2460,12 @@ func (x *GetObjectsResponse) GetObjects() []*Object {
 type CreateRepoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`                                // github, git or none
-	Remote        string                 `protobuf:"bytes,3,opt,name=remote,proto3" json:"remote,omitempty"`                                    // owner/name for github, URL or path for git
+	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`                                // github, gitlab, gitea, forgejo, bitbucket, git or none
+	Remote        string                 `protobuf:"bytes,3,opt,name=remote,proto3" json:"remote,omitempty"`                                    // owner/name for github, group/project for gitlab, owner/repo for gitea and forgejo, workspace/repo for bitbucket, URL or path for git
 	DefaultBranch string                 `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"` // empty: ask the provider, or "main"
 	Org           string                 `protobuf:"bytes,5,opt,name=org,proto3" json:"org,omitempty"`                                          // owning organization; empty: the org named like the repo's owner part, else the caller's personal org
+	BaseUrl       string                 `protobuf:"bytes,6,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                   // gitlab, gitea, forgejo, bitbucket: the host's web address; empty: the server's default (gitlab.com, bitbucket.org)
+	Token         string                 `protobuf:"bytes,7,opt,name=token,proto3" json:"token,omitempty"`                                      // gitlab, gitea, forgejo, bitbucket: a token for this repository only, kept sealed; empty: the server's token for the host
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2509,9 +2535,24 @@ func (x *CreateRepoRequest) GetOrg() string {
 	return ""
 }
 
+func (x *CreateRepoRequest) GetBaseUrl() string {
+	if x != nil {
+		return x.BaseUrl
+	}
+	return ""
+}
+
+func (x *CreateRepoRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
 type CreateRepoResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Repo          *Repo                  `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Hook          *HostHook              `protobuf:"bytes,2,opt,name=hook,proto3" json:"hook,omitempty"` // gitlab, gitea, forgejo, bitbucket: how to register the webhook
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2553,6 +2594,186 @@ func (x *CreateRepoResponse) GetRepo() *Repo {
 	return nil
 }
 
+func (x *CreateRepoResponse) GetHook() *HostHook {
+	if x != nil {
+		return x.Hook
+	}
+	return nil
+}
+
+// HostHook is how to register a repository's webhook on its host.
+type HostHook struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`                                       // where the host delivers
+	Secret        string                 `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`                                 // the repository's webhook secret: only right after it was made
+	SecretSource  string                 `protobuf:"bytes,3,opt,name=secret_source,json=secretSource,proto3" json:"secret_source,omitempty"` // repository, server (VX_<HOST>_WEBHOOK_SECRET) or empty (none: deliveries are refused)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostHook) Reset() {
+	*x = HostHook{}
+	mi := &file_vx_v1_vx_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostHook) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostHook) ProtoMessage() {}
+
+func (x *HostHook) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostHook.ProtoReflect.Descriptor instead.
+func (*HostHook) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *HostHook) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *HostHook) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
+func (x *HostHook) GetSecretSource() string {
+	if x != nil {
+		return x.SecretSource
+	}
+	return ""
+}
+
+type SetRepoHostRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Repo                string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	SetToken            bool                   `protobuf:"varint,2,opt,name=set_token,json=setToken,proto3" json:"set_token,omitempty"` // replace the token with token (empty token: remove it)
+	Token               string                 `protobuf:"bytes,3,opt,name=token,proto3" json:"token,omitempty"`
+	RotateWebhookSecret bool                   `protobuf:"varint,4,opt,name=rotate_webhook_secret,json=rotateWebhookSecret,proto3" json:"rotate_webhook_secret,omitempty"` // make a new webhook secret, returned once
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SetRepoHostRequest) Reset() {
+	*x = SetRepoHostRequest{}
+	mi := &file_vx_v1_vx_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRepoHostRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRepoHostRequest) ProtoMessage() {}
+
+func (x *SetRepoHostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRepoHostRequest.ProtoReflect.Descriptor instead.
+func (*SetRepoHostRequest) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SetRepoHostRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *SetRepoHostRequest) GetSetToken() bool {
+	if x != nil {
+		return x.SetToken
+	}
+	return false
+}
+
+func (x *SetRepoHostRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *SetRepoHostRequest) GetRotateWebhookSecret() bool {
+	if x != nil {
+		return x.RotateWebhookSecret
+	}
+	return false
+}
+
+type SetRepoHostResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hook          *HostHook              `protobuf:"bytes,1,opt,name=hook,proto3" json:"hook,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetRepoHostResponse) Reset() {
+	*x = SetRepoHostResponse{}
+	mi := &file_vx_v1_vx_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRepoHostResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRepoHostResponse) ProtoMessage() {}
+
+func (x *SetRepoHostResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vx_v1_vx_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRepoHostResponse.ProtoReflect.Descriptor instead.
+func (*SetRepoHostResponse) Descriptor() ([]byte, []int) {
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *SetRepoHostResponse) GetHook() *HostHook {
+	if x != nil {
+		return x.Hook
+	}
+	return nil
+}
+
 type GetRepoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -2562,7 +2783,7 @@ type GetRepoRequest struct {
 
 func (x *GetRepoRequest) Reset() {
 	*x = GetRepoRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[37]
+	mi := &file_vx_v1_vx_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2574,7 +2795,7 @@ func (x *GetRepoRequest) String() string {
 func (*GetRepoRequest) ProtoMessage() {}
 
 func (x *GetRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[37]
+	mi := &file_vx_v1_vx_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2587,7 +2808,7 @@ func (x *GetRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepoRequest.ProtoReflect.Descriptor instead.
 func (*GetRepoRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{37}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetRepoRequest) GetName() string {
@@ -2606,7 +2827,7 @@ type GetRepoResponse struct {
 
 func (x *GetRepoResponse) Reset() {
 	*x = GetRepoResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[38]
+	mi := &file_vx_v1_vx_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2618,7 +2839,7 @@ func (x *GetRepoResponse) String() string {
 func (*GetRepoResponse) ProtoMessage() {}
 
 func (x *GetRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[38]
+	mi := &file_vx_v1_vx_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2631,7 +2852,7 @@ func (x *GetRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepoResponse.ProtoReflect.Descriptor instead.
 func (*GetRepoResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{38}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetRepoResponse) GetRepo() *Repo {
@@ -2649,7 +2870,7 @@ type ListReposRequest struct {
 
 func (x *ListReposRequest) Reset() {
 	*x = ListReposRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[39]
+	mi := &file_vx_v1_vx_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2661,7 +2882,7 @@ func (x *ListReposRequest) String() string {
 func (*ListReposRequest) ProtoMessage() {}
 
 func (x *ListReposRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[39]
+	mi := &file_vx_v1_vx_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2674,7 +2895,7 @@ func (x *ListReposRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReposRequest.ProtoReflect.Descriptor instead.
 func (*ListReposRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{39}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{42}
 }
 
 type ListReposResponse struct {
@@ -2686,7 +2907,7 @@ type ListReposResponse struct {
 
 func (x *ListReposResponse) Reset() {
 	*x = ListReposResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[40]
+	mi := &file_vx_v1_vx_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2698,7 +2919,7 @@ func (x *ListReposResponse) String() string {
 func (*ListReposResponse) ProtoMessage() {}
 
 func (x *ListReposResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[40]
+	mi := &file_vx_v1_vx_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2711,7 +2932,7 @@ func (x *ListReposResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReposResponse.ProtoReflect.Descriptor instead.
 func (*ListReposResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{40}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListReposResponse) GetRepos() []*Repo {
@@ -2731,7 +2952,7 @@ type SyncBranchRequest struct {
 
 func (x *SyncBranchRequest) Reset() {
 	*x = SyncBranchRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[41]
+	mi := &file_vx_v1_vx_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2743,7 +2964,7 @@ func (x *SyncBranchRequest) String() string {
 func (*SyncBranchRequest) ProtoMessage() {}
 
 func (x *SyncBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[41]
+	mi := &file_vx_v1_vx_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2756,7 +2977,7 @@ func (x *SyncBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncBranchRequest.ProtoReflect.Descriptor instead.
 func (*SyncBranchRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{41}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *SyncBranchRequest) GetRepo() string {
@@ -2783,7 +3004,7 @@ type SyncBranchResponse struct {
 
 func (x *SyncBranchResponse) Reset() {
 	*x = SyncBranchResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[42]
+	mi := &file_vx_v1_vx_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2795,7 +3016,7 @@ func (x *SyncBranchResponse) String() string {
 func (*SyncBranchResponse) ProtoMessage() {}
 
 func (x *SyncBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[42]
+	mi := &file_vx_v1_vx_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2808,7 +3029,7 @@ func (x *SyncBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncBranchResponse.ProtoReflect.Descriptor instead.
 func (*SyncBranchResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{42}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *SyncBranchResponse) GetBranch() *Branch {
@@ -2837,7 +3058,7 @@ type CreateEffortRequest struct {
 
 func (x *CreateEffortRequest) Reset() {
 	*x = CreateEffortRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[43]
+	mi := &file_vx_v1_vx_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2849,7 +3070,7 @@ func (x *CreateEffortRequest) String() string {
 func (*CreateEffortRequest) ProtoMessage() {}
 
 func (x *CreateEffortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[43]
+	mi := &file_vx_v1_vx_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +3083,7 @@ func (x *CreateEffortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEffortRequest.ProtoReflect.Descriptor instead.
 func (*CreateEffortRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{43}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CreateEffortRequest) GetRepo() string {
@@ -2902,7 +3123,7 @@ type CreateEffortResponse struct {
 
 func (x *CreateEffortResponse) Reset() {
 	*x = CreateEffortResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[44]
+	mi := &file_vx_v1_vx_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2914,7 +3135,7 @@ func (x *CreateEffortResponse) String() string {
 func (*CreateEffortResponse) ProtoMessage() {}
 
 func (x *CreateEffortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[44]
+	mi := &file_vx_v1_vx_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2927,7 +3148,7 @@ func (x *CreateEffortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEffortResponse.ProtoReflect.Descriptor instead.
 func (*CreateEffortResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{44}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *CreateEffortResponse) GetEffort() *Effort {
@@ -2947,7 +3168,7 @@ type GetEffortRequest struct {
 
 func (x *GetEffortRequest) Reset() {
 	*x = GetEffortRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[45]
+	mi := &file_vx_v1_vx_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +3180,7 @@ func (x *GetEffortRequest) String() string {
 func (*GetEffortRequest) ProtoMessage() {}
 
 func (x *GetEffortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[45]
+	mi := &file_vx_v1_vx_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +3193,7 @@ func (x *GetEffortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEffortRequest.ProtoReflect.Descriptor instead.
 func (*GetEffortRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{45}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetEffortRequest) GetRepo() string {
@@ -2999,7 +3220,7 @@ type GetEffortResponse struct {
 
 func (x *GetEffortResponse) Reset() {
 	*x = GetEffortResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[46]
+	mi := &file_vx_v1_vx_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3011,7 +3232,7 @@ func (x *GetEffortResponse) String() string {
 func (*GetEffortResponse) ProtoMessage() {}
 
 func (x *GetEffortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[46]
+	mi := &file_vx_v1_vx_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3024,7 +3245,7 @@ func (x *GetEffortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEffortResponse.ProtoReflect.Descriptor instead.
 func (*GetEffortResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{46}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetEffortResponse) GetEffort() *Effort {
@@ -3051,7 +3272,7 @@ type ListEffortsRequest struct {
 
 func (x *ListEffortsRequest) Reset() {
 	*x = ListEffortsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[47]
+	mi := &file_vx_v1_vx_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3063,7 +3284,7 @@ func (x *ListEffortsRequest) String() string {
 func (*ListEffortsRequest) ProtoMessage() {}
 
 func (x *ListEffortsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[47]
+	mi := &file_vx_v1_vx_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3076,7 +3297,7 @@ func (x *ListEffortsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffortsRequest.ProtoReflect.Descriptor instead.
 func (*ListEffortsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{47}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListEffortsRequest) GetRepo() string {
@@ -3102,7 +3323,7 @@ type ListEffortsResponse struct {
 
 func (x *ListEffortsResponse) Reset() {
 	*x = ListEffortsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[48]
+	mi := &file_vx_v1_vx_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3114,7 +3335,7 @@ func (x *ListEffortsResponse) String() string {
 func (*ListEffortsResponse) ProtoMessage() {}
 
 func (x *ListEffortsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[48]
+	mi := &file_vx_v1_vx_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3127,7 +3348,7 @@ func (x *ListEffortsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffortsResponse.ProtoReflect.Descriptor instead.
 func (*ListEffortsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{48}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListEffortsResponse) GetEfforts() []*Effort {
@@ -3149,7 +3370,7 @@ type LogRequest struct {
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[49]
+	mi := &file_vx_v1_vx_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3161,7 +3382,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[49]
+	mi := &file_vx_v1_vx_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3174,7 +3395,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{49}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *LogRequest) GetRepo() string {
@@ -3214,7 +3435,7 @@ type LogResponse struct {
 
 func (x *LogResponse) Reset() {
 	*x = LogResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[50]
+	mi := &file_vx_v1_vx_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3226,7 +3447,7 @@ func (x *LogResponse) String() string {
 func (*LogResponse) ProtoMessage() {}
 
 func (x *LogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[50]
+	mi := &file_vx_v1_vx_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3239,7 +3460,7 @@ func (x *LogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogResponse.ProtoReflect.Descriptor instead.
 func (*LogResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{50}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *LogResponse) GetChangesets() []*Changeset {
@@ -3259,7 +3480,7 @@ type GetChangesetRequest struct {
 
 func (x *GetChangesetRequest) Reset() {
 	*x = GetChangesetRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[51]
+	mi := &file_vx_v1_vx_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3271,7 +3492,7 @@ func (x *GetChangesetRequest) String() string {
 func (*GetChangesetRequest) ProtoMessage() {}
 
 func (x *GetChangesetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[51]
+	mi := &file_vx_v1_vx_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3284,7 +3505,7 @@ func (x *GetChangesetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangesetRequest.ProtoReflect.Descriptor instead.
 func (*GetChangesetRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{51}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetChangesetRequest) GetRepo() string {
@@ -3310,7 +3531,7 @@ type GetChangesetResponse struct {
 
 func (x *GetChangesetResponse) Reset() {
 	*x = GetChangesetResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[52]
+	mi := &file_vx_v1_vx_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3322,7 +3543,7 @@ func (x *GetChangesetResponse) String() string {
 func (*GetChangesetResponse) ProtoMessage() {}
 
 func (x *GetChangesetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[52]
+	mi := &file_vx_v1_vx_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3335,7 +3556,7 @@ func (x *GetChangesetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangesetResponse.ProtoReflect.Descriptor instead.
 func (*GetChangesetResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{52}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GetChangesetResponse) GetChangeset() *Changeset {
@@ -3355,7 +3576,7 @@ type ReportChangesRequest struct {
 
 func (x *ReportChangesRequest) Reset() {
 	*x = ReportChangesRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[53]
+	mi := &file_vx_v1_vx_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3367,7 +3588,7 @@ func (x *ReportChangesRequest) String() string {
 func (*ReportChangesRequest) ProtoMessage() {}
 
 func (x *ReportChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[53]
+	mi := &file_vx_v1_vx_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3380,7 +3601,7 @@ func (x *ReportChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportChangesRequest.ProtoReflect.Descriptor instead.
 func (*ReportChangesRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{53}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ReportChangesRequest) GetId() string {
@@ -3405,7 +3626,7 @@ type ReportChangesResponse struct {
 
 func (x *ReportChangesResponse) Reset() {
 	*x = ReportChangesResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[54]
+	mi := &file_vx_v1_vx_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3417,7 +3638,7 @@ func (x *ReportChangesResponse) String() string {
 func (*ReportChangesResponse) ProtoMessage() {}
 
 func (x *ReportChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[54]
+	mi := &file_vx_v1_vx_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3430,7 +3651,7 @@ func (x *ReportChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportChangesResponse.ProtoReflect.Descriptor instead.
 func (*ReportChangesResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{54}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{57}
 }
 
 type OpenWorkspaceRequest struct {
@@ -3444,7 +3665,7 @@ type OpenWorkspaceRequest struct {
 
 func (x *OpenWorkspaceRequest) Reset() {
 	*x = OpenWorkspaceRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[55]
+	mi := &file_vx_v1_vx_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3456,7 +3677,7 @@ func (x *OpenWorkspaceRequest) String() string {
 func (*OpenWorkspaceRequest) ProtoMessage() {}
 
 func (x *OpenWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[55]
+	mi := &file_vx_v1_vx_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3469,7 +3690,7 @@ func (x *OpenWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*OpenWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{55}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *OpenWorkspaceRequest) GetRepo() string {
@@ -3502,7 +3723,7 @@ type OpenWorkspaceResponse struct {
 
 func (x *OpenWorkspaceResponse) Reset() {
 	*x = OpenWorkspaceResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[56]
+	mi := &file_vx_v1_vx_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3514,7 +3735,7 @@ func (x *OpenWorkspaceResponse) String() string {
 func (*OpenWorkspaceResponse) ProtoMessage() {}
 
 func (x *OpenWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[56]
+	mi := &file_vx_v1_vx_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3527,7 +3748,7 @@ func (x *OpenWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*OpenWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{56}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *OpenWorkspaceResponse) GetWorkspace() *Workspace {
@@ -3546,7 +3767,7 @@ type GetWorkspaceRequest struct {
 
 func (x *GetWorkspaceRequest) Reset() {
 	*x = GetWorkspaceRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[57]
+	mi := &file_vx_v1_vx_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3558,7 +3779,7 @@ func (x *GetWorkspaceRequest) String() string {
 func (*GetWorkspaceRequest) ProtoMessage() {}
 
 func (x *GetWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[57]
+	mi := &file_vx_v1_vx_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3571,7 +3792,7 @@ func (x *GetWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{57}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *GetWorkspaceRequest) GetId() string {
@@ -3590,7 +3811,7 @@ type GetWorkspaceResponse struct {
 
 func (x *GetWorkspaceResponse) Reset() {
 	*x = GetWorkspaceResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[58]
+	mi := &file_vx_v1_vx_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3602,7 +3823,7 @@ func (x *GetWorkspaceResponse) String() string {
 func (*GetWorkspaceResponse) ProtoMessage() {}
 
 func (x *GetWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[58]
+	mi := &file_vx_v1_vx_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3615,7 +3836,7 @@ func (x *GetWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{58}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetWorkspaceResponse) GetWorkspace() *Workspace {
@@ -3635,7 +3856,7 @@ type SetBaseRequest struct {
 
 func (x *SetBaseRequest) Reset() {
 	*x = SetBaseRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[59]
+	mi := &file_vx_v1_vx_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3647,7 +3868,7 @@ func (x *SetBaseRequest) String() string {
 func (*SetBaseRequest) ProtoMessage() {}
 
 func (x *SetBaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[59]
+	mi := &file_vx_v1_vx_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3660,7 +3881,7 @@ func (x *SetBaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBaseRequest.ProtoReflect.Descriptor instead.
 func (*SetBaseRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{59}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *SetBaseRequest) GetId() string {
@@ -3686,7 +3907,7 @@ type SetBaseResponse struct {
 
 func (x *SetBaseResponse) Reset() {
 	*x = SetBaseResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[60]
+	mi := &file_vx_v1_vx_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3698,7 +3919,7 @@ func (x *SetBaseResponse) String() string {
 func (*SetBaseResponse) ProtoMessage() {}
 
 func (x *SetBaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[60]
+	mi := &file_vx_v1_vx_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3711,7 +3932,7 @@ func (x *SetBaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBaseResponse.ProtoReflect.Descriptor instead.
 func (*SetBaseResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{60}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *SetBaseResponse) GetWorkspace() *Workspace {
@@ -3740,7 +3961,7 @@ type LandRequest struct {
 
 func (x *LandRequest) Reset() {
 	*x = LandRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[61]
+	mi := &file_vx_v1_vx_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3752,7 +3973,7 @@ func (x *LandRequest) String() string {
 func (*LandRequest) ProtoMessage() {}
 
 func (x *LandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[61]
+	mi := &file_vx_v1_vx_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3765,7 +3986,7 @@ func (x *LandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LandRequest.ProtoReflect.Descriptor instead.
 func (*LandRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{61}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *LandRequest) GetWorkspaceId() string {
@@ -3850,7 +4071,7 @@ type LandResponse struct {
 
 func (x *LandResponse) Reset() {
 	*x = LandResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[62]
+	mi := &file_vx_v1_vx_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3862,7 +4083,7 @@ func (x *LandResponse) String() string {
 func (*LandResponse) ProtoMessage() {}
 
 func (x *LandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[62]
+	mi := &file_vx_v1_vx_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3875,7 +4096,7 @@ func (x *LandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LandResponse.ProtoReflect.Descriptor instead.
 func (*LandResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{62}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *LandResponse) GetLanded() bool {
@@ -3964,7 +4185,7 @@ type AbandonRequest struct {
 
 func (x *AbandonRequest) Reset() {
 	*x = AbandonRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[63]
+	mi := &file_vx_v1_vx_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3976,7 +4197,7 @@ func (x *AbandonRequest) String() string {
 func (*AbandonRequest) ProtoMessage() {}
 
 func (x *AbandonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[63]
+	mi := &file_vx_v1_vx_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3989,7 +4210,7 @@ func (x *AbandonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbandonRequest.ProtoReflect.Descriptor instead.
 func (*AbandonRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{63}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *AbandonRequest) GetId() string {
@@ -4008,7 +4229,7 @@ type AbandonResponse struct {
 
 func (x *AbandonResponse) Reset() {
 	*x = AbandonResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[64]
+	mi := &file_vx_v1_vx_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4020,7 +4241,7 @@ func (x *AbandonResponse) String() string {
 func (*AbandonResponse) ProtoMessage() {}
 
 func (x *AbandonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[64]
+	mi := &file_vx_v1_vx_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4033,7 +4254,7 @@ func (x *AbandonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbandonResponse.ProtoReflect.Descriptor instead.
 func (*AbandonResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{64}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *AbandonResponse) GetWorkspace() *Workspace {
@@ -4054,7 +4275,7 @@ type ShipStep struct {
 
 func (x *ShipStep) Reset() {
 	*x = ShipStep{}
-	mi := &file_vx_v1_vx_proto_msgTypes[65]
+	mi := &file_vx_v1_vx_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4066,7 +4287,7 @@ func (x *ShipStep) String() string {
 func (*ShipStep) ProtoMessage() {}
 
 func (x *ShipStep) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[65]
+	mi := &file_vx_v1_vx_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4079,7 +4300,7 @@ func (x *ShipStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShipStep.ProtoReflect.Descriptor instead.
 func (*ShipStep) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{65}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ShipStep) GetChangeset() *Changeset {
@@ -4127,7 +4348,7 @@ type ShipmentPlan struct {
 
 func (x *ShipmentPlan) Reset() {
 	*x = ShipmentPlan{}
-	mi := &file_vx_v1_vx_proto_msgTypes[66]
+	mi := &file_vx_v1_vx_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4139,7 +4360,7 @@ func (x *ShipmentPlan) String() string {
 func (*ShipmentPlan) ProtoMessage() {}
 
 func (x *ShipmentPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[66]
+	mi := &file_vx_v1_vx_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4152,7 +4373,7 @@ func (x *ShipmentPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShipmentPlan.ProtoReflect.Descriptor instead.
 func (*ShipmentPlan) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{66}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ShipmentPlan) GetTarget() string {
@@ -4284,7 +4505,7 @@ type ShipGroup struct {
 
 func (x *ShipGroup) Reset() {
 	*x = ShipGroup{}
-	mi := &file_vx_v1_vx_proto_msgTypes[67]
+	mi := &file_vx_v1_vx_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4296,7 +4517,7 @@ func (x *ShipGroup) String() string {
 func (*ShipGroup) ProtoMessage() {}
 
 func (x *ShipGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[67]
+	mi := &file_vx_v1_vx_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4309,7 +4530,7 @@ func (x *ShipGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShipGroup.ProtoReflect.Descriptor instead.
 func (*ShipGroup) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{67}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *ShipGroup) GetPart() int32 {
@@ -4427,7 +4648,7 @@ type ShipGroupInput struct {
 
 func (x *ShipGroupInput) Reset() {
 	*x = ShipGroupInput{}
-	mi := &file_vx_v1_vx_proto_msgTypes[68]
+	mi := &file_vx_v1_vx_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4439,7 +4660,7 @@ func (x *ShipGroupInput) String() string {
 func (*ShipGroupInput) ProtoMessage() {}
 
 func (x *ShipGroupInput) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[68]
+	mi := &file_vx_v1_vx_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4452,7 +4673,7 @@ func (x *ShipGroupInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShipGroupInput.ProtoReflect.Descriptor instead.
 func (*ShipGroupInput) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{68}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ShipGroupInput) GetChangeIds() []string {
@@ -4484,7 +4705,7 @@ type Shipment struct {
 
 func (x *Shipment) Reset() {
 	*x = Shipment{}
-	mi := &file_vx_v1_vx_proto_msgTypes[69]
+	mi := &file_vx_v1_vx_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4496,7 +4717,7 @@ func (x *Shipment) String() string {
 func (*Shipment) ProtoMessage() {}
 
 func (x *Shipment) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[69]
+	mi := &file_vx_v1_vx_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4509,7 +4730,7 @@ func (x *Shipment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shipment.ProtoReflect.Descriptor instead.
 func (*Shipment) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{69}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *Shipment) GetId() string {
@@ -4623,7 +4844,7 @@ type PlanShipmentRequest struct {
 
 func (x *PlanShipmentRequest) Reset() {
 	*x = PlanShipmentRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[70]
+	mi := &file_vx_v1_vx_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4635,7 +4856,7 @@ func (x *PlanShipmentRequest) String() string {
 func (*PlanShipmentRequest) ProtoMessage() {}
 
 func (x *PlanShipmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[70]
+	mi := &file_vx_v1_vx_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4648,7 +4869,7 @@ func (x *PlanShipmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanShipmentRequest.ProtoReflect.Descriptor instead.
 func (*PlanShipmentRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{70}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *PlanShipmentRequest) GetRepo() string {
@@ -4695,7 +4916,7 @@ type PlanShipmentResponse struct {
 
 func (x *PlanShipmentResponse) Reset() {
 	*x = PlanShipmentResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[71]
+	mi := &file_vx_v1_vx_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4707,7 +4928,7 @@ func (x *PlanShipmentResponse) String() string {
 func (*PlanShipmentResponse) ProtoMessage() {}
 
 func (x *PlanShipmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[71]
+	mi := &file_vx_v1_vx_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4720,7 +4941,7 @@ func (x *PlanShipmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanShipmentResponse.ProtoReflect.Descriptor instead.
 func (*PlanShipmentResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{71}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *PlanShipmentResponse) GetPlan() *ShipmentPlan {
@@ -4746,7 +4967,7 @@ type OpenShipmentRequest struct {
 
 func (x *OpenShipmentRequest) Reset() {
 	*x = OpenShipmentRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[72]
+	mi := &file_vx_v1_vx_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4758,7 +4979,7 @@ func (x *OpenShipmentRequest) String() string {
 func (*OpenShipmentRequest) ProtoMessage() {}
 
 func (x *OpenShipmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[72]
+	mi := &file_vx_v1_vx_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4771,7 +4992,7 @@ func (x *OpenShipmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenShipmentRequest.ProtoReflect.Descriptor instead.
 func (*OpenShipmentRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{72}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *OpenShipmentRequest) GetRepo() string {
@@ -4843,7 +5064,7 @@ type OpenShipmentResponse struct {
 
 func (x *OpenShipmentResponse) Reset() {
 	*x = OpenShipmentResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[73]
+	mi := &file_vx_v1_vx_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4855,7 +5076,7 @@ func (x *OpenShipmentResponse) String() string {
 func (*OpenShipmentResponse) ProtoMessage() {}
 
 func (x *OpenShipmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[73]
+	mi := &file_vx_v1_vx_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4868,7 +5089,7 @@ func (x *OpenShipmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenShipmentResponse.ProtoReflect.Descriptor instead.
 func (*OpenShipmentResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{73}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *OpenShipmentResponse) GetShipment() *Shipment {
@@ -4916,7 +5137,7 @@ type ListShipmentsRequest struct {
 
 func (x *ListShipmentsRequest) Reset() {
 	*x = ListShipmentsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[74]
+	mi := &file_vx_v1_vx_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4928,7 +5149,7 @@ func (x *ListShipmentsRequest) String() string {
 func (*ListShipmentsRequest) ProtoMessage() {}
 
 func (x *ListShipmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[74]
+	mi := &file_vx_v1_vx_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4941,7 +5162,7 @@ func (x *ListShipmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListShipmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListShipmentsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{74}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *ListShipmentsRequest) GetRepo() string {
@@ -4967,7 +5188,7 @@ type ListShipmentsResponse struct {
 
 func (x *ListShipmentsResponse) Reset() {
 	*x = ListShipmentsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[75]
+	mi := &file_vx_v1_vx_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4979,7 +5200,7 @@ func (x *ListShipmentsResponse) String() string {
 func (*ListShipmentsResponse) ProtoMessage() {}
 
 func (x *ListShipmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[75]
+	mi := &file_vx_v1_vx_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4992,7 +5213,7 @@ func (x *ListShipmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListShipmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListShipmentsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{75}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ListShipmentsResponse) GetShipments() []*Shipment {
@@ -5011,7 +5232,7 @@ type MarkReadRequest struct {
 
 func (x *MarkReadRequest) Reset() {
 	*x = MarkReadRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[76]
+	mi := &file_vx_v1_vx_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5023,7 +5244,7 @@ func (x *MarkReadRequest) String() string {
 func (*MarkReadRequest) ProtoMessage() {}
 
 func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[76]
+	mi := &file_vx_v1_vx_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5036,7 +5257,7 @@ func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadRequest.ProtoReflect.Descriptor instead.
 func (*MarkReadRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{76}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *MarkReadRequest) GetNoteIds() []string {
@@ -5054,7 +5275,7 @@ type MarkReadResponse struct {
 
 func (x *MarkReadResponse) Reset() {
 	*x = MarkReadResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[77]
+	mi := &file_vx_v1_vx_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5066,7 +5287,7 @@ func (x *MarkReadResponse) String() string {
 func (*MarkReadResponse) ProtoMessage() {}
 
 func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[77]
+	mi := &file_vx_v1_vx_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5079,7 +5300,7 @@ func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadResponse.ProtoReflect.Descriptor instead.
 func (*MarkReadResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{77}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{80}
 }
 
 type Note struct {
@@ -5111,7 +5332,7 @@ type Note struct {
 
 func (x *Note) Reset() {
 	*x = Note{}
-	mi := &file_vx_v1_vx_proto_msgTypes[78]
+	mi := &file_vx_v1_vx_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5123,7 +5344,7 @@ func (x *Note) String() string {
 func (*Note) ProtoMessage() {}
 
 func (x *Note) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[78]
+	mi := &file_vx_v1_vx_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5136,7 +5357,7 @@ func (x *Note) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Note.ProtoReflect.Descriptor instead.
 func (*Note) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{78}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *Note) GetId() string {
@@ -5272,7 +5493,7 @@ type PostNoteRequest struct {
 
 func (x *PostNoteRequest) Reset() {
 	*x = PostNoteRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[79]
+	mi := &file_vx_v1_vx_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5284,7 +5505,7 @@ func (x *PostNoteRequest) String() string {
 func (*PostNoteRequest) ProtoMessage() {}
 
 func (x *PostNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[79]
+	mi := &file_vx_v1_vx_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5297,7 +5518,7 @@ func (x *PostNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostNoteRequest.ProtoReflect.Descriptor instead.
 func (*PostNoteRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{79}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *PostNoteRequest) GetRepo() string {
@@ -5351,7 +5572,7 @@ type PostNoteResponse struct {
 
 func (x *PostNoteResponse) Reset() {
 	*x = PostNoteResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[80]
+	mi := &file_vx_v1_vx_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5363,7 +5584,7 @@ func (x *PostNoteResponse) String() string {
 func (*PostNoteResponse) ProtoMessage() {}
 
 func (x *PostNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[80]
+	mi := &file_vx_v1_vx_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5376,7 +5597,7 @@ func (x *PostNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostNoteResponse.ProtoReflect.Descriptor instead.
 func (*PostNoteResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{80}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *PostNoteResponse) GetNote() *Note {
@@ -5400,7 +5621,7 @@ type AskRequest struct {
 
 func (x *AskRequest) Reset() {
 	*x = AskRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[81]
+	mi := &file_vx_v1_vx_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5412,7 +5633,7 @@ func (x *AskRequest) String() string {
 func (*AskRequest) ProtoMessage() {}
 
 func (x *AskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[81]
+	mi := &file_vx_v1_vx_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5425,7 +5646,7 @@ func (x *AskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AskRequest.ProtoReflect.Descriptor instead.
 func (*AskRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{81}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *AskRequest) GetRepo() string {
@@ -5479,7 +5700,7 @@ type AskResponse struct {
 
 func (x *AskResponse) Reset() {
 	*x = AskResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[82]
+	mi := &file_vx_v1_vx_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5491,7 +5712,7 @@ func (x *AskResponse) String() string {
 func (*AskResponse) ProtoMessage() {}
 
 func (x *AskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[82]
+	mi := &file_vx_v1_vx_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5504,7 +5725,7 @@ func (x *AskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AskResponse.ProtoReflect.Descriptor instead.
 func (*AskResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{82}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *AskResponse) GetQuestion() *Note {
@@ -5524,7 +5745,7 @@ type AnswerRequest struct {
 
 func (x *AnswerRequest) Reset() {
 	*x = AnswerRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[83]
+	mi := &file_vx_v1_vx_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5536,7 +5757,7 @@ func (x *AnswerRequest) String() string {
 func (*AnswerRequest) ProtoMessage() {}
 
 func (x *AnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[83]
+	mi := &file_vx_v1_vx_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5549,7 +5770,7 @@ func (x *AnswerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerRequest.ProtoReflect.Descriptor instead.
 func (*AnswerRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{83}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *AnswerRequest) GetNoteId() string {
@@ -5576,7 +5797,7 @@ type AnswerResponse struct {
 
 func (x *AnswerResponse) Reset() {
 	*x = AnswerResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[84]
+	mi := &file_vx_v1_vx_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5588,7 +5809,7 @@ func (x *AnswerResponse) String() string {
 func (*AnswerResponse) ProtoMessage() {}
 
 func (x *AnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[84]
+	mi := &file_vx_v1_vx_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5601,7 +5822,7 @@ func (x *AnswerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerResponse.ProtoReflect.Descriptor instead.
 func (*AnswerResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{84}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *AnswerResponse) GetAnswer() *Note {
@@ -5634,7 +5855,7 @@ type ListNotesRequest struct {
 
 func (x *ListNotesRequest) Reset() {
 	*x = ListNotesRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[85]
+	mi := &file_vx_v1_vx_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5646,7 +5867,7 @@ func (x *ListNotesRequest) String() string {
 func (*ListNotesRequest) ProtoMessage() {}
 
 func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[85]
+	mi := &file_vx_v1_vx_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5659,7 +5880,7 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
 func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{85}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ListNotesRequest) GetRepo() string {
@@ -5727,7 +5948,7 @@ type ListNotesResponse struct {
 
 func (x *ListNotesResponse) Reset() {
 	*x = ListNotesResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[86]
+	mi := &file_vx_v1_vx_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5739,7 +5960,7 @@ func (x *ListNotesResponse) String() string {
 func (*ListNotesResponse) ProtoMessage() {}
 
 func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[86]
+	mi := &file_vx_v1_vx_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5752,7 +5973,7 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
 func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{86}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *ListNotesResponse) GetNotes() []*Note {
@@ -5770,7 +5991,7 @@ type InboxRequest struct {
 
 func (x *InboxRequest) Reset() {
 	*x = InboxRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[87]
+	mi := &file_vx_v1_vx_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5782,7 +6003,7 @@ func (x *InboxRequest) String() string {
 func (*InboxRequest) ProtoMessage() {}
 
 func (x *InboxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[87]
+	mi := &file_vx_v1_vx_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5795,7 +6016,7 @@ func (x *InboxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InboxRequest.ProtoReflect.Descriptor instead.
 func (*InboxRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{87}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{90}
 }
 
 type InboxResponse struct {
@@ -5809,7 +6030,7 @@ type InboxResponse struct {
 
 func (x *InboxResponse) Reset() {
 	*x = InboxResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[88]
+	mi := &file_vx_v1_vx_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5821,7 +6042,7 @@ func (x *InboxResponse) String() string {
 func (*InboxResponse) ProtoMessage() {}
 
 func (x *InboxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[88]
+	mi := &file_vx_v1_vx_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5834,7 +6055,7 @@ func (x *InboxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InboxResponse.ProtoReflect.Descriptor instead.
 func (*InboxResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{88}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *InboxResponse) GetQuestions() []*Note {
@@ -5872,7 +6093,7 @@ type ContextRequest struct {
 
 func (x *ContextRequest) Reset() {
 	*x = ContextRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[89]
+	mi := &file_vx_v1_vx_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5884,7 +6105,7 @@ func (x *ContextRequest) String() string {
 func (*ContextRequest) ProtoMessage() {}
 
 func (x *ContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[89]
+	mi := &file_vx_v1_vx_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5897,7 +6118,7 @@ func (x *ContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextRequest.ProtoReflect.Descriptor instead.
 func (*ContextRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{89}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *ContextRequest) GetRepo() string {
@@ -5938,7 +6159,7 @@ type ContextWorkspace struct {
 
 func (x *ContextWorkspace) Reset() {
 	*x = ContextWorkspace{}
-	mi := &file_vx_v1_vx_proto_msgTypes[90]
+	mi := &file_vx_v1_vx_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5950,7 +6171,7 @@ func (x *ContextWorkspace) String() string {
 func (*ContextWorkspace) ProtoMessage() {}
 
 func (x *ContextWorkspace) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[90]
+	mi := &file_vx_v1_vx_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5963,7 +6184,7 @@ func (x *ContextWorkspace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextWorkspace.ProtoReflect.Descriptor instead.
 func (*ContextWorkspace) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{90}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ContextWorkspace) GetOwner() string {
@@ -6022,7 +6243,7 @@ type ContextResponse struct {
 
 func (x *ContextResponse) Reset() {
 	*x = ContextResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[91]
+	mi := &file_vx_v1_vx_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6034,7 +6255,7 @@ func (x *ContextResponse) String() string {
 func (*ContextResponse) ProtoMessage() {}
 
 func (x *ContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[91]
+	mi := &file_vx_v1_vx_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6047,7 +6268,7 @@ func (x *ContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextResponse.ProtoReflect.Descriptor instead.
 func (*ContextResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{91}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *ContextResponse) GetNotes() []*Note {
@@ -6108,7 +6329,7 @@ type OtherEffort struct {
 
 func (x *OtherEffort) Reset() {
 	*x = OtherEffort{}
-	mi := &file_vx_v1_vx_proto_msgTypes[92]
+	mi := &file_vx_v1_vx_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6120,7 +6341,7 @@ func (x *OtherEffort) String() string {
 func (*OtherEffort) ProtoMessage() {}
 
 func (x *OtherEffort) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[92]
+	mi := &file_vx_v1_vx_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6133,7 +6354,7 @@ func (x *OtherEffort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OtherEffort.ProtoReflect.Descriptor instead.
 func (*OtherEffort) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{92}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *OtherEffort) GetEffort() string {
@@ -6205,7 +6426,7 @@ type Overlap struct {
 
 func (x *Overlap) Reset() {
 	*x = Overlap{}
-	mi := &file_vx_v1_vx_proto_msgTypes[93]
+	mi := &file_vx_v1_vx_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6217,7 +6438,7 @@ func (x *Overlap) String() string {
 func (*Overlap) ProtoMessage() {}
 
 func (x *Overlap) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[93]
+	mi := &file_vx_v1_vx_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6230,7 +6451,7 @@ func (x *Overlap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Overlap.ProtoReflect.Descriptor instead.
 func (*Overlap) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{93}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *Overlap) GetRepo() string {
@@ -6321,7 +6542,7 @@ type Claim struct {
 
 func (x *Claim) Reset() {
 	*x = Claim{}
-	mi := &file_vx_v1_vx_proto_msgTypes[94]
+	mi := &file_vx_v1_vx_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6333,7 +6554,7 @@ func (x *Claim) String() string {
 func (*Claim) ProtoMessage() {}
 
 func (x *Claim) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[94]
+	mi := &file_vx_v1_vx_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6346,7 +6567,7 @@ func (x *Claim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Claim.ProtoReflect.Descriptor instead.
 func (*Claim) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{94}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *Claim) GetId() string {
@@ -6433,7 +6654,7 @@ type ClaimRequest struct {
 
 func (x *ClaimRequest) Reset() {
 	*x = ClaimRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[95]
+	mi := &file_vx_v1_vx_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6445,7 +6666,7 @@ func (x *ClaimRequest) String() string {
 func (*ClaimRequest) ProtoMessage() {}
 
 func (x *ClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[95]
+	mi := &file_vx_v1_vx_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6458,7 +6679,7 @@ func (x *ClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimRequest.ProtoReflect.Descriptor instead.
 func (*ClaimRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{95}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *ClaimRequest) GetRepo() string {
@@ -6513,7 +6734,7 @@ type ClaimResponse struct {
 
 func (x *ClaimResponse) Reset() {
 	*x = ClaimResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[96]
+	mi := &file_vx_v1_vx_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6525,7 +6746,7 @@ func (x *ClaimResponse) String() string {
 func (*ClaimResponse) ProtoMessage() {}
 
 func (x *ClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[96]
+	mi := &file_vx_v1_vx_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6538,7 +6759,7 @@ func (x *ClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimResponse.ProtoReflect.Descriptor instead.
 func (*ClaimResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{96}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *ClaimResponse) GetClaim() *Claim {
@@ -6565,7 +6786,7 @@ type ReleaseRequest struct {
 
 func (x *ReleaseRequest) Reset() {
 	*x = ReleaseRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[97]
+	mi := &file_vx_v1_vx_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6577,7 +6798,7 @@ func (x *ReleaseRequest) String() string {
 func (*ReleaseRequest) ProtoMessage() {}
 
 func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[97]
+	mi := &file_vx_v1_vx_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6590,7 +6811,7 @@ func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{97}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ReleaseRequest) GetId() string {
@@ -6616,7 +6837,7 @@ type ReleaseResponse struct {
 
 func (x *ReleaseResponse) Reset() {
 	*x = ReleaseResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[98]
+	mi := &file_vx_v1_vx_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6628,7 +6849,7 @@ func (x *ReleaseResponse) String() string {
 func (*ReleaseResponse) ProtoMessage() {}
 
 func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[98]
+	mi := &file_vx_v1_vx_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6641,7 +6862,7 @@ func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{98}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ReleaseResponse) GetReleased() []*Claim {
@@ -6662,7 +6883,7 @@ type ListClaimsRequest struct {
 
 func (x *ListClaimsRequest) Reset() {
 	*x = ListClaimsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[99]
+	mi := &file_vx_v1_vx_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6674,7 +6895,7 @@ func (x *ListClaimsRequest) String() string {
 func (*ListClaimsRequest) ProtoMessage() {}
 
 func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[99]
+	mi := &file_vx_v1_vx_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6687,7 +6908,7 @@ func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsRequest.ProtoReflect.Descriptor instead.
 func (*ListClaimsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{99}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ListClaimsRequest) GetRepo() string {
@@ -6720,7 +6941,7 @@ type ListClaimsResponse struct {
 
 func (x *ListClaimsResponse) Reset() {
 	*x = ListClaimsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[100]
+	mi := &file_vx_v1_vx_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6732,7 +6953,7 @@ func (x *ListClaimsResponse) String() string {
 func (*ListClaimsResponse) ProtoMessage() {}
 
 func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[100]
+	mi := &file_vx_v1_vx_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6745,7 +6966,7 @@ func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsResponse.ProtoReflect.Descriptor instead.
 func (*ListClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{100}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *ListClaimsResponse) GetClaims() []*Claim {
@@ -6776,7 +6997,7 @@ type Task struct {
 
 func (x *Task) Reset() {
 	*x = Task{}
-	mi := &file_vx_v1_vx_proto_msgTypes[101]
+	mi := &file_vx_v1_vx_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6788,7 +7009,7 @@ func (x *Task) String() string {
 func (*Task) ProtoMessage() {}
 
 func (x *Task) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[101]
+	mi := &file_vx_v1_vx_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6801,7 +7022,7 @@ func (x *Task) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Task.ProtoReflect.Descriptor instead.
 func (*Task) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{101}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *Task) GetId() string {
@@ -6909,7 +7130,7 @@ type AddTaskRequest struct {
 
 func (x *AddTaskRequest) Reset() {
 	*x = AddTaskRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[102]
+	mi := &file_vx_v1_vx_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6921,7 +7142,7 @@ func (x *AddTaskRequest) String() string {
 func (*AddTaskRequest) ProtoMessage() {}
 
 func (x *AddTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[102]
+	mi := &file_vx_v1_vx_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6934,7 +7155,7 @@ func (x *AddTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTaskRequest.ProtoReflect.Descriptor instead.
 func (*AddTaskRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{102}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *AddTaskRequest) GetRepo() string {
@@ -6988,7 +7209,7 @@ type AddTaskResponse struct {
 
 func (x *AddTaskResponse) Reset() {
 	*x = AddTaskResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[103]
+	mi := &file_vx_v1_vx_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7000,7 +7221,7 @@ func (x *AddTaskResponse) String() string {
 func (*AddTaskResponse) ProtoMessage() {}
 
 func (x *AddTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[103]
+	mi := &file_vx_v1_vx_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7013,7 +7234,7 @@ func (x *AddTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTaskResponse.ProtoReflect.Descriptor instead.
 func (*AddTaskResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{103}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *AddTaskResponse) GetTask() *Task {
@@ -7035,7 +7256,7 @@ type UpdateTaskRequest struct {
 
 func (x *UpdateTaskRequest) Reset() {
 	*x = UpdateTaskRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[104]
+	mi := &file_vx_v1_vx_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7047,7 +7268,7 @@ func (x *UpdateTaskRequest) String() string {
 func (*UpdateTaskRequest) ProtoMessage() {}
 
 func (x *UpdateTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[104]
+	mi := &file_vx_v1_vx_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7060,7 +7281,7 @@ func (x *UpdateTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTaskRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{104}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *UpdateTaskRequest) GetId() string {
@@ -7101,7 +7322,7 @@ type UpdateTaskResponse struct {
 
 func (x *UpdateTaskResponse) Reset() {
 	*x = UpdateTaskResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[105]
+	mi := &file_vx_v1_vx_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7113,7 +7334,7 @@ func (x *UpdateTaskResponse) String() string {
 func (*UpdateTaskResponse) ProtoMessage() {}
 
 func (x *UpdateTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[105]
+	mi := &file_vx_v1_vx_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7126,7 +7347,7 @@ func (x *UpdateTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTaskResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{105}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *UpdateTaskResponse) GetTask() *Task {
@@ -7155,7 +7376,7 @@ type ListTasksRequest struct {
 
 func (x *ListTasksRequest) Reset() {
 	*x = ListTasksRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[106]
+	mi := &file_vx_v1_vx_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7167,7 +7388,7 @@ func (x *ListTasksRequest) String() string {
 func (*ListTasksRequest) ProtoMessage() {}
 
 func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[106]
+	mi := &file_vx_v1_vx_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7180,7 +7401,7 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
 func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{106}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *ListTasksRequest) GetRepo() string {
@@ -7220,7 +7441,7 @@ type ListTasksResponse struct {
 
 func (x *ListTasksResponse) Reset() {
 	*x = ListTasksResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[107]
+	mi := &file_vx_v1_vx_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7232,7 +7453,7 @@ func (x *ListTasksResponse) String() string {
 func (*ListTasksResponse) ProtoMessage() {}
 
 func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[107]
+	mi := &file_vx_v1_vx_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7245,7 +7466,7 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
 func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{107}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *ListTasksResponse) GetTasks() []*Task {
@@ -7284,7 +7505,7 @@ type Rebase struct {
 
 func (x *Rebase) Reset() {
 	*x = Rebase{}
-	mi := &file_vx_v1_vx_proto_msgTypes[108]
+	mi := &file_vx_v1_vx_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7296,7 +7517,7 @@ func (x *Rebase) String() string {
 func (*Rebase) ProtoMessage() {}
 
 func (x *Rebase) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[108]
+	mi := &file_vx_v1_vx_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7309,7 +7530,7 @@ func (x *Rebase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Rebase.ProtoReflect.Descriptor instead.
 func (*Rebase) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{108}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *Rebase) GetId() string {
@@ -7459,7 +7680,7 @@ type RebaseConflict struct {
 
 func (x *RebaseConflict) Reset() {
 	*x = RebaseConflict{}
-	mi := &file_vx_v1_vx_proto_msgTypes[109]
+	mi := &file_vx_v1_vx_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7471,7 +7692,7 @@ func (x *RebaseConflict) String() string {
 func (*RebaseConflict) ProtoMessage() {}
 
 func (x *RebaseConflict) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[109]
+	mi := &file_vx_v1_vx_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7484,7 +7705,7 @@ func (x *RebaseConflict) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebaseConflict.ProtoReflect.Descriptor instead.
 func (*RebaseConflict) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{109}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *RebaseConflict) GetPath() string {
@@ -7526,7 +7747,7 @@ type RebaseEffortRequest struct {
 
 func (x *RebaseEffortRequest) Reset() {
 	*x = RebaseEffortRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[110]
+	mi := &file_vx_v1_vx_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7538,7 +7759,7 @@ func (x *RebaseEffortRequest) String() string {
 func (*RebaseEffortRequest) ProtoMessage() {}
 
 func (x *RebaseEffortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[110]
+	mi := &file_vx_v1_vx_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7551,7 +7772,7 @@ func (x *RebaseEffortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebaseEffortRequest.ProtoReflect.Descriptor instead.
 func (*RebaseEffortRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{110}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *RebaseEffortRequest) GetRepo() string {
@@ -7586,7 +7807,7 @@ type RebaseEffortResponse struct {
 
 func (x *RebaseEffortResponse) Reset() {
 	*x = RebaseEffortResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[111]
+	mi := &file_vx_v1_vx_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7598,7 +7819,7 @@ func (x *RebaseEffortResponse) String() string {
 func (*RebaseEffortResponse) ProtoMessage() {}
 
 func (x *RebaseEffortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[111]
+	mi := &file_vx_v1_vx_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7611,7 +7832,7 @@ func (x *RebaseEffortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebaseEffortResponse.ProtoReflect.Descriptor instead.
 func (*RebaseEffortResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{111}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *RebaseEffortResponse) GetRebase() *Rebase {
@@ -7647,7 +7868,7 @@ type ContinueRebaseRequest struct {
 
 func (x *ContinueRebaseRequest) Reset() {
 	*x = ContinueRebaseRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[112]
+	mi := &file_vx_v1_vx_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7659,7 +7880,7 @@ func (x *ContinueRebaseRequest) String() string {
 func (*ContinueRebaseRequest) ProtoMessage() {}
 
 func (x *ContinueRebaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[112]
+	mi := &file_vx_v1_vx_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7672,7 +7893,7 @@ func (x *ContinueRebaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContinueRebaseRequest.ProtoReflect.Descriptor instead.
 func (*ContinueRebaseRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{112}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *ContinueRebaseRequest) GetRepo() string {
@@ -7713,7 +7934,7 @@ type ContinueRebaseResponse struct {
 
 func (x *ContinueRebaseResponse) Reset() {
 	*x = ContinueRebaseResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[113]
+	mi := &file_vx_v1_vx_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7725,7 +7946,7 @@ func (x *ContinueRebaseResponse) String() string {
 func (*ContinueRebaseResponse) ProtoMessage() {}
 
 func (x *ContinueRebaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[113]
+	mi := &file_vx_v1_vx_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7738,7 +7959,7 @@ func (x *ContinueRebaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContinueRebaseResponse.ProtoReflect.Descriptor instead.
 func (*ContinueRebaseResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{113}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *ContinueRebaseResponse) GetRebase() *Rebase {
@@ -7765,7 +7986,7 @@ type AbortRebaseRequest struct {
 
 func (x *AbortRebaseRequest) Reset() {
 	*x = AbortRebaseRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[114]
+	mi := &file_vx_v1_vx_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7777,7 +7998,7 @@ func (x *AbortRebaseRequest) String() string {
 func (*AbortRebaseRequest) ProtoMessage() {}
 
 func (x *AbortRebaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[114]
+	mi := &file_vx_v1_vx_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7790,7 +8011,7 @@ func (x *AbortRebaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortRebaseRequest.ProtoReflect.Descriptor instead.
 func (*AbortRebaseRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{114}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *AbortRebaseRequest) GetRepo() string {
@@ -7817,7 +8038,7 @@ type AbortRebaseResponse struct {
 
 func (x *AbortRebaseResponse) Reset() {
 	*x = AbortRebaseResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[115]
+	mi := &file_vx_v1_vx_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7829,7 +8050,7 @@ func (x *AbortRebaseResponse) String() string {
 func (*AbortRebaseResponse) ProtoMessage() {}
 
 func (x *AbortRebaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[115]
+	mi := &file_vx_v1_vx_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7842,7 +8063,7 @@ func (x *AbortRebaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortRebaseResponse.ProtoReflect.Descriptor instead.
 func (*AbortRebaseResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{115}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *AbortRebaseResponse) GetRebase() *Rebase {
@@ -7869,7 +8090,7 @@ type GetRebaseRequest struct {
 
 func (x *GetRebaseRequest) Reset() {
 	*x = GetRebaseRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[116]
+	mi := &file_vx_v1_vx_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7881,7 +8102,7 @@ func (x *GetRebaseRequest) String() string {
 func (*GetRebaseRequest) ProtoMessage() {}
 
 func (x *GetRebaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[116]
+	mi := &file_vx_v1_vx_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7894,7 +8115,7 @@ func (x *GetRebaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRebaseRequest.ProtoReflect.Descriptor instead.
 func (*GetRebaseRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{116}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *GetRebaseRequest) GetRepo() string {
@@ -7920,7 +8141,7 @@ type GetRebaseResponse struct {
 
 func (x *GetRebaseResponse) Reset() {
 	*x = GetRebaseResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[117]
+	mi := &file_vx_v1_vx_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7932,7 +8153,7 @@ func (x *GetRebaseResponse) String() string {
 func (*GetRebaseResponse) ProtoMessage() {}
 
 func (x *GetRebaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[117]
+	mi := &file_vx_v1_vx_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7945,7 +8166,7 @@ func (x *GetRebaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRebaseResponse.ProtoReflect.Descriptor instead.
 func (*GetRebaseResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{117}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetRebaseResponse) GetRebase() *Rebase {
@@ -7969,7 +8190,7 @@ type Org struct {
 
 func (x *Org) Reset() {
 	*x = Org{}
-	mi := &file_vx_v1_vx_proto_msgTypes[118]
+	mi := &file_vx_v1_vx_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7981,7 +8202,7 @@ func (x *Org) String() string {
 func (*Org) ProtoMessage() {}
 
 func (x *Org) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[118]
+	mi := &file_vx_v1_vx_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7994,7 +8215,7 @@ func (x *Org) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Org.ProtoReflect.Descriptor instead.
 func (*Org) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{118}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *Org) GetHandle() string {
@@ -8050,7 +8271,7 @@ type OrgMember struct {
 
 func (x *OrgMember) Reset() {
 	*x = OrgMember{}
-	mi := &file_vx_v1_vx_proto_msgTypes[119]
+	mi := &file_vx_v1_vx_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8062,7 +8283,7 @@ func (x *OrgMember) String() string {
 func (*OrgMember) ProtoMessage() {}
 
 func (x *OrgMember) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[119]
+	mi := &file_vx_v1_vx_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8075,7 +8296,7 @@ func (x *OrgMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgMember.ProtoReflect.Descriptor instead.
 func (*OrgMember) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{119}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *OrgMember) GetPerson() *Principal {
@@ -8110,7 +8331,7 @@ type Team struct {
 
 func (x *Team) Reset() {
 	*x = Team{}
-	mi := &file_vx_v1_vx_proto_msgTypes[120]
+	mi := &file_vx_v1_vx_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8122,7 +8343,7 @@ func (x *Team) String() string {
 func (*Team) ProtoMessage() {}
 
 func (x *Team) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[120]
+	mi := &file_vx_v1_vx_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8135,7 +8356,7 @@ func (x *Team) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Team.ProtoReflect.Descriptor instead.
 func (*Team) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{120}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *Team) GetOrg() string {
@@ -8170,7 +8391,7 @@ type RepoGrant struct {
 
 func (x *RepoGrant) Reset() {
 	*x = RepoGrant{}
-	mi := &file_vx_v1_vx_proto_msgTypes[121]
+	mi := &file_vx_v1_vx_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8182,7 +8403,7 @@ func (x *RepoGrant) String() string {
 func (*RepoGrant) ProtoMessage() {}
 
 func (x *RepoGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[121]
+	mi := &file_vx_v1_vx_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8195,7 +8416,7 @@ func (x *RepoGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoGrant.ProtoReflect.Descriptor instead.
 func (*RepoGrant) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{121}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *RepoGrant) GetRepo() string {
@@ -8230,7 +8451,7 @@ type RepoAccessEntry struct {
 
 func (x *RepoAccessEntry) Reset() {
 	*x = RepoAccessEntry{}
-	mi := &file_vx_v1_vx_proto_msgTypes[122]
+	mi := &file_vx_v1_vx_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8242,7 +8463,7 @@ func (x *RepoAccessEntry) String() string {
 func (*RepoAccessEntry) ProtoMessage() {}
 
 func (x *RepoAccessEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[122]
+	mi := &file_vx_v1_vx_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8255,7 +8476,7 @@ func (x *RepoAccessEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoAccessEntry.ProtoReflect.Descriptor instead.
 func (*RepoAccessEntry) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{122}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *RepoAccessEntry) GetPerson() *Principal {
@@ -8289,7 +8510,7 @@ type CreateOrgRequest struct {
 
 func (x *CreateOrgRequest) Reset() {
 	*x = CreateOrgRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[123]
+	mi := &file_vx_v1_vx_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8301,7 +8522,7 @@ func (x *CreateOrgRequest) String() string {
 func (*CreateOrgRequest) ProtoMessage() {}
 
 func (x *CreateOrgRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[123]
+	mi := &file_vx_v1_vx_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8314,7 +8535,7 @@ func (x *CreateOrgRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrgRequest.ProtoReflect.Descriptor instead.
 func (*CreateOrgRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{123}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *CreateOrgRequest) GetHandle() string {
@@ -8340,7 +8561,7 @@ type CreateOrgResponse struct {
 
 func (x *CreateOrgResponse) Reset() {
 	*x = CreateOrgResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[124]
+	mi := &file_vx_v1_vx_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8352,7 +8573,7 @@ func (x *CreateOrgResponse) String() string {
 func (*CreateOrgResponse) ProtoMessage() {}
 
 func (x *CreateOrgResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[124]
+	mi := &file_vx_v1_vx_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8365,7 +8586,7 @@ func (x *CreateOrgResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrgResponse.ProtoReflect.Descriptor instead.
 func (*CreateOrgResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{124}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *CreateOrgResponse) GetOrg() *Org {
@@ -8384,7 +8605,7 @@ type ListOrgsRequest struct {
 
 func (x *ListOrgsRequest) Reset() {
 	*x = ListOrgsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[125]
+	mi := &file_vx_v1_vx_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8396,7 +8617,7 @@ func (x *ListOrgsRequest) String() string {
 func (*ListOrgsRequest) ProtoMessage() {}
 
 func (x *ListOrgsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[125]
+	mi := &file_vx_v1_vx_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8409,7 +8630,7 @@ func (x *ListOrgsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgsRequest.ProtoReflect.Descriptor instead.
 func (*ListOrgsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{125}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *ListOrgsRequest) GetAll() bool {
@@ -8428,7 +8649,7 @@ type ListOrgsResponse struct {
 
 func (x *ListOrgsResponse) Reset() {
 	*x = ListOrgsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[126]
+	mi := &file_vx_v1_vx_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8440,7 +8661,7 @@ func (x *ListOrgsResponse) String() string {
 func (*ListOrgsResponse) ProtoMessage() {}
 
 func (x *ListOrgsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[126]
+	mi := &file_vx_v1_vx_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8453,7 +8674,7 @@ func (x *ListOrgsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgsResponse.ProtoReflect.Descriptor instead.
 func (*ListOrgsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{126}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *ListOrgsResponse) GetOrgs() []*Org {
@@ -8472,7 +8693,7 @@ type GetOrgRequest struct {
 
 func (x *GetOrgRequest) Reset() {
 	*x = GetOrgRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[127]
+	mi := &file_vx_v1_vx_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8484,7 +8705,7 @@ func (x *GetOrgRequest) String() string {
 func (*GetOrgRequest) ProtoMessage() {}
 
 func (x *GetOrgRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[127]
+	mi := &file_vx_v1_vx_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8497,7 +8718,7 @@ func (x *GetOrgRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrgRequest.ProtoReflect.Descriptor instead.
 func (*GetOrgRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{127}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *GetOrgRequest) GetHandle() string {
@@ -8519,7 +8740,7 @@ type GetOrgResponse struct {
 
 func (x *GetOrgResponse) Reset() {
 	*x = GetOrgResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[128]
+	mi := &file_vx_v1_vx_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8531,7 +8752,7 @@ func (x *GetOrgResponse) String() string {
 func (*GetOrgResponse) ProtoMessage() {}
 
 func (x *GetOrgResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[128]
+	mi := &file_vx_v1_vx_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8544,7 +8765,7 @@ func (x *GetOrgResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrgResponse.ProtoReflect.Descriptor instead.
 func (*GetOrgResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{128}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *GetOrgResponse) GetOrg() *Org {
@@ -8586,7 +8807,7 @@ type UpdateOrgRequest struct {
 
 func (x *UpdateOrgRequest) Reset() {
 	*x = UpdateOrgRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[129]
+	mi := &file_vx_v1_vx_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8598,7 +8819,7 @@ func (x *UpdateOrgRequest) String() string {
 func (*UpdateOrgRequest) ProtoMessage() {}
 
 func (x *UpdateOrgRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[129]
+	mi := &file_vx_v1_vx_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8611,7 +8832,7 @@ func (x *UpdateOrgRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateOrgRequest.ProtoReflect.Descriptor instead.
 func (*UpdateOrgRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{129}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *UpdateOrgRequest) GetHandle() string {
@@ -8644,7 +8865,7 @@ type UpdateOrgResponse struct {
 
 func (x *UpdateOrgResponse) Reset() {
 	*x = UpdateOrgResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[130]
+	mi := &file_vx_v1_vx_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8656,7 +8877,7 @@ func (x *UpdateOrgResponse) String() string {
 func (*UpdateOrgResponse) ProtoMessage() {}
 
 func (x *UpdateOrgResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[130]
+	mi := &file_vx_v1_vx_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8669,7 +8890,7 @@ func (x *UpdateOrgResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateOrgResponse.ProtoReflect.Descriptor instead.
 func (*UpdateOrgResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{130}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *UpdateOrgResponse) GetOrg() *Org {
@@ -8690,7 +8911,7 @@ type SetMemberRequest struct {
 
 func (x *SetMemberRequest) Reset() {
 	*x = SetMemberRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[131]
+	mi := &file_vx_v1_vx_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8702,7 +8923,7 @@ func (x *SetMemberRequest) String() string {
 func (*SetMemberRequest) ProtoMessage() {}
 
 func (x *SetMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[131]
+	mi := &file_vx_v1_vx_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8715,7 +8936,7 @@ func (x *SetMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberRequest.ProtoReflect.Descriptor instead.
 func (*SetMemberRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{131}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *SetMemberRequest) GetOrg() string {
@@ -8748,7 +8969,7 @@ type SetMemberResponse struct {
 
 func (x *SetMemberResponse) Reset() {
 	*x = SetMemberResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[132]
+	mi := &file_vx_v1_vx_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8760,7 +8981,7 @@ func (x *SetMemberResponse) String() string {
 func (*SetMemberResponse) ProtoMessage() {}
 
 func (x *SetMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[132]
+	mi := &file_vx_v1_vx_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8773,7 +8994,7 @@ func (x *SetMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberResponse.ProtoReflect.Descriptor instead.
 func (*SetMemberResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{132}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *SetMemberResponse) GetMember() *OrgMember {
@@ -8793,7 +9014,7 @@ type RemoveMemberRequest struct {
 
 func (x *RemoveMemberRequest) Reset() {
 	*x = RemoveMemberRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[133]
+	mi := &file_vx_v1_vx_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8805,7 +9026,7 @@ func (x *RemoveMemberRequest) String() string {
 func (*RemoveMemberRequest) ProtoMessage() {}
 
 func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[133]
+	mi := &file_vx_v1_vx_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8818,7 +9039,7 @@ func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{133}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *RemoveMemberRequest) GetOrg() string {
@@ -8843,7 +9064,7 @@ type RemoveMemberResponse struct {
 
 func (x *RemoveMemberResponse) Reset() {
 	*x = RemoveMemberResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[134]
+	mi := &file_vx_v1_vx_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8855,7 +9076,7 @@ func (x *RemoveMemberResponse) String() string {
 func (*RemoveMemberResponse) ProtoMessage() {}
 
 func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[134]
+	mi := &file_vx_v1_vx_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8868,7 +9089,7 @@ func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{134}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{137}
 }
 
 type CreateTeamRequest struct {
@@ -8881,7 +9102,7 @@ type CreateTeamRequest struct {
 
 func (x *CreateTeamRequest) Reset() {
 	*x = CreateTeamRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[135]
+	mi := &file_vx_v1_vx_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8893,7 +9114,7 @@ func (x *CreateTeamRequest) String() string {
 func (*CreateTeamRequest) ProtoMessage() {}
 
 func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[135]
+	mi := &file_vx_v1_vx_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8906,7 +9127,7 @@ func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamRequest.ProtoReflect.Descriptor instead.
 func (*CreateTeamRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{135}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *CreateTeamRequest) GetOrg() string {
@@ -8932,7 +9153,7 @@ type CreateTeamResponse struct {
 
 func (x *CreateTeamResponse) Reset() {
 	*x = CreateTeamResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[136]
+	mi := &file_vx_v1_vx_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8944,7 +9165,7 @@ func (x *CreateTeamResponse) String() string {
 func (*CreateTeamResponse) ProtoMessage() {}
 
 func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[136]
+	mi := &file_vx_v1_vx_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8957,7 +9178,7 @@ func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamResponse.ProtoReflect.Descriptor instead.
 func (*CreateTeamResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{136}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *CreateTeamResponse) GetTeam() *Team {
@@ -8977,7 +9198,7 @@ type DeleteTeamRequest struct {
 
 func (x *DeleteTeamRequest) Reset() {
 	*x = DeleteTeamRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[137]
+	mi := &file_vx_v1_vx_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8989,7 +9210,7 @@ func (x *DeleteTeamRequest) String() string {
 func (*DeleteTeamRequest) ProtoMessage() {}
 
 func (x *DeleteTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[137]
+	mi := &file_vx_v1_vx_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9002,7 +9223,7 @@ func (x *DeleteTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTeamRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTeamRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{137}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *DeleteTeamRequest) GetOrg() string {
@@ -9027,7 +9248,7 @@ type DeleteTeamResponse struct {
 
 func (x *DeleteTeamResponse) Reset() {
 	*x = DeleteTeamResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[138]
+	mi := &file_vx_v1_vx_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9039,7 +9260,7 @@ func (x *DeleteTeamResponse) String() string {
 func (*DeleteTeamResponse) ProtoMessage() {}
 
 func (x *DeleteTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[138]
+	mi := &file_vx_v1_vx_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9052,7 +9273,7 @@ func (x *DeleteTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTeamResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTeamResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{138}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{141}
 }
 
 type SetTeamMemberRequest struct {
@@ -9066,7 +9287,7 @@ type SetTeamMemberRequest struct {
 
 func (x *SetTeamMemberRequest) Reset() {
 	*x = SetTeamMemberRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[139]
+	mi := &file_vx_v1_vx_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9078,7 +9299,7 @@ func (x *SetTeamMemberRequest) String() string {
 func (*SetTeamMemberRequest) ProtoMessage() {}
 
 func (x *SetTeamMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[139]
+	mi := &file_vx_v1_vx_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9091,7 +9312,7 @@ func (x *SetTeamMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTeamMemberRequest.ProtoReflect.Descriptor instead.
 func (*SetTeamMemberRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{139}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *SetTeamMemberRequest) GetOrg() string {
@@ -9124,7 +9345,7 @@ type SetTeamMemberResponse struct {
 
 func (x *SetTeamMemberResponse) Reset() {
 	*x = SetTeamMemberResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[140]
+	mi := &file_vx_v1_vx_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9136,7 +9357,7 @@ func (x *SetTeamMemberResponse) String() string {
 func (*SetTeamMemberResponse) ProtoMessage() {}
 
 func (x *SetTeamMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[140]
+	mi := &file_vx_v1_vx_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9149,7 +9370,7 @@ func (x *SetTeamMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTeamMemberResponse.ProtoReflect.Descriptor instead.
 func (*SetTeamMemberResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{140}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *SetTeamMemberResponse) GetTeam() *Team {
@@ -9170,7 +9391,7 @@ type RemoveTeamMemberRequest struct {
 
 func (x *RemoveTeamMemberRequest) Reset() {
 	*x = RemoveTeamMemberRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[141]
+	mi := &file_vx_v1_vx_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9182,7 +9403,7 @@ func (x *RemoveTeamMemberRequest) String() string {
 func (*RemoveTeamMemberRequest) ProtoMessage() {}
 
 func (x *RemoveTeamMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[141]
+	mi := &file_vx_v1_vx_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9195,7 +9416,7 @@ func (x *RemoveTeamMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTeamMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTeamMemberRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{141}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *RemoveTeamMemberRequest) GetOrg() string {
@@ -9228,7 +9449,7 @@ type RemoveTeamMemberResponse struct {
 
 func (x *RemoveTeamMemberResponse) Reset() {
 	*x = RemoveTeamMemberResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[142]
+	mi := &file_vx_v1_vx_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9240,7 +9461,7 @@ func (x *RemoveTeamMemberResponse) String() string {
 func (*RemoveTeamMemberResponse) ProtoMessage() {}
 
 func (x *RemoveTeamMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[142]
+	mi := &file_vx_v1_vx_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9253,7 +9474,7 @@ func (x *RemoveTeamMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTeamMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveTeamMemberResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{142}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *RemoveTeamMemberResponse) GetTeam() *Team {
@@ -9274,7 +9495,7 @@ type GrantRepoRequest struct {
 
 func (x *GrantRepoRequest) Reset() {
 	*x = GrantRepoRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[143]
+	mi := &file_vx_v1_vx_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9286,7 +9507,7 @@ func (x *GrantRepoRequest) String() string {
 func (*GrantRepoRequest) ProtoMessage() {}
 
 func (x *GrantRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[143]
+	mi := &file_vx_v1_vx_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9299,7 +9520,7 @@ func (x *GrantRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantRepoRequest.ProtoReflect.Descriptor instead.
 func (*GrantRepoRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{143}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *GrantRepoRequest) GetRepo() string {
@@ -9332,7 +9553,7 @@ type GrantRepoResponse struct {
 
 func (x *GrantRepoResponse) Reset() {
 	*x = GrantRepoResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[144]
+	mi := &file_vx_v1_vx_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9344,7 +9565,7 @@ func (x *GrantRepoResponse) String() string {
 func (*GrantRepoResponse) ProtoMessage() {}
 
 func (x *GrantRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[144]
+	mi := &file_vx_v1_vx_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9357,7 +9578,7 @@ func (x *GrantRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantRepoResponse.ProtoReflect.Descriptor instead.
 func (*GrantRepoResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{144}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *GrantRepoResponse) GetGrant() *RepoGrant {
@@ -9377,7 +9598,7 @@ type RevokeRepoRequest struct {
 
 func (x *RevokeRepoRequest) Reset() {
 	*x = RevokeRepoRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[145]
+	mi := &file_vx_v1_vx_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9389,7 +9610,7 @@ func (x *RevokeRepoRequest) String() string {
 func (*RevokeRepoRequest) ProtoMessage() {}
 
 func (x *RevokeRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[145]
+	mi := &file_vx_v1_vx_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9402,7 +9623,7 @@ func (x *RevokeRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRepoRequest.ProtoReflect.Descriptor instead.
 func (*RevokeRepoRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{145}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *RevokeRepoRequest) GetRepo() string {
@@ -9427,7 +9648,7 @@ type RevokeRepoResponse struct {
 
 func (x *RevokeRepoResponse) Reset() {
 	*x = RevokeRepoResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[146]
+	mi := &file_vx_v1_vx_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9439,7 +9660,7 @@ func (x *RevokeRepoResponse) String() string {
 func (*RevokeRepoResponse) ProtoMessage() {}
 
 func (x *RevokeRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[146]
+	mi := &file_vx_v1_vx_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9452,7 +9673,7 @@ func (x *RevokeRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRepoResponse.ProtoReflect.Descriptor instead.
 func (*RevokeRepoResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{146}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{149}
 }
 
 type RepoAccessRequest struct {
@@ -9464,7 +9685,7 @@ type RepoAccessRequest struct {
 
 func (x *RepoAccessRequest) Reset() {
 	*x = RepoAccessRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[147]
+	mi := &file_vx_v1_vx_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9476,7 +9697,7 @@ func (x *RepoAccessRequest) String() string {
 func (*RepoAccessRequest) ProtoMessage() {}
 
 func (x *RepoAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[147]
+	mi := &file_vx_v1_vx_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9489,7 +9710,7 @@ func (x *RepoAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoAccessRequest.ProtoReflect.Descriptor instead.
 func (*RepoAccessRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{147}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *RepoAccessRequest) GetRepo() string {
@@ -9509,7 +9730,7 @@ type RepoAccessResponse struct {
 
 func (x *RepoAccessResponse) Reset() {
 	*x = RepoAccessResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[148]
+	mi := &file_vx_v1_vx_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9521,7 +9742,7 @@ func (x *RepoAccessResponse) String() string {
 func (*RepoAccessResponse) ProtoMessage() {}
 
 func (x *RepoAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[148]
+	mi := &file_vx_v1_vx_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9534,7 +9755,7 @@ func (x *RepoAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoAccessResponse.ProtoReflect.Descriptor instead.
 func (*RepoAccessResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{148}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *RepoAccessResponse) GetGrants() []*RepoGrant {
@@ -9564,7 +9785,7 @@ type CreatePersonRequest struct {
 
 func (x *CreatePersonRequest) Reset() {
 	*x = CreatePersonRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[149]
+	mi := &file_vx_v1_vx_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9576,7 +9797,7 @@ func (x *CreatePersonRequest) String() string {
 func (*CreatePersonRequest) ProtoMessage() {}
 
 func (x *CreatePersonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[149]
+	mi := &file_vx_v1_vx_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9589,7 +9810,7 @@ func (x *CreatePersonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePersonRequest.ProtoReflect.Descriptor instead.
 func (*CreatePersonRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{149}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *CreatePersonRequest) GetHandle() string {
@@ -9637,7 +9858,7 @@ type CreatePersonResponse struct {
 
 func (x *CreatePersonResponse) Reset() {
 	*x = CreatePersonResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[150]
+	mi := &file_vx_v1_vx_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9649,7 +9870,7 @@ func (x *CreatePersonResponse) String() string {
 func (*CreatePersonResponse) ProtoMessage() {}
 
 func (x *CreatePersonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[150]
+	mi := &file_vx_v1_vx_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9662,7 +9883,7 @@ func (x *CreatePersonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePersonResponse.ProtoReflect.Descriptor instead.
 func (*CreatePersonResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{150}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *CreatePersonResponse) GetPerson() *Principal {
@@ -9687,7 +9908,7 @@ type ListPeopleRequest struct {
 
 func (x *ListPeopleRequest) Reset() {
 	*x = ListPeopleRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[151]
+	mi := &file_vx_v1_vx_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9699,7 +9920,7 @@ func (x *ListPeopleRequest) String() string {
 func (*ListPeopleRequest) ProtoMessage() {}
 
 func (x *ListPeopleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[151]
+	mi := &file_vx_v1_vx_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9712,7 +9933,7 @@ func (x *ListPeopleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPeopleRequest.ProtoReflect.Descriptor instead.
 func (*ListPeopleRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{151}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{154}
 }
 
 type ListPeopleResponse struct {
@@ -9724,7 +9945,7 @@ type ListPeopleResponse struct {
 
 func (x *ListPeopleResponse) Reset() {
 	*x = ListPeopleResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[152]
+	mi := &file_vx_v1_vx_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9736,7 +9957,7 @@ func (x *ListPeopleResponse) String() string {
 func (*ListPeopleResponse) ProtoMessage() {}
 
 func (x *ListPeopleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[152]
+	mi := &file_vx_v1_vx_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9749,7 +9970,7 @@ func (x *ListPeopleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPeopleResponse.ProtoReflect.Descriptor instead.
 func (*ListPeopleResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{152}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *ListPeopleResponse) GetPeople() []*Principal {
@@ -9768,7 +9989,7 @@ type ServerInfoRequest struct {
 
 func (x *ServerInfoRequest) Reset() {
 	*x = ServerInfoRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[153]
+	mi := &file_vx_v1_vx_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9780,7 +10001,7 @@ func (x *ServerInfoRequest) String() string {
 func (*ServerInfoRequest) ProtoMessage() {}
 
 func (x *ServerInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[153]
+	mi := &file_vx_v1_vx_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9793,7 +10014,7 @@ func (x *ServerInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfoRequest.ProtoReflect.Descriptor instead.
 func (*ServerInfoRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{153}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *ServerInfoRequest) GetCliVersion() string {
@@ -9817,7 +10038,7 @@ type ServerInfoResponse struct {
 
 func (x *ServerInfoResponse) Reset() {
 	*x = ServerInfoResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[154]
+	mi := &file_vx_v1_vx_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9829,7 +10050,7 @@ func (x *ServerInfoResponse) String() string {
 func (*ServerInfoResponse) ProtoMessage() {}
 
 func (x *ServerInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[154]
+	mi := &file_vx_v1_vx_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9842,7 +10063,7 @@ func (x *ServerInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfoResponse.ProtoReflect.Descriptor instead.
 func (*ServerInfoResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{154}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *ServerInfoResponse) GetVersion() string {
@@ -9896,7 +10117,7 @@ type StartCLILoginRequest struct {
 
 func (x *StartCLILoginRequest) Reset() {
 	*x = StartCLILoginRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[155]
+	mi := &file_vx_v1_vx_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9908,7 +10129,7 @@ func (x *StartCLILoginRequest) String() string {
 func (*StartCLILoginRequest) ProtoMessage() {}
 
 func (x *StartCLILoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[155]
+	mi := &file_vx_v1_vx_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9921,7 +10142,7 @@ func (x *StartCLILoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCLILoginRequest.ProtoReflect.Descriptor instead.
 func (*StartCLILoginRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{155}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *StartCLILoginRequest) GetClientName() string {
@@ -9944,7 +10165,7 @@ type StartCLILoginResponse struct {
 
 func (x *StartCLILoginResponse) Reset() {
 	*x = StartCLILoginResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[156]
+	mi := &file_vx_v1_vx_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9956,7 +10177,7 @@ func (x *StartCLILoginResponse) String() string {
 func (*StartCLILoginResponse) ProtoMessage() {}
 
 func (x *StartCLILoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[156]
+	mi := &file_vx_v1_vx_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9969,7 +10190,7 @@ func (x *StartCLILoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCLILoginResponse.ProtoReflect.Descriptor instead.
 func (*StartCLILoginResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{156}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *StartCLILoginResponse) GetDeviceCode() string {
@@ -10016,7 +10237,7 @@ type PollCLILoginRequest struct {
 
 func (x *PollCLILoginRequest) Reset() {
 	*x = PollCLILoginRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[157]
+	mi := &file_vx_v1_vx_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10028,7 +10249,7 @@ func (x *PollCLILoginRequest) String() string {
 func (*PollCLILoginRequest) ProtoMessage() {}
 
 func (x *PollCLILoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[157]
+	mi := &file_vx_v1_vx_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10041,7 +10262,7 @@ func (x *PollCLILoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollCLILoginRequest.ProtoReflect.Descriptor instead.
 func (*PollCLILoginRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{157}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *PollCLILoginRequest) GetDeviceCode() string {
@@ -10062,7 +10283,7 @@ type PollCLILoginResponse struct {
 
 func (x *PollCLILoginResponse) Reset() {
 	*x = PollCLILoginResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[158]
+	mi := &file_vx_v1_vx_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10074,7 +10295,7 @@ func (x *PollCLILoginResponse) String() string {
 func (*PollCLILoginResponse) ProtoMessage() {}
 
 func (x *PollCLILoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[158]
+	mi := &file_vx_v1_vx_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10087,7 +10308,7 @@ func (x *PollCLILoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollCLILoginResponse.ProtoReflect.Descriptor instead.
 func (*PollCLILoginResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{158}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *PollCLILoginResponse) GetStatus() string {
@@ -10121,7 +10342,7 @@ type ListOverlapsRequest struct {
 
 func (x *ListOverlapsRequest) Reset() {
 	*x = ListOverlapsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[159]
+	mi := &file_vx_v1_vx_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10133,7 +10354,7 @@ func (x *ListOverlapsRequest) String() string {
 func (*ListOverlapsRequest) ProtoMessage() {}
 
 func (x *ListOverlapsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[159]
+	mi := &file_vx_v1_vx_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10146,7 +10367,7 @@ func (x *ListOverlapsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOverlapsRequest.ProtoReflect.Descriptor instead.
 func (*ListOverlapsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{159}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *ListOverlapsRequest) GetRepo() string {
@@ -10172,7 +10393,7 @@ type ListOverlapsResponse struct {
 
 func (x *ListOverlapsResponse) Reset() {
 	*x = ListOverlapsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[160]
+	mi := &file_vx_v1_vx_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10184,7 +10405,7 @@ func (x *ListOverlapsResponse) String() string {
 func (*ListOverlapsResponse) ProtoMessage() {}
 
 func (x *ListOverlapsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[160]
+	mi := &file_vx_v1_vx_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10197,7 +10418,7 @@ func (x *ListOverlapsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOverlapsResponse.ProtoReflect.Descriptor instead.
 func (*ListOverlapsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{160}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *ListOverlapsResponse) GetOverlaps() []*Overlap {
@@ -10218,7 +10439,7 @@ type UniqueRule struct {
 
 func (x *UniqueRule) Reset() {
 	*x = UniqueRule{}
-	mi := &file_vx_v1_vx_proto_msgTypes[161]
+	mi := &file_vx_v1_vx_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10230,7 +10451,7 @@ func (x *UniqueRule) String() string {
 func (*UniqueRule) ProtoMessage() {}
 
 func (x *UniqueRule) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[161]
+	mi := &file_vx_v1_vx_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10243,7 +10464,7 @@ func (x *UniqueRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UniqueRule.ProtoReflect.Descriptor instead.
 func (*UniqueRule) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{161}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *UniqueRule) GetName() string {
@@ -10277,7 +10498,7 @@ type GeneratedRule struct {
 
 func (x *GeneratedRule) Reset() {
 	*x = GeneratedRule{}
-	mi := &file_vx_v1_vx_proto_msgTypes[162]
+	mi := &file_vx_v1_vx_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10289,7 +10510,7 @@ func (x *GeneratedRule) String() string {
 func (*GeneratedRule) ProtoMessage() {}
 
 func (x *GeneratedRule) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[162]
+	mi := &file_vx_v1_vx_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10302,7 +10523,7 @@ func (x *GeneratedRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeneratedRule.ProtoReflect.Descriptor instead.
 func (*GeneratedRule) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{162}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *GeneratedRule) GetGlob() string {
@@ -10331,7 +10552,7 @@ type RepoRules struct {
 
 func (x *RepoRules) Reset() {
 	*x = RepoRules{}
-	mi := &file_vx_v1_vx_proto_msgTypes[163]
+	mi := &file_vx_v1_vx_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10343,7 +10564,7 @@ func (x *RepoRules) String() string {
 func (*RepoRules) ProtoMessage() {}
 
 func (x *RepoRules) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[163]
+	mi := &file_vx_v1_vx_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10356,7 +10577,7 @@ func (x *RepoRules) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoRules.ProtoReflect.Descriptor instead.
 func (*RepoRules) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{163}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *RepoRules) GetUnique() []*UniqueRule {
@@ -10397,7 +10618,7 @@ type GetRulesRequest struct {
 
 func (x *GetRulesRequest) Reset() {
 	*x = GetRulesRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[164]
+	mi := &file_vx_v1_vx_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10409,7 +10630,7 @@ func (x *GetRulesRequest) String() string {
 func (*GetRulesRequest) ProtoMessage() {}
 
 func (x *GetRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[164]
+	mi := &file_vx_v1_vx_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10422,7 +10643,7 @@ func (x *GetRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRulesRequest.ProtoReflect.Descriptor instead.
 func (*GetRulesRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{164}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *GetRulesRequest) GetRepo() string {
@@ -10448,7 +10669,7 @@ type GetRulesResponse struct {
 
 func (x *GetRulesResponse) Reset() {
 	*x = GetRulesResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[165]
+	mi := &file_vx_v1_vx_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10460,7 +10681,7 @@ func (x *GetRulesResponse) String() string {
 func (*GetRulesResponse) ProtoMessage() {}
 
 func (x *GetRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[165]
+	mi := &file_vx_v1_vx_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10473,7 +10694,7 @@ func (x *GetRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRulesResponse.ProtoReflect.Descriptor instead.
 func (*GetRulesResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{165}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *GetRulesResponse) GetRules() *RepoRules {
@@ -10494,7 +10715,7 @@ type ReserveRequest struct {
 
 func (x *ReserveRequest) Reset() {
 	*x = ReserveRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[166]
+	mi := &file_vx_v1_vx_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10506,7 +10727,7 @@ func (x *ReserveRequest) String() string {
 func (*ReserveRequest) ProtoMessage() {}
 
 func (x *ReserveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[166]
+	mi := &file_vx_v1_vx_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10519,7 +10740,7 @@ func (x *ReserveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveRequest.ProtoReflect.Descriptor instead.
 func (*ReserveRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{166}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *ReserveRequest) GetRepo() string {
@@ -10553,7 +10774,7 @@ type ReserveResponse struct {
 
 func (x *ReserveResponse) Reset() {
 	*x = ReserveResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[167]
+	mi := &file_vx_v1_vx_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10565,7 +10786,7 @@ func (x *ReserveResponse) String() string {
 func (*ReserveResponse) ProtoMessage() {}
 
 func (x *ReserveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[167]
+	mi := &file_vx_v1_vx_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10578,7 +10799,7 @@ func (x *ReserveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveResponse.ProtoReflect.Descriptor instead.
 func (*ReserveResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{167}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{170}
 }
 
 func (x *ReserveResponse) GetValue() string {
@@ -10605,7 +10826,7 @@ type ListReservationsRequest struct {
 
 func (x *ListReservationsRequest) Reset() {
 	*x = ListReservationsRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[168]
+	mi := &file_vx_v1_vx_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10617,7 +10838,7 @@ func (x *ListReservationsRequest) String() string {
 func (*ListReservationsRequest) ProtoMessage() {}
 
 func (x *ListReservationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[168]
+	mi := &file_vx_v1_vx_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10630,7 +10851,7 @@ func (x *ListReservationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReservationsRequest.ProtoReflect.Descriptor instead.
 func (*ListReservationsRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{168}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *ListReservationsRequest) GetRepo() string {
@@ -10660,7 +10881,7 @@ type Reservation struct {
 
 func (x *Reservation) Reset() {
 	*x = Reservation{}
-	mi := &file_vx_v1_vx_proto_msgTypes[169]
+	mi := &file_vx_v1_vx_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10672,7 +10893,7 @@ func (x *Reservation) String() string {
 func (*Reservation) ProtoMessage() {}
 
 func (x *Reservation) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[169]
+	mi := &file_vx_v1_vx_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10685,7 +10906,7 @@ func (x *Reservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reservation.ProtoReflect.Descriptor instead.
 func (*Reservation) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{169}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *Reservation) GetRule() string {
@@ -10732,7 +10953,7 @@ type ListReservationsResponse struct {
 
 func (x *ListReservationsResponse) Reset() {
 	*x = ListReservationsResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[170]
+	mi := &file_vx_v1_vx_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10744,7 +10965,7 @@ func (x *ListReservationsResponse) String() string {
 func (*ListReservationsResponse) ProtoMessage() {}
 
 func (x *ListReservationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[170]
+	mi := &file_vx_v1_vx_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10757,7 +10978,7 @@ func (x *ListReservationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReservationsResponse.ProtoReflect.Descriptor instead.
 func (*ListReservationsResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{170}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *ListReservationsResponse) GetReservations() []*Reservation {
@@ -10778,7 +10999,7 @@ type CloseEffortRequest struct {
 
 func (x *CloseEffortRequest) Reset() {
 	*x = CloseEffortRequest{}
-	mi := &file_vx_v1_vx_proto_msgTypes[171]
+	mi := &file_vx_v1_vx_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10790,7 +11011,7 @@ func (x *CloseEffortRequest) String() string {
 func (*CloseEffortRequest) ProtoMessage() {}
 
 func (x *CloseEffortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[171]
+	mi := &file_vx_v1_vx_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10803,7 +11024,7 @@ func (x *CloseEffortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseEffortRequest.ProtoReflect.Descriptor instead.
 func (*CloseEffortRequest) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{171}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *CloseEffortRequest) GetRepo() string {
@@ -10836,7 +11057,7 @@ type CloseEffortResponse struct {
 
 func (x *CloseEffortResponse) Reset() {
 	*x = CloseEffortResponse{}
-	mi := &file_vx_v1_vx_proto_msgTypes[172]
+	mi := &file_vx_v1_vx_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10848,7 +11069,7 @@ func (x *CloseEffortResponse) String() string {
 func (*CloseEffortResponse) ProtoMessage() {}
 
 func (x *CloseEffortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vx_v1_vx_proto_msgTypes[172]
+	mi := &file_vx_v1_vx_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10861,7 +11082,7 @@ func (x *CloseEffortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseEffortResponse.ProtoReflect.Descriptor instead.
 func (*CloseEffortResponse) Descriptor() ([]byte, []int) {
-	return file_vx_v1_vx_proto_rawDescGZIP(), []int{172}
+	return file_vx_v1_vx_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *CloseEffortResponse) GetEffort() *Effort {
@@ -10891,7 +11112,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04head\x18\x02 \x01(\tR\x04head\x12\x17\n" +
 	"\agit_sha\x18\x03 \x01(\tR\x06gitSha\x12\x1b\n" +
-	"\tsynced_at\x18\x04 \x01(\tR\bsyncedAt\"\xf0\x01\n" +
+	"\tsynced_at\x18\x04 \x01(\tR\bsyncedAt\"\xb8\x02\n" +
 	"\x04Repo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
@@ -10900,7 +11121,11 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bbranches\x18\x05 \x03(\v2\r.vx.v1.BranchR\bbranches\x12\x10\n" +
 	"\x03org\x18\x06 \x01(\tR\x03org\x12\x17\n" +
 	"\amy_role\x18\a \x01(\tR\x06myRole\x12#\n" +
-	"\rgithub_backed\x18\b \x01(\bR\fgithubBacked\"\xf5\x02\n" +
+	"\rgithub_backed\x18\b \x01(\bR\fgithubBacked\x12\x19\n" +
+	"\bbase_url\x18\t \x01(\tR\abaseUrl\x12\x12\n" +
+	"\x04host\x18\n" +
+	" \x01(\tR\x04host\x12\x17\n" +
+	"\aweb_url\x18\v \x01(\tR\x06webUrl\"\xf5\x02\n" +
 	"\x06Effort\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
@@ -11074,15 +11299,29 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06hashes\x18\x01 \x03(\tR\x06hashes\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\"=\n" +
 	"\x12GetObjectsResponse\x12'\n" +
-	"\aobjects\x18\x01 \x03(\v2\r.vx.v1.ObjectR\aobjects\"\x94\x01\n" +
+	"\aobjects\x18\x01 \x03(\v2\r.vx.v1.ObjectR\aobjects\"\xc5\x01\n" +
 	"\x11CreateRepoRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
 	"\x06remote\x18\x03 \x01(\tR\x06remote\x12%\n" +
 	"\x0edefault_branch\x18\x04 \x01(\tR\rdefaultBranch\x12\x10\n" +
-	"\x03org\x18\x05 \x01(\tR\x03org\"5\n" +
+	"\x03org\x18\x05 \x01(\tR\x03org\x12\x19\n" +
+	"\bbase_url\x18\x06 \x01(\tR\abaseUrl\x12\x14\n" +
+	"\x05token\x18\a \x01(\tR\x05token\"Z\n" +
 	"\x12CreateRepoResponse\x12\x1f\n" +
-	"\x04repo\x18\x01 \x01(\v2\v.vx.v1.RepoR\x04repo\"$\n" +
+	"\x04repo\x18\x01 \x01(\v2\v.vx.v1.RepoR\x04repo\x12#\n" +
+	"\x04hook\x18\x02 \x01(\v2\x0f.vx.v1.HostHookR\x04hook\"Y\n" +
+	"\bHostHook\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\x12#\n" +
+	"\rsecret_source\x18\x03 \x01(\tR\fsecretSource\"\x8f\x01\n" +
+	"\x12SetRepoHostRequest\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x1b\n" +
+	"\tset_token\x18\x02 \x01(\bR\bsetToken\x12\x14\n" +
+	"\x05token\x18\x03 \x01(\tR\x05token\x122\n" +
+	"\x15rotate_webhook_secret\x18\x04 \x01(\bR\x13rotateWebhookSecret\":\n" +
+	"\x13SetRepoHostResponse\x12#\n" +
+	"\x04hook\x18\x01 \x01(\v2\x0f.vx.v1.HostHookR\x04hook\"$\n" +
 	"\x0eGetRepoRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"2\n" +
 	"\x0fGetRepoResponse\x12\x1f\n" +
@@ -11727,14 +11966,15 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"PutObjects\x12\x18.vx.v1.PutObjectsRequest\x1a\x19.vx.v1.PutObjectsResponse\"\x00\x12C\n" +
 	"\n" +
-	"GetObjects\x12\x18.vx.v1.GetObjectsRequest\x1a\x19.vx.v1.GetObjectsResponse\"\x002\x95\x02\n" +
+	"GetObjects\x12\x18.vx.v1.GetObjectsRequest\x1a\x19.vx.v1.GetObjectsResponse\"\x002\xdd\x02\n" +
 	"\vRepoService\x12C\n" +
 	"\n" +
 	"CreateRepo\x12\x18.vx.v1.CreateRepoRequest\x1a\x19.vx.v1.CreateRepoResponse\"\x00\x12:\n" +
 	"\aGetRepo\x12\x15.vx.v1.GetRepoRequest\x1a\x16.vx.v1.GetRepoResponse\"\x00\x12@\n" +
 	"\tListRepos\x12\x17.vx.v1.ListReposRequest\x1a\x18.vx.v1.ListReposResponse\"\x00\x12C\n" +
 	"\n" +
-	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x002\x98\x06\n" +
+	"SyncBranch\x12\x18.vx.v1.SyncBranchRequest\x1a\x19.vx.v1.SyncBranchResponse\"\x00\x12F\n" +
+	"\vSetRepoHost\x12\x19.vx.v1.SetRepoHostRequest\x1a\x1a.vx.v1.SetRepoHostResponse\"\x002\x98\x06\n" +
 	"\rEffortService\x12I\n" +
 	"\fCreateEffort\x12\x1a.vx.v1.CreateEffortRequest\x1a\x1b.vx.v1.CreateEffortResponse\"\x00\x12@\n" +
 	"\tGetEffort\x12\x17.vx.v1.GetEffortRequest\x1a\x18.vx.v1.GetEffortResponse\"\x00\x12F\n" +
@@ -11820,7 +12060,7 @@ func file_vx_v1_vx_proto_rawDescGZIP() []byte {
 	return file_vx_v1_vx_proto_rawDescData
 }
 
-var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 173)
+var file_vx_v1_vx_proto_msgTypes = make([]protoimpl.MessageInfo, 176)
 var file_vx_v1_vx_proto_goTypes = []any{
 	(*Principal)(nil),                // 0: vx.v1.Principal
 	(*Branch)(nil),                   // 1: vx.v1.Branch
@@ -11859,146 +12099,149 @@ var file_vx_v1_vx_proto_goTypes = []any{
 	(*GetObjectsResponse)(nil),       // 34: vx.v1.GetObjectsResponse
 	(*CreateRepoRequest)(nil),        // 35: vx.v1.CreateRepoRequest
 	(*CreateRepoResponse)(nil),       // 36: vx.v1.CreateRepoResponse
-	(*GetRepoRequest)(nil),           // 37: vx.v1.GetRepoRequest
-	(*GetRepoResponse)(nil),          // 38: vx.v1.GetRepoResponse
-	(*ListReposRequest)(nil),         // 39: vx.v1.ListReposRequest
-	(*ListReposResponse)(nil),        // 40: vx.v1.ListReposResponse
-	(*SyncBranchRequest)(nil),        // 41: vx.v1.SyncBranchRequest
-	(*SyncBranchResponse)(nil),       // 42: vx.v1.SyncBranchResponse
-	(*CreateEffortRequest)(nil),      // 43: vx.v1.CreateEffortRequest
-	(*CreateEffortResponse)(nil),     // 44: vx.v1.CreateEffortResponse
-	(*GetEffortRequest)(nil),         // 45: vx.v1.GetEffortRequest
-	(*GetEffortResponse)(nil),        // 46: vx.v1.GetEffortResponse
-	(*ListEffortsRequest)(nil),       // 47: vx.v1.ListEffortsRequest
-	(*ListEffortsResponse)(nil),      // 48: vx.v1.ListEffortsResponse
-	(*LogRequest)(nil),               // 49: vx.v1.LogRequest
-	(*LogResponse)(nil),              // 50: vx.v1.LogResponse
-	(*GetChangesetRequest)(nil),      // 51: vx.v1.GetChangesetRequest
-	(*GetChangesetResponse)(nil),     // 52: vx.v1.GetChangesetResponse
-	(*ReportChangesRequest)(nil),     // 53: vx.v1.ReportChangesRequest
-	(*ReportChangesResponse)(nil),    // 54: vx.v1.ReportChangesResponse
-	(*OpenWorkspaceRequest)(nil),     // 55: vx.v1.OpenWorkspaceRequest
-	(*OpenWorkspaceResponse)(nil),    // 56: vx.v1.OpenWorkspaceResponse
-	(*GetWorkspaceRequest)(nil),      // 57: vx.v1.GetWorkspaceRequest
-	(*GetWorkspaceResponse)(nil),     // 58: vx.v1.GetWorkspaceResponse
-	(*SetBaseRequest)(nil),           // 59: vx.v1.SetBaseRequest
-	(*SetBaseResponse)(nil),          // 60: vx.v1.SetBaseResponse
-	(*LandRequest)(nil),              // 61: vx.v1.LandRequest
-	(*LandResponse)(nil),             // 62: vx.v1.LandResponse
-	(*AbandonRequest)(nil),           // 63: vx.v1.AbandonRequest
-	(*AbandonResponse)(nil),          // 64: vx.v1.AbandonResponse
-	(*ShipStep)(nil),                 // 65: vx.v1.ShipStep
-	(*ShipmentPlan)(nil),             // 66: vx.v1.ShipmentPlan
-	(*ShipGroup)(nil),                // 67: vx.v1.ShipGroup
-	(*ShipGroupInput)(nil),           // 68: vx.v1.ShipGroupInput
-	(*Shipment)(nil),                 // 69: vx.v1.Shipment
-	(*PlanShipmentRequest)(nil),      // 70: vx.v1.PlanShipmentRequest
-	(*PlanShipmentResponse)(nil),     // 71: vx.v1.PlanShipmentResponse
-	(*OpenShipmentRequest)(nil),      // 72: vx.v1.OpenShipmentRequest
-	(*OpenShipmentResponse)(nil),     // 73: vx.v1.OpenShipmentResponse
-	(*ListShipmentsRequest)(nil),     // 74: vx.v1.ListShipmentsRequest
-	(*ListShipmentsResponse)(nil),    // 75: vx.v1.ListShipmentsResponse
-	(*MarkReadRequest)(nil),          // 76: vx.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),         // 77: vx.v1.MarkReadResponse
-	(*Note)(nil),                     // 78: vx.v1.Note
-	(*PostNoteRequest)(nil),          // 79: vx.v1.PostNoteRequest
-	(*PostNoteResponse)(nil),         // 80: vx.v1.PostNoteResponse
-	(*AskRequest)(nil),               // 81: vx.v1.AskRequest
-	(*AskResponse)(nil),              // 82: vx.v1.AskResponse
-	(*AnswerRequest)(nil),            // 83: vx.v1.AnswerRequest
-	(*AnswerResponse)(nil),           // 84: vx.v1.AnswerResponse
-	(*ListNotesRequest)(nil),         // 85: vx.v1.ListNotesRequest
-	(*ListNotesResponse)(nil),        // 86: vx.v1.ListNotesResponse
-	(*InboxRequest)(nil),             // 87: vx.v1.InboxRequest
-	(*InboxResponse)(nil),            // 88: vx.v1.InboxResponse
-	(*ContextRequest)(nil),           // 89: vx.v1.ContextRequest
-	(*ContextWorkspace)(nil),         // 90: vx.v1.ContextWorkspace
-	(*ContextResponse)(nil),          // 91: vx.v1.ContextResponse
-	(*OtherEffort)(nil),              // 92: vx.v1.OtherEffort
-	(*Overlap)(nil),                  // 93: vx.v1.Overlap
-	(*Claim)(nil),                    // 94: vx.v1.Claim
-	(*ClaimRequest)(nil),             // 95: vx.v1.ClaimRequest
-	(*ClaimResponse)(nil),            // 96: vx.v1.ClaimResponse
-	(*ReleaseRequest)(nil),           // 97: vx.v1.ReleaseRequest
-	(*ReleaseResponse)(nil),          // 98: vx.v1.ReleaseResponse
-	(*ListClaimsRequest)(nil),        // 99: vx.v1.ListClaimsRequest
-	(*ListClaimsResponse)(nil),       // 100: vx.v1.ListClaimsResponse
-	(*Task)(nil),                     // 101: vx.v1.Task
-	(*AddTaskRequest)(nil),           // 102: vx.v1.AddTaskRequest
-	(*AddTaskResponse)(nil),          // 103: vx.v1.AddTaskResponse
-	(*UpdateTaskRequest)(nil),        // 104: vx.v1.UpdateTaskRequest
-	(*UpdateTaskResponse)(nil),       // 105: vx.v1.UpdateTaskResponse
-	(*ListTasksRequest)(nil),         // 106: vx.v1.ListTasksRequest
-	(*ListTasksResponse)(nil),        // 107: vx.v1.ListTasksResponse
-	(*Rebase)(nil),                   // 108: vx.v1.Rebase
-	(*RebaseConflict)(nil),           // 109: vx.v1.RebaseConflict
-	(*RebaseEffortRequest)(nil),      // 110: vx.v1.RebaseEffortRequest
-	(*RebaseEffortResponse)(nil),     // 111: vx.v1.RebaseEffortResponse
-	(*ContinueRebaseRequest)(nil),    // 112: vx.v1.ContinueRebaseRequest
-	(*ContinueRebaseResponse)(nil),   // 113: vx.v1.ContinueRebaseResponse
-	(*AbortRebaseRequest)(nil),       // 114: vx.v1.AbortRebaseRequest
-	(*AbortRebaseResponse)(nil),      // 115: vx.v1.AbortRebaseResponse
-	(*GetRebaseRequest)(nil),         // 116: vx.v1.GetRebaseRequest
-	(*GetRebaseResponse)(nil),        // 117: vx.v1.GetRebaseResponse
-	(*Org)(nil),                      // 118: vx.v1.Org
-	(*OrgMember)(nil),                // 119: vx.v1.OrgMember
-	(*Team)(nil),                     // 120: vx.v1.Team
-	(*RepoGrant)(nil),                // 121: vx.v1.RepoGrant
-	(*RepoAccessEntry)(nil),          // 122: vx.v1.RepoAccessEntry
-	(*CreateOrgRequest)(nil),         // 123: vx.v1.CreateOrgRequest
-	(*CreateOrgResponse)(nil),        // 124: vx.v1.CreateOrgResponse
-	(*ListOrgsRequest)(nil),          // 125: vx.v1.ListOrgsRequest
-	(*ListOrgsResponse)(nil),         // 126: vx.v1.ListOrgsResponse
-	(*GetOrgRequest)(nil),            // 127: vx.v1.GetOrgRequest
-	(*GetOrgResponse)(nil),           // 128: vx.v1.GetOrgResponse
-	(*UpdateOrgRequest)(nil),         // 129: vx.v1.UpdateOrgRequest
-	(*UpdateOrgResponse)(nil),        // 130: vx.v1.UpdateOrgResponse
-	(*SetMemberRequest)(nil),         // 131: vx.v1.SetMemberRequest
-	(*SetMemberResponse)(nil),        // 132: vx.v1.SetMemberResponse
-	(*RemoveMemberRequest)(nil),      // 133: vx.v1.RemoveMemberRequest
-	(*RemoveMemberResponse)(nil),     // 134: vx.v1.RemoveMemberResponse
-	(*CreateTeamRequest)(nil),        // 135: vx.v1.CreateTeamRequest
-	(*CreateTeamResponse)(nil),       // 136: vx.v1.CreateTeamResponse
-	(*DeleteTeamRequest)(nil),        // 137: vx.v1.DeleteTeamRequest
-	(*DeleteTeamResponse)(nil),       // 138: vx.v1.DeleteTeamResponse
-	(*SetTeamMemberRequest)(nil),     // 139: vx.v1.SetTeamMemberRequest
-	(*SetTeamMemberResponse)(nil),    // 140: vx.v1.SetTeamMemberResponse
-	(*RemoveTeamMemberRequest)(nil),  // 141: vx.v1.RemoveTeamMemberRequest
-	(*RemoveTeamMemberResponse)(nil), // 142: vx.v1.RemoveTeamMemberResponse
-	(*GrantRepoRequest)(nil),         // 143: vx.v1.GrantRepoRequest
-	(*GrantRepoResponse)(nil),        // 144: vx.v1.GrantRepoResponse
-	(*RevokeRepoRequest)(nil),        // 145: vx.v1.RevokeRepoRequest
-	(*RevokeRepoResponse)(nil),       // 146: vx.v1.RevokeRepoResponse
-	(*RepoAccessRequest)(nil),        // 147: vx.v1.RepoAccessRequest
-	(*RepoAccessResponse)(nil),       // 148: vx.v1.RepoAccessResponse
-	(*CreatePersonRequest)(nil),      // 149: vx.v1.CreatePersonRequest
-	(*CreatePersonResponse)(nil),     // 150: vx.v1.CreatePersonResponse
-	(*ListPeopleRequest)(nil),        // 151: vx.v1.ListPeopleRequest
-	(*ListPeopleResponse)(nil),       // 152: vx.v1.ListPeopleResponse
-	(*ServerInfoRequest)(nil),        // 153: vx.v1.ServerInfoRequest
-	(*ServerInfoResponse)(nil),       // 154: vx.v1.ServerInfoResponse
-	(*StartCLILoginRequest)(nil),     // 155: vx.v1.StartCLILoginRequest
-	(*StartCLILoginResponse)(nil),    // 156: vx.v1.StartCLILoginResponse
-	(*PollCLILoginRequest)(nil),      // 157: vx.v1.PollCLILoginRequest
-	(*PollCLILoginResponse)(nil),     // 158: vx.v1.PollCLILoginResponse
-	(*ListOverlapsRequest)(nil),      // 159: vx.v1.ListOverlapsRequest
-	(*ListOverlapsResponse)(nil),     // 160: vx.v1.ListOverlapsResponse
-	(*UniqueRule)(nil),               // 161: vx.v1.UniqueRule
-	(*GeneratedRule)(nil),            // 162: vx.v1.GeneratedRule
-	(*RepoRules)(nil),                // 163: vx.v1.RepoRules
-	(*GetRulesRequest)(nil),          // 164: vx.v1.GetRulesRequest
-	(*GetRulesResponse)(nil),         // 165: vx.v1.GetRulesResponse
-	(*ReserveRequest)(nil),           // 166: vx.v1.ReserveRequest
-	(*ReserveResponse)(nil),          // 167: vx.v1.ReserveResponse
-	(*ListReservationsRequest)(nil),  // 168: vx.v1.ListReservationsRequest
-	(*Reservation)(nil),              // 169: vx.v1.Reservation
-	(*ListReservationsResponse)(nil), // 170: vx.v1.ListReservationsResponse
-	(*CloseEffortRequest)(nil),       // 171: vx.v1.CloseEffortRequest
-	(*CloseEffortResponse)(nil),      // 172: vx.v1.CloseEffortResponse
+	(*HostHook)(nil),                 // 37: vx.v1.HostHook
+	(*SetRepoHostRequest)(nil),       // 38: vx.v1.SetRepoHostRequest
+	(*SetRepoHostResponse)(nil),      // 39: vx.v1.SetRepoHostResponse
+	(*GetRepoRequest)(nil),           // 40: vx.v1.GetRepoRequest
+	(*GetRepoResponse)(nil),          // 41: vx.v1.GetRepoResponse
+	(*ListReposRequest)(nil),         // 42: vx.v1.ListReposRequest
+	(*ListReposResponse)(nil),        // 43: vx.v1.ListReposResponse
+	(*SyncBranchRequest)(nil),        // 44: vx.v1.SyncBranchRequest
+	(*SyncBranchResponse)(nil),       // 45: vx.v1.SyncBranchResponse
+	(*CreateEffortRequest)(nil),      // 46: vx.v1.CreateEffortRequest
+	(*CreateEffortResponse)(nil),     // 47: vx.v1.CreateEffortResponse
+	(*GetEffortRequest)(nil),         // 48: vx.v1.GetEffortRequest
+	(*GetEffortResponse)(nil),        // 49: vx.v1.GetEffortResponse
+	(*ListEffortsRequest)(nil),       // 50: vx.v1.ListEffortsRequest
+	(*ListEffortsResponse)(nil),      // 51: vx.v1.ListEffortsResponse
+	(*LogRequest)(nil),               // 52: vx.v1.LogRequest
+	(*LogResponse)(nil),              // 53: vx.v1.LogResponse
+	(*GetChangesetRequest)(nil),      // 54: vx.v1.GetChangesetRequest
+	(*GetChangesetResponse)(nil),     // 55: vx.v1.GetChangesetResponse
+	(*ReportChangesRequest)(nil),     // 56: vx.v1.ReportChangesRequest
+	(*ReportChangesResponse)(nil),    // 57: vx.v1.ReportChangesResponse
+	(*OpenWorkspaceRequest)(nil),     // 58: vx.v1.OpenWorkspaceRequest
+	(*OpenWorkspaceResponse)(nil),    // 59: vx.v1.OpenWorkspaceResponse
+	(*GetWorkspaceRequest)(nil),      // 60: vx.v1.GetWorkspaceRequest
+	(*GetWorkspaceResponse)(nil),     // 61: vx.v1.GetWorkspaceResponse
+	(*SetBaseRequest)(nil),           // 62: vx.v1.SetBaseRequest
+	(*SetBaseResponse)(nil),          // 63: vx.v1.SetBaseResponse
+	(*LandRequest)(nil),              // 64: vx.v1.LandRequest
+	(*LandResponse)(nil),             // 65: vx.v1.LandResponse
+	(*AbandonRequest)(nil),           // 66: vx.v1.AbandonRequest
+	(*AbandonResponse)(nil),          // 67: vx.v1.AbandonResponse
+	(*ShipStep)(nil),                 // 68: vx.v1.ShipStep
+	(*ShipmentPlan)(nil),             // 69: vx.v1.ShipmentPlan
+	(*ShipGroup)(nil),                // 70: vx.v1.ShipGroup
+	(*ShipGroupInput)(nil),           // 71: vx.v1.ShipGroupInput
+	(*Shipment)(nil),                 // 72: vx.v1.Shipment
+	(*PlanShipmentRequest)(nil),      // 73: vx.v1.PlanShipmentRequest
+	(*PlanShipmentResponse)(nil),     // 74: vx.v1.PlanShipmentResponse
+	(*OpenShipmentRequest)(nil),      // 75: vx.v1.OpenShipmentRequest
+	(*OpenShipmentResponse)(nil),     // 76: vx.v1.OpenShipmentResponse
+	(*ListShipmentsRequest)(nil),     // 77: vx.v1.ListShipmentsRequest
+	(*ListShipmentsResponse)(nil),    // 78: vx.v1.ListShipmentsResponse
+	(*MarkReadRequest)(nil),          // 79: vx.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),         // 80: vx.v1.MarkReadResponse
+	(*Note)(nil),                     // 81: vx.v1.Note
+	(*PostNoteRequest)(nil),          // 82: vx.v1.PostNoteRequest
+	(*PostNoteResponse)(nil),         // 83: vx.v1.PostNoteResponse
+	(*AskRequest)(nil),               // 84: vx.v1.AskRequest
+	(*AskResponse)(nil),              // 85: vx.v1.AskResponse
+	(*AnswerRequest)(nil),            // 86: vx.v1.AnswerRequest
+	(*AnswerResponse)(nil),           // 87: vx.v1.AnswerResponse
+	(*ListNotesRequest)(nil),         // 88: vx.v1.ListNotesRequest
+	(*ListNotesResponse)(nil),        // 89: vx.v1.ListNotesResponse
+	(*InboxRequest)(nil),             // 90: vx.v1.InboxRequest
+	(*InboxResponse)(nil),            // 91: vx.v1.InboxResponse
+	(*ContextRequest)(nil),           // 92: vx.v1.ContextRequest
+	(*ContextWorkspace)(nil),         // 93: vx.v1.ContextWorkspace
+	(*ContextResponse)(nil),          // 94: vx.v1.ContextResponse
+	(*OtherEffort)(nil),              // 95: vx.v1.OtherEffort
+	(*Overlap)(nil),                  // 96: vx.v1.Overlap
+	(*Claim)(nil),                    // 97: vx.v1.Claim
+	(*ClaimRequest)(nil),             // 98: vx.v1.ClaimRequest
+	(*ClaimResponse)(nil),            // 99: vx.v1.ClaimResponse
+	(*ReleaseRequest)(nil),           // 100: vx.v1.ReleaseRequest
+	(*ReleaseResponse)(nil),          // 101: vx.v1.ReleaseResponse
+	(*ListClaimsRequest)(nil),        // 102: vx.v1.ListClaimsRequest
+	(*ListClaimsResponse)(nil),       // 103: vx.v1.ListClaimsResponse
+	(*Task)(nil),                     // 104: vx.v1.Task
+	(*AddTaskRequest)(nil),           // 105: vx.v1.AddTaskRequest
+	(*AddTaskResponse)(nil),          // 106: vx.v1.AddTaskResponse
+	(*UpdateTaskRequest)(nil),        // 107: vx.v1.UpdateTaskRequest
+	(*UpdateTaskResponse)(nil),       // 108: vx.v1.UpdateTaskResponse
+	(*ListTasksRequest)(nil),         // 109: vx.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),        // 110: vx.v1.ListTasksResponse
+	(*Rebase)(nil),                   // 111: vx.v1.Rebase
+	(*RebaseConflict)(nil),           // 112: vx.v1.RebaseConflict
+	(*RebaseEffortRequest)(nil),      // 113: vx.v1.RebaseEffortRequest
+	(*RebaseEffortResponse)(nil),     // 114: vx.v1.RebaseEffortResponse
+	(*ContinueRebaseRequest)(nil),    // 115: vx.v1.ContinueRebaseRequest
+	(*ContinueRebaseResponse)(nil),   // 116: vx.v1.ContinueRebaseResponse
+	(*AbortRebaseRequest)(nil),       // 117: vx.v1.AbortRebaseRequest
+	(*AbortRebaseResponse)(nil),      // 118: vx.v1.AbortRebaseResponse
+	(*GetRebaseRequest)(nil),         // 119: vx.v1.GetRebaseRequest
+	(*GetRebaseResponse)(nil),        // 120: vx.v1.GetRebaseResponse
+	(*Org)(nil),                      // 121: vx.v1.Org
+	(*OrgMember)(nil),                // 122: vx.v1.OrgMember
+	(*Team)(nil),                     // 123: vx.v1.Team
+	(*RepoGrant)(nil),                // 124: vx.v1.RepoGrant
+	(*RepoAccessEntry)(nil),          // 125: vx.v1.RepoAccessEntry
+	(*CreateOrgRequest)(nil),         // 126: vx.v1.CreateOrgRequest
+	(*CreateOrgResponse)(nil),        // 127: vx.v1.CreateOrgResponse
+	(*ListOrgsRequest)(nil),          // 128: vx.v1.ListOrgsRequest
+	(*ListOrgsResponse)(nil),         // 129: vx.v1.ListOrgsResponse
+	(*GetOrgRequest)(nil),            // 130: vx.v1.GetOrgRequest
+	(*GetOrgResponse)(nil),           // 131: vx.v1.GetOrgResponse
+	(*UpdateOrgRequest)(nil),         // 132: vx.v1.UpdateOrgRequest
+	(*UpdateOrgResponse)(nil),        // 133: vx.v1.UpdateOrgResponse
+	(*SetMemberRequest)(nil),         // 134: vx.v1.SetMemberRequest
+	(*SetMemberResponse)(nil),        // 135: vx.v1.SetMemberResponse
+	(*RemoveMemberRequest)(nil),      // 136: vx.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),     // 137: vx.v1.RemoveMemberResponse
+	(*CreateTeamRequest)(nil),        // 138: vx.v1.CreateTeamRequest
+	(*CreateTeamResponse)(nil),       // 139: vx.v1.CreateTeamResponse
+	(*DeleteTeamRequest)(nil),        // 140: vx.v1.DeleteTeamRequest
+	(*DeleteTeamResponse)(nil),       // 141: vx.v1.DeleteTeamResponse
+	(*SetTeamMemberRequest)(nil),     // 142: vx.v1.SetTeamMemberRequest
+	(*SetTeamMemberResponse)(nil),    // 143: vx.v1.SetTeamMemberResponse
+	(*RemoveTeamMemberRequest)(nil),  // 144: vx.v1.RemoveTeamMemberRequest
+	(*RemoveTeamMemberResponse)(nil), // 145: vx.v1.RemoveTeamMemberResponse
+	(*GrantRepoRequest)(nil),         // 146: vx.v1.GrantRepoRequest
+	(*GrantRepoResponse)(nil),        // 147: vx.v1.GrantRepoResponse
+	(*RevokeRepoRequest)(nil),        // 148: vx.v1.RevokeRepoRequest
+	(*RevokeRepoResponse)(nil),       // 149: vx.v1.RevokeRepoResponse
+	(*RepoAccessRequest)(nil),        // 150: vx.v1.RepoAccessRequest
+	(*RepoAccessResponse)(nil),       // 151: vx.v1.RepoAccessResponse
+	(*CreatePersonRequest)(nil),      // 152: vx.v1.CreatePersonRequest
+	(*CreatePersonResponse)(nil),     // 153: vx.v1.CreatePersonResponse
+	(*ListPeopleRequest)(nil),        // 154: vx.v1.ListPeopleRequest
+	(*ListPeopleResponse)(nil),       // 155: vx.v1.ListPeopleResponse
+	(*ServerInfoRequest)(nil),        // 156: vx.v1.ServerInfoRequest
+	(*ServerInfoResponse)(nil),       // 157: vx.v1.ServerInfoResponse
+	(*StartCLILoginRequest)(nil),     // 158: vx.v1.StartCLILoginRequest
+	(*StartCLILoginResponse)(nil),    // 159: vx.v1.StartCLILoginResponse
+	(*PollCLILoginRequest)(nil),      // 160: vx.v1.PollCLILoginRequest
+	(*PollCLILoginResponse)(nil),     // 161: vx.v1.PollCLILoginResponse
+	(*ListOverlapsRequest)(nil),      // 162: vx.v1.ListOverlapsRequest
+	(*ListOverlapsResponse)(nil),     // 163: vx.v1.ListOverlapsResponse
+	(*UniqueRule)(nil),               // 164: vx.v1.UniqueRule
+	(*GeneratedRule)(nil),            // 165: vx.v1.GeneratedRule
+	(*RepoRules)(nil),                // 166: vx.v1.RepoRules
+	(*GetRulesRequest)(nil),          // 167: vx.v1.GetRulesRequest
+	(*GetRulesResponse)(nil),         // 168: vx.v1.GetRulesResponse
+	(*ReserveRequest)(nil),           // 169: vx.v1.ReserveRequest
+	(*ReserveResponse)(nil),          // 170: vx.v1.ReserveResponse
+	(*ListReservationsRequest)(nil),  // 171: vx.v1.ListReservationsRequest
+	(*Reservation)(nil),              // 172: vx.v1.Reservation
+	(*ListReservationsResponse)(nil), // 173: vx.v1.ListReservationsResponse
+	(*CloseEffortRequest)(nil),       // 174: vx.v1.CloseEffortRequest
+	(*CloseEffortResponse)(nil),      // 175: vx.v1.CloseEffortResponse
 }
 var file_vx_v1_vx_proto_depIdxs = []int32{
 	1,   // 0: vx.v1.Repo.branches:type_name -> vx.v1.Branch
-	108, // 1: vx.v1.Effort.rebase:type_name -> vx.v1.Rebase
+	111, // 1: vx.v1.Effort.rebase:type_name -> vx.v1.Rebase
 	5,   // 2: vx.v1.Evidence.checks:type_name -> vx.v1.Check
 	4,   // 3: vx.v1.Changeset.author:type_name -> vx.v1.Author
 	6,   // 4: vx.v1.Changeset.evidence:type_name -> vx.v1.Evidence
@@ -12016,247 +12259,251 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	12,  // 16: vx.v1.PutObjectsRequest.objects:type_name -> vx.v1.Object
 	12,  // 17: vx.v1.GetObjectsResponse.objects:type_name -> vx.v1.Object
 	2,   // 18: vx.v1.CreateRepoResponse.repo:type_name -> vx.v1.Repo
-	2,   // 19: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
-	2,   // 20: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
-	1,   // 21: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
-	3,   // 22: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
-	3,   // 23: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
-	9,   // 24: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
-	3,   // 25: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
-	8,   // 26: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
-	8,   // 27: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
-	9,   // 28: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,   // 29: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
-	9,   // 30: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
-	6,   // 31: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
-	8,   // 32: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
-	10,  // 33: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
-	11,  // 34: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
-	94,  // 35: vx.v1.LandResponse.overlapping_claims:type_name -> vx.v1.Claim
-	93,  // 36: vx.v1.LandResponse.overlaps:type_name -> vx.v1.Overlap
-	9,   // 37: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
-	8,   // 38: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
-	65,  // 39: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
-	10,  // 40: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
-	11,  // 41: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
-	67,  // 42: vx.v1.ShipmentPlan.groups:type_name -> vx.v1.ShipGroup
-	69,  // 43: vx.v1.ShipmentPlan.stale:type_name -> vx.v1.Shipment
-	65,  // 44: vx.v1.ShipGroup.steps:type_name -> vx.v1.ShipStep
-	10,  // 45: vx.v1.ShipGroup.conflicts:type_name -> vx.v1.Conflict
-	11,  // 46: vx.v1.ShipGroup.warnings:type_name -> vx.v1.Warning
-	68,  // 47: vx.v1.PlanShipmentRequest.groups:type_name -> vx.v1.ShipGroupInput
-	66,  // 48: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	68,  // 49: vx.v1.OpenShipmentRequest.groups:type_name -> vx.v1.ShipGroupInput
-	69,  // 50: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
-	66,  // 51: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
-	69,  // 52: vx.v1.OpenShipmentResponse.shipments:type_name -> vx.v1.Shipment
-	69,  // 53: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
-	0,   // 54: vx.v1.Note.author:type_name -> vx.v1.Principal
-	78,  // 55: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
-	78,  // 56: vx.v1.AskResponse.question:type_name -> vx.v1.Note
-	78,  // 57: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
-	78,  // 58: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
-	78,  // 59: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
-	78,  // 60: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
-	78,  // 61: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
-	78,  // 62: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
-	78,  // 63: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
-	90,  // 64: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
-	8,   // 65: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
-	94,  // 66: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
-	92,  // 67: vx.v1.ContextResponse.other_efforts:type_name -> vx.v1.OtherEffort
-	93,  // 68: vx.v1.ContextResponse.overlaps:type_name -> vx.v1.Overlap
-	94,  // 69: vx.v1.OtherEffort.claims:type_name -> vx.v1.Claim
-	78,  // 70: vx.v1.OtherEffort.notes:type_name -> vx.v1.Note
-	90,  // 71: vx.v1.OtherEffort.working:type_name -> vx.v1.ContextWorkspace
-	11,  // 72: vx.v1.Overlap.warnings:type_name -> vx.v1.Warning
-	0,   // 73: vx.v1.Claim.owner:type_name -> vx.v1.Principal
-	94,  // 74: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
-	94,  // 75: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
-	94,  // 76: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
-	94,  // 77: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
-	0,   // 78: vx.v1.Task.owner:type_name -> vx.v1.Principal
-	0,   // 79: vx.v1.Task.created_by:type_name -> vx.v1.Principal
-	101, // 80: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
-	101, // 81: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
-	101, // 82: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
-	101, // 83: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
-	8,   // 84: vx.v1.Rebase.stopped_at:type_name -> vx.v1.Changeset
-	109, // 85: vx.v1.Rebase.conflicts:type_name -> vx.v1.RebaseConflict
-	108, // 86: vx.v1.RebaseEffortResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 87: vx.v1.RebaseEffortResponse.effort:type_name -> vx.v1.Effort
-	108, // 88: vx.v1.ContinueRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 89: vx.v1.ContinueRebaseResponse.effort:type_name -> vx.v1.Effort
-	108, // 90: vx.v1.AbortRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 91: vx.v1.AbortRebaseResponse.effort:type_name -> vx.v1.Effort
-	108, // 92: vx.v1.GetRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	0,   // 93: vx.v1.OrgMember.person:type_name -> vx.v1.Principal
-	0,   // 94: vx.v1.Team.members:type_name -> vx.v1.Principal
-	0,   // 95: vx.v1.RepoAccessEntry.person:type_name -> vx.v1.Principal
-	118, // 96: vx.v1.CreateOrgResponse.org:type_name -> vx.v1.Org
-	118, // 97: vx.v1.ListOrgsResponse.orgs:type_name -> vx.v1.Org
-	118, // 98: vx.v1.GetOrgResponse.org:type_name -> vx.v1.Org
-	119, // 99: vx.v1.GetOrgResponse.members:type_name -> vx.v1.OrgMember
-	120, // 100: vx.v1.GetOrgResponse.teams:type_name -> vx.v1.Team
-	2,   // 101: vx.v1.GetOrgResponse.repos:type_name -> vx.v1.Repo
-	118, // 102: vx.v1.UpdateOrgResponse.org:type_name -> vx.v1.Org
-	119, // 103: vx.v1.SetMemberResponse.member:type_name -> vx.v1.OrgMember
-	120, // 104: vx.v1.CreateTeamResponse.team:type_name -> vx.v1.Team
-	120, // 105: vx.v1.SetTeamMemberResponse.team:type_name -> vx.v1.Team
-	120, // 106: vx.v1.RemoveTeamMemberResponse.team:type_name -> vx.v1.Team
-	121, // 107: vx.v1.GrantRepoResponse.grant:type_name -> vx.v1.RepoGrant
-	121, // 108: vx.v1.RepoAccessResponse.grants:type_name -> vx.v1.RepoGrant
-	122, // 109: vx.v1.RepoAccessResponse.people:type_name -> vx.v1.RepoAccessEntry
-	0,   // 110: vx.v1.CreatePersonResponse.person:type_name -> vx.v1.Principal
-	0,   // 111: vx.v1.ListPeopleResponse.people:type_name -> vx.v1.Principal
-	0,   // 112: vx.v1.PollCLILoginResponse.principal:type_name -> vx.v1.Principal
-	93,  // 113: vx.v1.ListOverlapsResponse.overlaps:type_name -> vx.v1.Overlap
-	161, // 114: vx.v1.RepoRules.unique:type_name -> vx.v1.UniqueRule
-	162, // 115: vx.v1.RepoRules.generated:type_name -> vx.v1.GeneratedRule
-	163, // 116: vx.v1.GetRulesResponse.rules:type_name -> vx.v1.RepoRules
-	169, // 117: vx.v1.ListReservationsResponse.reservations:type_name -> vx.v1.Reservation
-	3,   // 118: vx.v1.CloseEffortResponse.effort:type_name -> vx.v1.Effort
-	25,  // 119: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	27,  // 120: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	17,  // 121: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	19,  // 122: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	21,  // 123: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	23,  // 124: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	13,  // 125: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	29,  // 126: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	31,  // 127: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	33,  // 128: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	35,  // 129: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	37,  // 130: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	39,  // 131: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	41,  // 132: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	43,  // 133: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	45,  // 134: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	47,  // 135: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	171, // 136: vx.v1.EffortService.CloseEffort:input_type -> vx.v1.CloseEffortRequest
-	159, // 137: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
-	49,  // 138: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	51,  // 139: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	110, // 140: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
-	112, // 141: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
-	114, // 142: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
-	116, // 143: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
-	55,  // 144: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	57,  // 145: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	59,  // 146: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	61,  // 147: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	63,  // 148: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	53,  // 149: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
-	70,  // 150: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	72,  // 151: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	74,  // 152: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	79,  // 153: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	81,  // 154: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	83,  // 155: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	85,  // 156: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	87,  // 157: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	89,  // 158: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	76,  // 159: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
-	95,  // 160: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
-	97,  // 161: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
-	99,  // 162: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
-	102, // 163: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
-	104, // 164: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
-	106, // 165: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
-	123, // 166: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
-	125, // 167: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
-	127, // 168: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
-	129, // 169: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
-	131, // 170: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
-	133, // 171: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
-	135, // 172: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
-	137, // 173: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
-	139, // 174: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
-	141, // 175: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
-	143, // 176: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
-	145, // 177: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
-	147, // 178: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
-	149, // 179: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
-	151, // 180: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
-	153, // 181: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
-	155, // 182: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
-	157, // 183: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
-	164, // 184: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
-	166, // 185: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
-	168, // 186: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
-	26,  // 187: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	28,  // 188: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	18,  // 189: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	20,  // 190: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	22,  // 191: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	24,  // 192: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	14,  // 193: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	30,  // 194: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	32,  // 195: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	34,  // 196: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	36,  // 197: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	38,  // 198: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	40,  // 199: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	42,  // 200: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	44,  // 201: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	46,  // 202: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	48,  // 203: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	172, // 204: vx.v1.EffortService.CloseEffort:output_type -> vx.v1.CloseEffortResponse
-	160, // 205: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
-	50,  // 206: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	52,  // 207: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	111, // 208: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
-	113, // 209: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
-	115, // 210: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
-	117, // 211: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
-	56,  // 212: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	58,  // 213: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	60,  // 214: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	62,  // 215: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	64,  // 216: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	54,  // 217: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
-	71,  // 218: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	73,  // 219: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	75,  // 220: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	80,  // 221: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	82,  // 222: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	84,  // 223: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	86,  // 224: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	88,  // 225: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	91,  // 226: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	77,  // 227: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
-	96,  // 228: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
-	98,  // 229: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
-	100, // 230: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
-	103, // 231: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
-	105, // 232: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
-	107, // 233: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
-	124, // 234: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
-	126, // 235: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
-	128, // 236: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
-	130, // 237: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
-	132, // 238: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
-	134, // 239: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
-	136, // 240: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
-	138, // 241: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
-	140, // 242: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
-	142, // 243: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
-	144, // 244: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
-	146, // 245: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
-	148, // 246: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
-	150, // 247: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
-	152, // 248: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
-	154, // 249: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
-	156, // 250: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
-	158, // 251: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
-	165, // 252: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
-	167, // 253: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
-	170, // 254: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
-	187, // [187:255] is the sub-list for method output_type
-	119, // [119:187] is the sub-list for method input_type
-	119, // [119:119] is the sub-list for extension type_name
-	119, // [119:119] is the sub-list for extension extendee
-	0,   // [0:119] is the sub-list for field type_name
+	37,  // 19: vx.v1.CreateRepoResponse.hook:type_name -> vx.v1.HostHook
+	37,  // 20: vx.v1.SetRepoHostResponse.hook:type_name -> vx.v1.HostHook
+	2,   // 21: vx.v1.GetRepoResponse.repo:type_name -> vx.v1.Repo
+	2,   // 22: vx.v1.ListReposResponse.repos:type_name -> vx.v1.Repo
+	1,   // 23: vx.v1.SyncBranchResponse.branch:type_name -> vx.v1.Branch
+	3,   // 24: vx.v1.CreateEffortResponse.effort:type_name -> vx.v1.Effort
+	3,   // 25: vx.v1.GetEffortResponse.effort:type_name -> vx.v1.Effort
+	9,   // 26: vx.v1.GetEffortResponse.open_workspaces:type_name -> vx.v1.Workspace
+	3,   // 27: vx.v1.ListEffortsResponse.efforts:type_name -> vx.v1.Effort
+	8,   // 28: vx.v1.LogResponse.changesets:type_name -> vx.v1.Changeset
+	8,   // 29: vx.v1.GetChangesetResponse.changeset:type_name -> vx.v1.Changeset
+	9,   // 30: vx.v1.OpenWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 31: vx.v1.GetWorkspaceResponse.workspace:type_name -> vx.v1.Workspace
+	9,   // 32: vx.v1.SetBaseResponse.workspace:type_name -> vx.v1.Workspace
+	6,   // 33: vx.v1.LandRequest.evidence:type_name -> vx.v1.Evidence
+	8,   // 34: vx.v1.LandResponse.changeset:type_name -> vx.v1.Changeset
+	10,  // 35: vx.v1.LandResponse.conflicts:type_name -> vx.v1.Conflict
+	11,  // 36: vx.v1.LandResponse.warnings:type_name -> vx.v1.Warning
+	97,  // 37: vx.v1.LandResponse.overlapping_claims:type_name -> vx.v1.Claim
+	96,  // 38: vx.v1.LandResponse.overlaps:type_name -> vx.v1.Overlap
+	9,   // 39: vx.v1.AbandonResponse.workspace:type_name -> vx.v1.Workspace
+	8,   // 40: vx.v1.ShipStep.changeset:type_name -> vx.v1.Changeset
+	68,  // 41: vx.v1.ShipmentPlan.steps:type_name -> vx.v1.ShipStep
+	10,  // 42: vx.v1.ShipmentPlan.conflicts:type_name -> vx.v1.Conflict
+	11,  // 43: vx.v1.ShipmentPlan.warnings:type_name -> vx.v1.Warning
+	70,  // 44: vx.v1.ShipmentPlan.groups:type_name -> vx.v1.ShipGroup
+	72,  // 45: vx.v1.ShipmentPlan.stale:type_name -> vx.v1.Shipment
+	68,  // 46: vx.v1.ShipGroup.steps:type_name -> vx.v1.ShipStep
+	10,  // 47: vx.v1.ShipGroup.conflicts:type_name -> vx.v1.Conflict
+	11,  // 48: vx.v1.ShipGroup.warnings:type_name -> vx.v1.Warning
+	71,  // 49: vx.v1.PlanShipmentRequest.groups:type_name -> vx.v1.ShipGroupInput
+	69,  // 50: vx.v1.PlanShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	71,  // 51: vx.v1.OpenShipmentRequest.groups:type_name -> vx.v1.ShipGroupInput
+	72,  // 52: vx.v1.OpenShipmentResponse.shipment:type_name -> vx.v1.Shipment
+	69,  // 53: vx.v1.OpenShipmentResponse.plan:type_name -> vx.v1.ShipmentPlan
+	72,  // 54: vx.v1.OpenShipmentResponse.shipments:type_name -> vx.v1.Shipment
+	72,  // 55: vx.v1.ListShipmentsResponse.shipments:type_name -> vx.v1.Shipment
+	0,   // 56: vx.v1.Note.author:type_name -> vx.v1.Principal
+	81,  // 57: vx.v1.PostNoteResponse.note:type_name -> vx.v1.Note
+	81,  // 58: vx.v1.AskResponse.question:type_name -> vx.v1.Note
+	81,  // 59: vx.v1.AnswerResponse.answer:type_name -> vx.v1.Note
+	81,  // 60: vx.v1.AnswerResponse.question:type_name -> vx.v1.Note
+	81,  // 61: vx.v1.ListNotesResponse.notes:type_name -> vx.v1.Note
+	81,  // 62: vx.v1.InboxResponse.questions:type_name -> vx.v1.Note
+	81,  // 63: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
+	81,  // 64: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
+	81,  // 65: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
+	93,  // 66: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
+	8,   // 67: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
+	97,  // 68: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
+	95,  // 69: vx.v1.ContextResponse.other_efforts:type_name -> vx.v1.OtherEffort
+	96,  // 70: vx.v1.ContextResponse.overlaps:type_name -> vx.v1.Overlap
+	97,  // 71: vx.v1.OtherEffort.claims:type_name -> vx.v1.Claim
+	81,  // 72: vx.v1.OtherEffort.notes:type_name -> vx.v1.Note
+	93,  // 73: vx.v1.OtherEffort.working:type_name -> vx.v1.ContextWorkspace
+	11,  // 74: vx.v1.Overlap.warnings:type_name -> vx.v1.Warning
+	0,   // 75: vx.v1.Claim.owner:type_name -> vx.v1.Principal
+	97,  // 76: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
+	97,  // 77: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
+	97,  // 78: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
+	97,  // 79: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
+	0,   // 80: vx.v1.Task.owner:type_name -> vx.v1.Principal
+	0,   // 81: vx.v1.Task.created_by:type_name -> vx.v1.Principal
+	104, // 82: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
+	104, // 83: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
+	104, // 84: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
+	104, // 85: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
+	8,   // 86: vx.v1.Rebase.stopped_at:type_name -> vx.v1.Changeset
+	112, // 87: vx.v1.Rebase.conflicts:type_name -> vx.v1.RebaseConflict
+	111, // 88: vx.v1.RebaseEffortResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 89: vx.v1.RebaseEffortResponse.effort:type_name -> vx.v1.Effort
+	111, // 90: vx.v1.ContinueRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 91: vx.v1.ContinueRebaseResponse.effort:type_name -> vx.v1.Effort
+	111, // 92: vx.v1.AbortRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 93: vx.v1.AbortRebaseResponse.effort:type_name -> vx.v1.Effort
+	111, // 94: vx.v1.GetRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	0,   // 95: vx.v1.OrgMember.person:type_name -> vx.v1.Principal
+	0,   // 96: vx.v1.Team.members:type_name -> vx.v1.Principal
+	0,   // 97: vx.v1.RepoAccessEntry.person:type_name -> vx.v1.Principal
+	121, // 98: vx.v1.CreateOrgResponse.org:type_name -> vx.v1.Org
+	121, // 99: vx.v1.ListOrgsResponse.orgs:type_name -> vx.v1.Org
+	121, // 100: vx.v1.GetOrgResponse.org:type_name -> vx.v1.Org
+	122, // 101: vx.v1.GetOrgResponse.members:type_name -> vx.v1.OrgMember
+	123, // 102: vx.v1.GetOrgResponse.teams:type_name -> vx.v1.Team
+	2,   // 103: vx.v1.GetOrgResponse.repos:type_name -> vx.v1.Repo
+	121, // 104: vx.v1.UpdateOrgResponse.org:type_name -> vx.v1.Org
+	122, // 105: vx.v1.SetMemberResponse.member:type_name -> vx.v1.OrgMember
+	123, // 106: vx.v1.CreateTeamResponse.team:type_name -> vx.v1.Team
+	123, // 107: vx.v1.SetTeamMemberResponse.team:type_name -> vx.v1.Team
+	123, // 108: vx.v1.RemoveTeamMemberResponse.team:type_name -> vx.v1.Team
+	124, // 109: vx.v1.GrantRepoResponse.grant:type_name -> vx.v1.RepoGrant
+	124, // 110: vx.v1.RepoAccessResponse.grants:type_name -> vx.v1.RepoGrant
+	125, // 111: vx.v1.RepoAccessResponse.people:type_name -> vx.v1.RepoAccessEntry
+	0,   // 112: vx.v1.CreatePersonResponse.person:type_name -> vx.v1.Principal
+	0,   // 113: vx.v1.ListPeopleResponse.people:type_name -> vx.v1.Principal
+	0,   // 114: vx.v1.PollCLILoginResponse.principal:type_name -> vx.v1.Principal
+	96,  // 115: vx.v1.ListOverlapsResponse.overlaps:type_name -> vx.v1.Overlap
+	164, // 116: vx.v1.RepoRules.unique:type_name -> vx.v1.UniqueRule
+	165, // 117: vx.v1.RepoRules.generated:type_name -> vx.v1.GeneratedRule
+	166, // 118: vx.v1.GetRulesResponse.rules:type_name -> vx.v1.RepoRules
+	172, // 119: vx.v1.ListReservationsResponse.reservations:type_name -> vx.v1.Reservation
+	3,   // 120: vx.v1.CloseEffortResponse.effort:type_name -> vx.v1.Effort
+	25,  // 121: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	27,  // 122: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	17,  // 123: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	19,  // 124: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	21,  // 125: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	23,  // 126: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	13,  // 127: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	29,  // 128: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	31,  // 129: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	33,  // 130: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	35,  // 131: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	40,  // 132: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	42,  // 133: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	44,  // 134: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	38,  // 135: vx.v1.RepoService.SetRepoHost:input_type -> vx.v1.SetRepoHostRequest
+	46,  // 136: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	48,  // 137: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	50,  // 138: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	174, // 139: vx.v1.EffortService.CloseEffort:input_type -> vx.v1.CloseEffortRequest
+	162, // 140: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
+	52,  // 141: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	54,  // 142: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	113, // 143: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
+	115, // 144: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
+	117, // 145: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
+	119, // 146: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
+	58,  // 147: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	60,  // 148: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	62,  // 149: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	64,  // 150: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	66,  // 151: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	56,  // 152: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
+	73,  // 153: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	75,  // 154: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	77,  // 155: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	82,  // 156: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	84,  // 157: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	86,  // 158: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	88,  // 159: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	90,  // 160: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	92,  // 161: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	79,  // 162: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
+	98,  // 163: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	100, // 164: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	102, // 165: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	105, // 166: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	107, // 167: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	109, // 168: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	126, // 169: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
+	128, // 170: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
+	130, // 171: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
+	132, // 172: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
+	134, // 173: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
+	136, // 174: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
+	138, // 175: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
+	140, // 176: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
+	142, // 177: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
+	144, // 178: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
+	146, // 179: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
+	148, // 180: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
+	150, // 181: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
+	152, // 182: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
+	154, // 183: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
+	156, // 184: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
+	158, // 185: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
+	160, // 186: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
+	167, // 187: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
+	169, // 188: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
+	171, // 189: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
+	26,  // 190: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	28,  // 191: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	18,  // 192: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	20,  // 193: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	22,  // 194: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	24,  // 195: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	14,  // 196: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	30,  // 197: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	32,  // 198: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	34,  // 199: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	36,  // 200: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	41,  // 201: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	43,  // 202: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	45,  // 203: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	39,  // 204: vx.v1.RepoService.SetRepoHost:output_type -> vx.v1.SetRepoHostResponse
+	47,  // 205: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	49,  // 206: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	51,  // 207: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	175, // 208: vx.v1.EffortService.CloseEffort:output_type -> vx.v1.CloseEffortResponse
+	163, // 209: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
+	53,  // 210: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	55,  // 211: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	114, // 212: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
+	116, // 213: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
+	118, // 214: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
+	120, // 215: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
+	59,  // 216: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	61,  // 217: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	63,  // 218: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	65,  // 219: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	67,  // 220: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	57,  // 221: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
+	74,  // 222: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	76,  // 223: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	78,  // 224: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	83,  // 225: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	85,  // 226: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	87,  // 227: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	89,  // 228: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	91,  // 229: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	94,  // 230: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	80,  // 231: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
+	99,  // 232: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	101, // 233: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	103, // 234: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	106, // 235: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	108, // 236: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	110, // 237: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	127, // 238: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
+	129, // 239: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
+	131, // 240: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
+	133, // 241: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
+	135, // 242: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
+	137, // 243: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
+	139, // 244: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
+	141, // 245: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
+	143, // 246: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
+	145, // 247: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
+	147, // 248: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
+	149, // 249: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
+	151, // 250: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
+	153, // 251: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
+	155, // 252: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
+	157, // 253: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
+	159, // 254: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
+	161, // 255: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
+	168, // 256: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
+	170, // 257: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
+	173, // 258: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
+	190, // [190:259] is the sub-list for method output_type
+	121, // [121:190] is the sub-list for method input_type
+	121, // [121:121] is the sub-list for extension type_name
+	121, // [121:121] is the sub-list for extension extendee
+	0,   // [0:121] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
@@ -12270,7 +12517,7 @@ func file_vx_v1_vx_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vx_v1_vx_proto_rawDesc), len(file_vx_v1_vx_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   173,
+			NumMessages:   176,
 			NumExtensions: 0,
 			NumServices:   11,
 		},

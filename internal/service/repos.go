@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/secret"
 	"github.com/TerracodeBA/vx/internal/store"
 )
 
@@ -18,6 +19,13 @@ type CreateRepoInput struct {
 	// owner part when the caller may create repos there, else the
 	// caller's personal organization.
 	Org string
+	// BaseURL is the host's web address for GitLab, Gitea, Forgejo and
+	// Bitbucket (empty: the server's default for the provider).
+	BaseURL string
+	// Token is a token for this repository only (GitLab, Gitea, Forgejo,
+	// Bitbucket), kept sealed with VX_SECRET_KEY. Empty: the server's
+	// token for the host.
+	Token string
 }
 
 // CreateRepo registers a repo. A repo with an upstream imports its default
@@ -36,8 +44,30 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 		if strings.TrimSpace(in.Remote) == "" {
 			return store.Repo{}, errf(CodeInvalid, "a %s repo needs a remote", in.Provider)
 		}
+	case store.ProviderGitLab, store.ProviderGitea, store.ProviderForgejo, store.ProviderBitbucket:
+		if s.Upstream == nil {
+			return store.Repo{}, errf(CodeFailedPrecondition, "this server has no git bridge configured")
+		}
+		remote, err := normalizeHostRemote(in.Provider, in.Remote)
+		if err != nil {
+			return store.Repo{}, err
+		}
+		base, err := s.hostBaseURL(in.Provider, in.BaseURL)
+		if err != nil {
+			return store.Repo{}, err
+		}
+		in.Remote, in.BaseURL = remote, base
+		if in.Token = strings.TrimSpace(in.Token); in.Token != "" {
+			if _, err := s.secretKey(); err != nil {
+				return store.Repo{}, errf(CodeFailedPrecondition, "vx keeps a repository's token sealed with the server key, and this server has none: set VX_SECRET_KEY, or give the server a token for the whole host (VX_%s_TOKEN)", strings.ToUpper(string(in.Provider)))
+			}
+			ctx = withHostToken(ctx, in.Token)
+		}
 	default:
 		return store.Repo{}, errf(CodeInvalid, "unknown provider %q", in.Provider)
+	}
+	if !in.Provider.Hosted() && (in.BaseURL != "" || in.Token != "") {
+		return store.Repo{}, errf(CodeInvalid, "a host address and token are for GitLab, Gitea, Forgejo and Bitbucket repositories, not %s ones", in.Provider)
 	}
 	if err := store.ValidateRepoName(in.Name); err != nil {
 		return store.Repo{}, errf(CodeInvalid, "%v", err)
@@ -46,7 +76,7 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	if err != nil {
 		return store.Repo{}, err
 	}
-	repo := store.Repo{Name: in.Name, Provider: in.Provider, Remote: in.Remote, DefaultBranch: in.DefaultBranch, OrgID: org.ID, Org: org.Handle}
+	repo := store.Repo{Name: in.Name, Provider: in.Provider, Remote: in.Remote, DefaultBranch: in.DefaultBranch, BaseURL: in.BaseURL, OrgID: org.ID, Org: org.Handle}
 	if repo.DefaultBranch == "" && in.Provider != store.ProviderNone {
 		b, err := s.Upstream.DefaultBranch(ctx, repo)
 		if err != nil {
@@ -64,6 +94,19 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 		created, err = tx.CreateRepo(ctx, repo)
 		if err != nil {
 			return err
+		}
+		if in.Token != "" {
+			key, err := s.secretKey()
+			if err != nil {
+				return err
+			}
+			sealed, err := secret.SealString(key, tokenPurpose(created), in.Token)
+			if err != nil {
+				return err
+			}
+			if err := tx.SetUpstreamToken(ctx, created.ID, sealed); err != nil {
+				return err
+			}
 		}
 		if in.Provider != store.ProviderNone {
 			return tx.LogOp(ctx, &created.ID, &actor.ID, "repo.create", created.Name, nil, created)

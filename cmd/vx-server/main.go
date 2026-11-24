@@ -79,6 +79,7 @@ func root() *cobra.Command {
 			}
 			srv, err := server.New(cmd.Context(), server.Config{
 				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream, GitHub: gh,
+				Hosts: hostSettings(),
 			})
 			if err != nil {
 				return err
@@ -284,7 +285,8 @@ func openMigrated(ctx context.Context, url string) (*store.Store, error) {
 	return st, nil
 }
 
-// upstream builds the git bridge. GitHub access uses VX_GITHUB_TOKEN.
+// upstream builds the git bridge. GitHub access uses VX_GITHUB_TOKEN;
+// GitLab, Gitea, Forgejo and Bitbucket use VX_<HOST>_TOKEN (hosts.go).
 func upstream(st *store.Store, blobs blob.Store, dataDir string) (service.UpstreamSyncer, error) {
 	token := func() string { return os.Getenv("VX_GITHUB_TOKEN") }
 	b := gitbridge.New(st, blobs, filepath.Join(dataDir, "git"), token)
@@ -294,6 +296,9 @@ func upstream(st *store.Store, blobs blob.Store, dataDir string) (service.Upstre
 	}
 	if v := strings.TrimRight(os.Getenv("VX_GITHUB_API_URL"), "/"); v != "" {
 		b.GitHubAPI = v
+	}
+	if err := configureHosts(b); err != nil {
+		return nil, err
 	}
 	return b, nil
 }

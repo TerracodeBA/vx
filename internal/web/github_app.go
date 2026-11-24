@@ -36,6 +36,7 @@ func (u *UI) mountGitHubApp(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /ui/admin/github/finish", u.auth(u.admin(u.githubFinishPost)))
 	mux.HandleFunc("GET "+service.GitHubSetupURLPath, u.githubInstalledPage)
 	mux.HandleFunc("POST "+service.GitHubWebhookPath, u.githubWebhook)
+	u.mountHostHooks(mux)
 	return nil
 }
 

@@ -49,6 +49,11 @@ type Bridge struct {
 	GitHubAPI string
 	// GitHubGitBase is the base URL for git over HTTPS (tests override it).
 	GitHubGitBase string
+	// Hosts configures GitLab, Gitea, Forgejo and Bitbucket (hosts.go).
+	Hosts map[store.Provider]HostConfig
+	// HostToken returns the token kept for one GitLab, Gitea, Forgejo or
+	// Bitbucket repository, or "" to use the server's token for its host.
+	HostToken func(ctx context.Context, repo store.Repo) (string, error)
 	// FirstDepth is how many commits the first import of a branch fetches.
 	FirstDepth int
 	// SyncDepth bounds how many new commits one sync imports.
@@ -63,7 +68,7 @@ type Bridge struct {
 func New(st *store.Store, blobs blob.Store, dir string, githubToken func() string) *Bridge {
 	return &Bridge{
 		Store: st, Blobs: blobs, Dir: dir, GitHubToken: githubToken,
-		GitHubAPI: "https://api.github.com", GitHubGitBase: defaultGitHubBase,
+		GitHubAPI: "https://api.github.com", GitHubGitBase: defaultGitHubBase, Hosts: defaultHosts(),
 		FirstDepth: 1, SyncDepth: 200, Log: slog.Default(),
 		locks: map[uuid.UUID]*sync.Mutex{},
 	}
@@ -123,13 +128,19 @@ func (b *Bridge) remoteURL(ctx context.Context, repo store.Repo) (string, error)
 		return base + "/" + repo.Remote + ".git", nil
 	case store.ProviderGit:
 		return repo.Remote, nil
+	case store.ProviderGitLab, store.ProviderGitea, store.ProviderForgejo, store.ProviderBitbucket:
+		return b.hostGitURL(repo)
 	}
 	return "", fmt.Errorf("repo %s has no git upstream", repo.Name)
 }
 
-// auth returns HTTPS credentials for GitHub when a token is set. Without
-// one, SSH remotes use the SSH agent and known_hosts, as git does.
+// auth returns HTTPS credentials for GitHub, GitLab, Gitea, Forgejo and
+// Bitbucket when a token is set. Without one, SSH remotes use the SSH
+// agent and known_hosts, as git does.
 func (b *Bridge) auth(ctx context.Context, repo store.Repo) transport.AuthMethod {
+	if repo.Provider.Hosted() {
+		return b.hostGitAuth(ctx, repo)
+	}
 	if repo.Provider == store.ProviderGitHub {
 		if tok := b.tokenFor(ctx, repo); tok != "" {
 			return &githttp.BasicAuth{Username: "x-access-token", Password: tok}

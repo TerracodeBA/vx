@@ -35,6 +35,9 @@ type Config struct {
 	// GitHub configures the GitHub App (VX_PUBLIC_URL, VX_SECRET_KEY,
 	// VX_SIGNUP). Connect defaults to the internal/github client.
 	GitHub service.GitHubSettings
+	// Hosts configures GitLab, Gitea, Forgejo and Bitbucket webhooks
+	// (VX_<HOST>_WEBHOOK_SECRET).
+	Hosts service.HostSettings
 }
 
 // Server is a running vx server.
@@ -74,6 +77,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	svc := service.New(st, blobs, up)
 	svc.GitHub = cfg.GitHub
+	svc.Hosts = cfg.Hosts
 	if svc.GitHub.Connect == nil {
 		apiURL, webURL := svc.GitHub.APIURL, svc.GitHub.WebURL
 		svc.GitHub.Connect = func(creds service.GitHubAppCredentials) (service.GitHubAPI, error) {
@@ -91,6 +95,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		UseRepoTokens(func(context.Context, store.Repo) (string, error))
 	}); ok {
 		b.UseRepoTokens(svc.GitHubRepoToken)
+	}
+	// GitLab, Gitea, Forgejo and Bitbucket repositories with a token of
+	// their own use it.
+	if b, ok := up.(interface {
+		UseHostTokens(func(context.Context, store.Repo) (string, error))
+	}); ok {
+		b.UseHostTokens(svc.HostRepoToken)
 	}
 	// Repositories from before objects were scoped to repositories get their
 	// objects indexed: queue them now, so object requests for them wait for

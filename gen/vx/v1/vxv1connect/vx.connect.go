@@ -85,6 +85,8 @@ const (
 	RepoServiceListReposProcedure = "/vx.v1.RepoService/ListRepos"
 	// RepoServiceSyncBranchProcedure is the fully-qualified name of the RepoService's SyncBranch RPC.
 	RepoServiceSyncBranchProcedure = "/vx.v1.RepoService/SyncBranch"
+	// RepoServiceSetRepoHostProcedure is the fully-qualified name of the RepoService's SetRepoHost RPC.
+	RepoServiceSetRepoHostProcedure = "/vx.v1.RepoService/SetRepoHost"
 	// EffortServiceCreateEffortProcedure is the fully-qualified name of the EffortService's
 	// CreateEffort RPC.
 	EffortServiceCreateEffortProcedure = "/vx.v1.EffortService/CreateEffort"
@@ -602,6 +604,9 @@ type RepoServiceClient interface {
 	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
 	// SyncBranch imports the latest commits of an upstream branch.
 	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
+	// SetRepoHost sets the token of a GitLab, Gitea, Forgejo or Bitbucket
+	// repository or makes a new webhook secret for it (admin).
+	SetRepoHost(context.Context, *connect.Request[v1.SetRepoHostRequest]) (*connect.Response[v1.SetRepoHostResponse], error)
 }
 
 // NewRepoServiceClient constructs a client for the vx.v1.RepoService service. By default, it uses
@@ -639,15 +644,22 @@ func NewRepoServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(repoServiceMethods.ByName("SyncBranch")),
 			connect.WithClientOptions(opts...),
 		),
+		setRepoHost: connect.NewClient[v1.SetRepoHostRequest, v1.SetRepoHostResponse](
+			httpClient,
+			baseURL+RepoServiceSetRepoHostProcedure,
+			connect.WithSchema(repoServiceMethods.ByName("SetRepoHost")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // repoServiceClient implements RepoServiceClient.
 type repoServiceClient struct {
-	createRepo *connect.Client[v1.CreateRepoRequest, v1.CreateRepoResponse]
-	getRepo    *connect.Client[v1.GetRepoRequest, v1.GetRepoResponse]
-	listRepos  *connect.Client[v1.ListReposRequest, v1.ListReposResponse]
-	syncBranch *connect.Client[v1.SyncBranchRequest, v1.SyncBranchResponse]
+	createRepo  *connect.Client[v1.CreateRepoRequest, v1.CreateRepoResponse]
+	getRepo     *connect.Client[v1.GetRepoRequest, v1.GetRepoResponse]
+	listRepos   *connect.Client[v1.ListReposRequest, v1.ListReposResponse]
+	syncBranch  *connect.Client[v1.SyncBranchRequest, v1.SyncBranchResponse]
+	setRepoHost *connect.Client[v1.SetRepoHostRequest, v1.SetRepoHostResponse]
 }
 
 // CreateRepo calls vx.v1.RepoService.CreateRepo.
@@ -670,6 +682,11 @@ func (c *repoServiceClient) SyncBranch(ctx context.Context, req *connect.Request
 	return c.syncBranch.CallUnary(ctx, req)
 }
 
+// SetRepoHost calls vx.v1.RepoService.SetRepoHost.
+func (c *repoServiceClient) SetRepoHost(ctx context.Context, req *connect.Request[v1.SetRepoHostRequest]) (*connect.Response[v1.SetRepoHostResponse], error) {
+	return c.setRepoHost.CallUnary(ctx, req)
+}
+
 // RepoServiceHandler is an implementation of the vx.v1.RepoService service.
 type RepoServiceHandler interface {
 	CreateRepo(context.Context, *connect.Request[v1.CreateRepoRequest]) (*connect.Response[v1.CreateRepoResponse], error)
@@ -677,6 +694,9 @@ type RepoServiceHandler interface {
 	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
 	// SyncBranch imports the latest commits of an upstream branch.
 	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
+	// SetRepoHost sets the token of a GitLab, Gitea, Forgejo or Bitbucket
+	// repository or makes a new webhook secret for it (admin).
+	SetRepoHost(context.Context, *connect.Request[v1.SetRepoHostRequest]) (*connect.Response[v1.SetRepoHostResponse], error)
 }
 
 // NewRepoServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -710,6 +730,12 @@ func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(repoServiceMethods.ByName("SyncBranch")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repoServiceSetRepoHostHandler := connect.NewUnaryHandler(
+		RepoServiceSetRepoHostProcedure,
+		svc.SetRepoHost,
+		connect.WithSchema(repoServiceMethods.ByName("SetRepoHost")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.RepoService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepoServiceCreateRepoProcedure:
@@ -720,6 +746,8 @@ func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption
 			repoServiceListReposHandler.ServeHTTP(w, r)
 		case RepoServiceSyncBranchProcedure:
 			repoServiceSyncBranchHandler.ServeHTTP(w, r)
+		case RepoServiceSetRepoHostProcedure:
+			repoServiceSetRepoHostHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -743,6 +771,10 @@ func (UnimplementedRepoServiceHandler) ListRepos(context.Context, *connect.Reque
 
 func (UnimplementedRepoServiceHandler) SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RepoService.SyncBranch is not implemented"))
+}
+
+func (UnimplementedRepoServiceHandler) SetRepoHost(context.Context, *connect.Request[v1.SetRepoHostRequest]) (*connect.Response[v1.SetRepoHostResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.RepoService.SetRepoHost is not implemented"))
 }
 
 // EffortServiceClient is a client for the vx.v1.EffortService service.

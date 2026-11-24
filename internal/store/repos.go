@@ -18,7 +18,51 @@ const (
 	ProviderGitHub Provider = "github" // remote is "owner/name"
 	ProviderGit    Provider = "git"    // remote is a git URL or path
 	ProviderNone   Provider = "none"   // vx only, nothing to sync or ship to
+	// Hosts with a pull request API besides GitHub; remote is the path on
+	// the host ("group/project", "owner/repo", "workspace/repo") and
+	// BaseURL the host's web address.
+	ProviderGitLab    Provider = "gitlab"
+	ProviderGitea     Provider = "gitea"
+	ProviderForgejo   Provider = "forgejo"
+	ProviderBitbucket Provider = "bitbucket"
 )
+
+// Hosted reports whether p is a host with a pull request API other than
+// GitHub: GitLab, Gitea, Forgejo or Bitbucket Cloud.
+func (p Provider) Hosted() bool {
+	switch p {
+	case ProviderGitLab, ProviderGitea, ProviderForgejo, ProviderBitbucket:
+		return true
+	}
+	return false
+}
+
+// HostName is the provider as people call it: "GitHub", "GitLab", ...
+func (p Provider) HostName() string {
+	switch p {
+	case ProviderGitHub:
+		return "GitHub"
+	case ProviderGitLab:
+		return "GitLab"
+	case ProviderGitea:
+		return "Gitea"
+	case ProviderForgejo:
+		return "Forgejo"
+	case ProviderBitbucket:
+		return "Bitbucket"
+	case ProviderGit:
+		return "git"
+	}
+	return "vx"
+}
+
+// PRName is what the host calls a pull request.
+func (p Provider) PRName() string {
+	if p == ProviderGitLab {
+		return "merge request"
+	}
+	return "pull request"
+}
 
 // Repo is a repository known to vx and its upstream.
 type Repo struct {
@@ -27,9 +71,12 @@ type Repo struct {
 	Provider      Provider
 	Remote        string
 	DefaultBranch string
-	OrgID         uuid.UUID // the owning organization
-	Org           string    // its handle
-	CreatedAt     time.Time
+	// BaseURL is the web address of a GitLab, Gitea, Forgejo or Bitbucket
+	// host, e.g. https://gitlab.example.com; empty for other providers.
+	BaseURL   string
+	OrgID     uuid.UUID // the owning organization
+	Org       string    // its handle
+	CreatedAt time.Time
 	// GitHubRepoID is set for a repository linked to GitHub, and
 	// GitHubInstallationID while an installation of the App reaches it.
 	// Such a repository is GitHub-backed: roles on it come from GitHub,
@@ -37,6 +84,23 @@ type Repo struct {
 	// has a role on it (it stays GitHub-backed, so access fails closed).
 	GitHubRepoID         *int64
 	GitHubInstallationID *int64
+}
+
+// HostName is the repository's git host as people call it.
+func (r Repo) HostName() string { return r.Provider.HostName() }
+
+// PRName is what the repository's host calls a pull request.
+func (r Repo) PRName() string { return r.Provider.PRName() }
+
+// WebURL is the repository's page on its host, or "" when vx cannot tell.
+func (r Repo) WebURL() string {
+	switch {
+	case r.Provider == ProviderGitHub:
+		return "https://github.com/" + r.Remote
+	case r.Provider.Hosted() && r.BaseURL != "":
+		return r.BaseURL + "/" + r.Remote
+	}
+	return ""
 }
 
 // GitHubBacked reports whether roles on r come from GitHub: it is linked
@@ -86,12 +150,19 @@ func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 	if err != nil {
 		return Repo{}, err
 	}
-	_, err = q.db.Exec(ctx, `insert into upstreams (repo_id, provider, remote, default_branch) values ($1, $2, $3, $4)`,
-		r.ID, r.Provider, r.Remote, r.DefaultBranch)
+	if r.BaseURL == "" {
+		// Without base_url, so data-migration tests can write a schema from
+		// before migration 022 with this.
+		_, err = q.db.Exec(ctx, `insert into upstreams (repo_id, provider, remote, default_branch) values ($1, $2, $3, $4)`,
+			r.ID, r.Provider, r.Remote, r.DefaultBranch)
+		return r, err
+	}
+	_, err = q.db.Exec(ctx, `insert into upstreams (repo_id, provider, remote, default_branch, base_url) values ($1, $2, $3, $4, $5)`,
+		r.ID, r.Provider, r.Remote, r.DefaultBranch, r.BaseURL)
 	return r, err
 }
 
-const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, r.org_id, o.handle, r.created_at, r.github_repo_id, r.github_installation_id`
+const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, u.base_url, r.org_id, o.handle, r.created_at, r.github_repo_id, r.github_installation_id`
 
 const repoFrom = ` from repos r join upstreams u on u.repo_id = r.id join orgs o on o.id = r.org_id`
 
@@ -99,7 +170,7 @@ const repoSelect = `select ` + repoCols + repoFrom
 
 func scanRepo(row interface{ Scan(...any) error }, extra ...any) (Repo, error) {
 	var r Repo
-	err := row.Scan(append([]any{&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.OrgID, &r.Org, &r.CreatedAt, &r.GitHubRepoID, &r.GitHubInstallationID}, extra...)...)
+	err := row.Scan(append([]any{&r.ID, &r.Name, &r.Provider, &r.Remote, &r.DefaultBranch, &r.BaseURL, &r.OrgID, &r.Org, &r.CreatedAt, &r.GitHubRepoID, &r.GitHubInstallationID}, extra...)...)
 	return r, err
 }
 
