@@ -277,13 +277,18 @@ func (a *App) boardFeedFor(ctx context.Context, c *client.Client, wc *workcopy.W
 
 // printBoardFeed prints the board section that ends vx sync and vx land:
 // new notes for the agent, one line each, then others' claims on its
-// files. Questions to the agent and notes of its own person print in full;
+// files. Notes addressed to the agent, and notes of its own person in its
+// own effort, print in full;
 // the line after the list says how to read the rest (vx board ID). It
 // prints nothing when there is nothing new. Every note it prints counts as
 // read.
 func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed) {
 	me := f.me
-	p := &notePrinter{a: a, repo: f.repo, effort: f.effort, full: func(n *vxv1.Note) bool { return fullInFeed(n, me) }}
+	// Another effort's notes stay on one line unless addressed to you:
+	// they ship separately, and their full text is a vx board ID away.
+	p := &notePrinter{a: a, repo: f.repo, effort: f.effort, full: func(n *vxv1.Note) bool {
+		return fullInFeed(n, me) && (n.To == me || !f.otherEffort(n))
+	}}
 	defer func() { a.markRead(ctx, c, p.shown...) }()
 	if len(f.notes) > 0 {
 		a.printf("\nNew on the board since your last sync (%d). %s\n", len(f.notes), boardFraming)
