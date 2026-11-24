@@ -93,6 +93,13 @@ func (s *Service) PutObjects(ctx context.Context, actor Actor, repo string, objs
 	if err != nil {
 		return nil, err
 	}
+	var size int64
+	for _, o := range objs {
+		size += int64(len(o.Data))
+	}
+	if err := s.checkPushQuota(ctx, r, size); err != nil {
+		return nil, err
+	}
 	out := make([]hash.Hash, 0, len(objs))
 	for _, o := range objs {
 		if o.Kind != hash.KindBlob && o.Kind != hash.KindTree {

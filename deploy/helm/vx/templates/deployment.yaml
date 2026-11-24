@@ -1,0 +1,171 @@
+{{- $secret := .Values.secrets.existingSecret -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vx.fullname" . }}
+  labels:
+    {{- include "vx.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  {{- if and .Values.persistence.enabled (has "ReadWriteOnce" .Values.persistence.accessModes) }}
+  # The data volume mounts on one node at a time: stop the old pod first.
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "vx.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "vx.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "vx.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: vx
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 7070
+              protocol: TCP
+          env:
+            - name: VX_ADDR
+              value: "0.0.0.0:7070"
+            - name: VX_DATA_DIR
+              value: /data
+            - name: VX_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vx.databaseSecret" . }}
+                  key: {{ .Values.database.urlKey }}
+            {{- with .Values.publicURL }}
+            - name: VX_PUBLIC_URL
+              value: {{ . | quote }}
+            {{- end }}
+            - name: VX_SIGNUP
+              value: {{ .Values.signup | quote }}
+            {{- if $secret }}
+            - name: VX_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ .Values.secrets.secretKeyKey }}
+                  optional: true
+            - name: VX_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ .Values.secrets.githubTokenKey }}
+                  optional: true
+            - name: VX_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ .Values.secrets.metricsTokenKey }}
+                  optional: true
+            {{- end }}
+            {{- with .Values.blobStore.url }}
+            - name: VX_BLOB_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if not .Values.rateLimits.enabled }}
+            - name: VX_RATE_LIMITS
+              value: "off"
+            {{- else }}
+            {{- range $key, $env := dict "apiToken" "VX_RATE_API_TOKEN" "apiIP" "VX_RATE_API_IP" "signin" "VX_RATE_SIGNIN" "signup" "VX_RATE_SIGNUP" "cliLogin" "VX_RATE_CLI_LOGIN" "webhook" "VX_RATE_WEBHOOK" }}
+            {{- with index $.Values.rateLimits $key }}
+            - name: {{ $env }}
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- range $key, $env := dict "repos" "VX_QUOTA_REPOS" "stored" "VX_QUOTA_STORED" "import" "VX_QUOTA_IMPORT" "push" "VX_QUOTA_PUSH" "openEfforts" "VX_QUOTA_OPEN_EFFORTS" "diskWarnPercent" "VX_DISK_WARN_PERCENT" }}
+            {{- with index $.Values.quotas $key }}
+            - name: {{ $env }}
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.auditRetention }}
+            - name: VX_AUDIT_RETENTION
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.blobStore.existingSecret .Values.extraEnvFrom }}
+          envFrom:
+            {{- with .Values.blobStore.existingSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "vx.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

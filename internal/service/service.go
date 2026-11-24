@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/ratelimit"
 	"github.com/TerracodeBA/vx/internal/store"
 )
 
@@ -114,6 +115,13 @@ type Service struct {
 	// ForecastTimeout bounds one background overlap forecast run; zero:
 	// DefaultForecastTimeout.
 	ForecastTimeout time.Duration
+
+	// Limits are the rate limits (sign-up here; the server applies the
+	// others per request); nil: none. Quotas are the organization quotas
+	// (quotas.go). Audit configures the operation log export (audit.go).
+	Limits *ratelimit.Limiter
+	Quotas QuotaSettings
+	Audit  AuditSettings
 
 	// Push configures Web Push notifications (push.go).
 	Push PushSettings

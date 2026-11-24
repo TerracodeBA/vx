@@ -77,6 +77,9 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	if err != nil {
 		return store.Repo{}, err
 	}
+	if err := s.checkRepoQuota(ctx, org); err != nil {
+		return store.Repo{}, err
+	}
 	repo := store.Repo{Name: in.Name, Provider: in.Provider, Remote: in.Remote, DefaultBranch: in.DefaultBranch, BaseURL: in.BaseURL, OrgID: org.ID, Org: org.Handle}
 	if repo.DefaultBranch == "" && in.Provider != store.ProviderNone {
 		b, err := s.Upstream.DefaultBranch(ctx, repo)
@@ -91,6 +94,11 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	}
 	if repo.DefaultBranch == "" {
 		repo.DefaultBranch = "main"
+	}
+	if in.Provider != store.ProviderNone {
+		if err := s.checkImportQuota(ctx, org, repo); err != nil {
+			return store.Repo{}, err
+		}
 	}
 
 	var created store.Repo

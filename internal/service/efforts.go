@@ -29,6 +29,9 @@ func (s *Service) CreateEffort(ctx context.Context, actor Actor, in CreateEffort
 	if err != nil {
 		return store.Effort{}, err
 	}
+	if err := s.checkEffortQuota(ctx, repo); err != nil {
+		return store.Effort{}, err
+	}
 	if in.BaseBranch == "" {
 		in.BaseBranch = repo.DefaultBranch
 	}

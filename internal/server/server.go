@@ -19,6 +19,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/github"
 	"github.com/TerracodeBA/vx/internal/mcp"
+	"github.com/TerracodeBA/vx/internal/ratelimit"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 	"github.com/TerracodeBA/vx/internal/web"
@@ -38,6 +39,16 @@ type Config struct {
 	// Hosts configures GitLab, Gitea, Forgejo and Bitbucket webhooks
 	// (VX_<HOST>_WEBHOOK_SECRET).
 	Hosts service.HostSettings
+	// MetricsToken turns on /metrics for callers with this bearer token
+	// (VX_METRICS_TOKEN); empty: no /metrics.
+	MetricsToken string
+	// Limits are the rate limits (VX_RATE_*); nil: none.
+	Limits ratelimit.Config
+	// Quotas are the organization quotas' defaults (VX_QUOTA_*); the data
+	// directory's disk is watched either way.
+	Quotas service.QuotaSettings
+	// Audit configures the operation log (VX_AUDIT_RETENTION).
+	Audit service.AuditSettings
 }
 
 // Server is a running vx server.
@@ -63,11 +74,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		st.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	blobs, err := blob.NewDisk(filepath.Join(cfg.DataDir, "objects"))
+	disk, err := blob.NewDisk(filepath.Join(cfg.DataDir, "objects"))
 	if err != nil {
 		st.Close()
 		return nil, err
 	}
+	blobs := countBlobs(disk) // vx_blob_* metrics
 	var up service.UpstreamSyncer
 	if cfg.Upstream != nil {
 		if up, err = cfg.Upstream(st, blobs, cfg.DataDir); err != nil {
@@ -78,6 +90,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	svc := service.New(st, blobs, up)
 	svc.GitHub = cfg.GitHub
 	svc.Hosts = cfg.Hosts
+	if cfg.Limits != nil {
+		svc.Limits = ratelimit.New(cfg.Limits)
+	}
+	svc.Quotas, svc.Audit = cfg.Quotas, cfg.Audit
+	if svc.Quotas.DataDir == "" {
+		svc.Quotas.DataDir = cfg.DataDir
+	}
 	if svc.GitHub.Connect == nil {
 		apiURL, webURL := svc.GitHub.APIURL, svc.GitHub.WebURL
 		svc.GitHub.Connect = func(creds service.GitHubAppCredentials) (service.GitHubAPI, error) {
@@ -130,7 +149,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 		fmt.Fprintln(w, "ok")
 	})
-	return &Server{Store: st, Blobs: blobs, Service: svc, Handler: logRequests(log, mux), log: log}, nil
+	mux.HandleFunc("GET /metrics", metricsHandler(cfg.MetricsToken))
+	registerGauges(st, svc)
+	return &Server{Store: st, Blobs: blobs, Service: svc, Handler: logRequests(log, instrument(svc.Limits, mux)), log: log}, nil
 }
 
 // Close releases the database.
@@ -151,6 +172,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	if s.Service != nil {
 		go s.backfillObjects(ctx)
 		go s.Service.RunPushNotifier(ctx, s.log)
+		go s.Service.PruneAuditLoop(ctx, s.log)
 	}
 	s.log.Info("vx server listening", "addr", addr)
 	select {

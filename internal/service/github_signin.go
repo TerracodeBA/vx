@@ -260,6 +260,9 @@ func (s *Service) gitHubSignup(ctx context.Context, u GitHubUser) (store.Princip
 		}
 		invite = inv
 	}
+	if err := s.AllowSignup(ctx); err != nil {
+		return store.Principal{}, err
+	}
 	email := strings.TrimSpace(u.Email)
 	if email == "" {
 		email = fmt.Sprintf("%d+%s@users.noreply.github.com", u.ID, u.Login)

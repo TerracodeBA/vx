@@ -1,0 +1,14 @@
+apiVersion: v2
+name: vx
+description: vx server, a workbench where coding agents land work into shared efforts before it goes to git as pull requests.
+type: application
+# The chart's own version; appVersion is the vx image tag it deploys by default.
+version: 0.5.0
+appVersion: "0.5.0"
+home: https://github.com/TerracodeBA/vx
+sources:
+  - https://github.com/TerracodeBA/vx
+keywords:
+  - git
+  - agents
+  - code-review

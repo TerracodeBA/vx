@@ -77,10 +77,14 @@ func root() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			srv, err := server.New(cmd.Context(), server.Config{
+			cfg := server.Config{
 				Addr: addr, DatabaseURL: dbURL, DataDir: dataDir, Logger: log, Upstream: upstream, GitHub: gh,
 				Hosts: hostSettings(),
-			})
+			}
+			if err := applyOps(&cfg, os.Getenv); err != nil {
+				return err
+			}
+			srv, err := server.New(cmd.Context(), cfg)
 			if err != nil {
 				return err
 			}
@@ -270,6 +274,7 @@ again even when already indexed). It is safe to run while the server runs.`,
 		Run:   func(*cobra.Command, []string) { fmt.Println("vx-server " + version.String()) },
 	}
 	cmd.AddCommand(serve, migrate, userAdd, invite, tokenCreate, backfill, superadminCmd(&dbURL), versionCmd)
+	cmd.AddCommand(quotaCmd(&dbURL))
 	return cmd
 }
 

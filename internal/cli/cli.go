@@ -127,6 +127,7 @@ Start here:
 		a.postCmd(), a.askCmd(), a.answerCmd(), a.boardCmd(), a.inboxCmd(), a.contextCmd(),
 		a.claimCmd(), a.releaseCmd(), a.claimsCmd(), a.overlapsCmd(),
 		a.taskCmd(), a.tasksCmd(), a.rulesCmd(), a.reserveCmd(), a.reviewCmd(), a.selfUpdateCmd(),
+		a.adminCmd(),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the vx version",

@@ -8,6 +8,7 @@
       {{if .O.Personal}}<span class="badge">personal</span>{{end}}</div>
     <p class="muted"><span class="mono">{{.O.Handle}}</span> · created {{ago .O.CreatedAt}}.{{if not .Manage}} {{if .IsHuman}}Only owners and admins change members, teams and settings; you see them read-only.{{else}}Agents see this page read-only; sign in as the person to change it.{{end}}{{end}}</p>
   </div>
+  {{if .Manage}}<div class="page-actions"><a class="btn ghost" href="/ui/admin/audit?org={{.O.Handle}}">Audit log</a></div>{{end}}
 </div>
 {{template "admin-flash" .Flash}}
 
@@ -146,5 +147,36 @@
   </dl>
   {{end}}
 </section>
+
+{{with .Quota}}
+<section class="panel" id="quotas">
+  <div class="panel-head"><h2>Quotas</h2><span class="muted small">what this organization may use on this server</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Quota</th><th>Used</th><th>Limit</th></tr></thead>
+    <tbody>
+    {{range .Rows}}
+      <tr>
+        <td class="cell-main">{{.Label}}</td>
+        <td>{{if .Used}}{{if .Over}}<span class="badge badge-conflict">{{.Used}}</span>{{else}}{{.Used}}{{end}}{{else}}<span class="muted">per request</span>{{end}}</td>
+        <td>{{.Limit}}{{if not .Default}} <span class="badge">set for this organization</span>{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if .Super}}
+  <form method="post" action="/ui/orgs/{{$o.Handle}}/quota" class="admin-form">
+    <div class="field"><label for="q-repos">Repositories</label><input id="q-repos" name="repos" type="text" maxlength="20" autocomplete="off" placeholder="default" value="{{index .Form "repos"}}"></div>
+    <div class="field"><label for="q-stored">Stored data</label><input id="q-stored" name="stored" type="text" maxlength="20" autocomplete="off" placeholder="default" value="{{index .Form "stored"}}"></div>
+    <div class="field"><label for="q-import">One import</label><input id="q-import" name="import" type="text" maxlength="20" autocomplete="off" placeholder="default" value="{{index .Form "import"}}"></div>
+    <div class="field"><label for="q-push">One upload</label><input id="q-push" name="push" type="text" maxlength="20" autocomplete="off" placeholder="default" value="{{index .Form "push"}}"></div>
+    <div class="field"><label for="q-efforts">Open efforts</label><input id="q-efforts" name="open_efforts" type="text" maxlength="20" autocomplete="off" placeholder="default" value="{{index .Form "open_efforts"}}"></div>
+    <button class="btn primary" type="submit">Save quotas</button>
+    <p class="field-hint">Superadmins only. Counts, or sizes like 500MB and 20GB. 0 means no limit; leave a field empty for the server's default (VX_QUOTA_*).</p>
+  </form>
+  {{end}}
+</section>
+{{end}}
 </div>
 {{end}}

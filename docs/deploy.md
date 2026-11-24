@@ -195,6 +195,102 @@ Upgrading from v0.1 made every existing person both an owner of every organizati
 
 Organizations whose only owners were removed or left can no longer be fixed by a superadmin from the web UI. Make someone an owner on the console: `docker compose exec -T postgres psql -U vx vx -c "insert into org_members (org_id, person_id, role) select o.id, p.id, 'owner' from orgs o, principals p where o.handle = 'acme' and p.handle = 'alice' on conflict (org_id, person_id) do update set role = 'owner'"`.
 
+## Kubernetes (Helm)
+
+`deploy/helm/vx` deploys vx-server to Kubernetes: a Deployment with health probes and resource defaults, a Service, an optional Ingress, a volume for the data directory, and a ServiceMonitor for the Prometheus Operator if you want one. Postgres is not part of the chart: use a managed database or your own, and give its URL in a Secret.
+
+```sh
+kubectl create secret generic vx-db --from-literal=database-url='postgres://vx:PASSWORD@db.example.com:5432/vx?sslmode=require'
+kubectl create secret generic vx-secrets \
+  --from-literal=secret-key="$(openssl rand -hex 32)" \
+  --from-literal=metrics-token="$(openssl rand -hex 24)"
+helm install vx deploy/helm/vx \
+  --set database.existingSecret=vx-db \
+  --set secrets.existingSecret=vx-secrets \
+  --set publicURL=https://vx.example.com \
+  --set ingress.enabled=true --set ingress.hosts[0].host=vx.example.com
+kubectl exec deploy/vx -- vx-server user-add alice --admin --name "Alice Example"
+```
+
+What the values cover (see `values.yaml` for all of them):
+
+| Value | Meaning |
+|---|---|
+| `database.existingSecret`, `database.urlKey` | The Secret and key with the Postgres URL (`VX_DATABASE_URL`). Required. |
+| `secrets.existingSecret` | One Secret with `secret-key` (`VX_SECRET_KEY`), `github-token` (`VX_GITHUB_TOKEN`) and `metrics-token` (`VX_METRICS_TOKEN`); missing keys leave the setting off. |
+| `publicURL`, `signup` | `VX_PUBLIC_URL` and `VX_SIGNUP`. |
+| `blobStore.url`, `blobStore.existingSecret` | Object storage (`VX_BLOB_URL`) and a Secret with its credentials as environment variables. Empty: objects stay on the data volume. |
+| `persistence.*` | The data volume (git mirrors; objects without object storage), 20 GiB by default. With a ReadWriteOnce volume the chart replaces the pod with `Recreate`. |
+| `rateLimits.*`, `quotas.*`, `auditRetention` | The `VX_RATE_*`, `VX_QUOTA_*` and `VX_AUDIT_RETENTION` settings below. |
+| `ingress.*` | Host, class, TLS and annotations. The CLI speaks HTTP/2 through the same host; lands upload up to 64 MiB per request, so raise body size limits (ingress-nginx: `nginx.ingress.kubernetes.io/proxy-body-size: "70m"`). |
+| `metrics.serviceMonitor.enabled` | A ServiceMonitor that scrapes `/metrics` with the metrics token. |
+| `resources`, `probes.*` | 250m CPU and 512 MiB requested, 2 GiB memory limit. The startup probe allows 10 minutes for migrations on an upgrade. |
+
+Run one replica: rate limits, overlap forecasts and git mirrors live in the process. The pod runs as user 10001 with a read-only root file system and no service account token.
+
+`deploy/helm/chart_test.go` runs `helm lint --strict` and `helm template` on the chart when `helm` is installed (or `VX_HELM` names it), and skips otherwise; it never talks to a cluster.
+
+## Metrics
+
+Set `VX_METRICS_TOKEN` (`openssl rand -hex 24`) and `GET /metrics` serves Prometheus metrics to callers that send it as a bearer token; without the variable the endpoint does not exist (404). A scrape configuration:
+
+```yaml
+scrape_configs:
+  - job_name: vx
+    scheme: https
+    authorization: {credentials_file: /etc/prometheus/vx-metrics-token}
+    static_configs: [{targets: [vx.example.com]}]
+```
+
+| Metric | Labels | What |
+|---|---|---|
+| `vx_rpc_requests_total`, `vx_rpc_duration_seconds` | `procedure`, `status` | API calls of the CLI, agents and MCP, by procedure (`/vx.v1.WorkspaceService/Land`) and HTTP status (429 is a rate limit) |
+| `vx_http_requests_total`, `vx_http_request_duration_seconds` | `route`, `method`, `status` | Web UI, webhooks and the rest, by route pattern (`GET /ui/repos/{path...}`) |
+| `vx_lands_total` | `result` | landed, conflicts, review, effort_moved, refused, error |
+| `vx_land_conflict_files_total` | | files that conflicted in lands |
+| `vx_rebases_total` | `event` | started, done, conflicts, aborted |
+| `vx_forecasts_total`, `vx_forecast_duration_seconds` | `result` | background overlap forecasts |
+| `vx_operations_total` | `op` | every operation log entry (`effort.create`, `ship`, `org.member`, ...) |
+| `vx_queue_depth` | `queue` | forecast (repositories with forecasts queued), object_backfill |
+| `vx_webhook_deliveries_total` | `host`, `status` | deliveries from GitHub, GitLab, Gitea, Forgejo, Bitbucket |
+| `vx_db_pool_connections`, `vx_db_pool_acquires_total`, `vx_db_pool_acquire_wait_seconds_total`, `vx_db_pool_empty_acquires_total` | `state` | the Postgres connection pool |
+| `vx_blob_ops_total`, `vx_blob_op_duration_seconds`, `vx_blob_bytes_total` | `op`, `result` | object store reads and writes |
+| `vx_rate_limited_total` | `class` | requests refused by a rate limit |
+| `vx_quota_refused_total` | `quota` | requests refused by an organization quota |
+| `vx_audit_pruned_total` | | operation log entries deleted by the retention |
+| `vx_build_info` | `version`, `go_version` | always 1 |
+
+Labels never carry repository, organization or person names. Each process counts on its own; scrape every replica.
+
+## Rate limits and quotas
+
+**Rate limits** are token buckets per process: a client may make a burst of requests, then as many as the rate refills. They are on by default with limits a team does not notice:
+
+| Variable | Default | Limits |
+|---|---|---|
+| `VX_RATE_API_TOKEN` | `30/s,burst=300` | API and MCP calls with one token |
+| `VX_RATE_API_IP` | `100/s,burst=1000` | API and MCP calls from one address, with any token or none |
+| `VX_RATE_SIGNIN` | `30/m` | sign-in pages and callbacks (`/ui/login...`, `/auth/...`: tokens, GitHub, single sign-on), per address |
+| `VX_RATE_SIGNUP` | `10/h,burst=5` | new accounts from sign-in, per address |
+| `VX_RATE_CLI_LOGIN` | `10/m` | `vx login` started or approved, per address |
+| `VX_RATE_WEBHOOK` | `20/s,burst=200` | webhook deliveries, per address |
+
+Write a rate as `N/s`, `N/m` or `N/h`, optionally with `,burst=B` (default: N), or `off`. `VX_RATE_LIMITS=off` turns every limit off. A refused API call fails with `ResourceExhausted`, other requests with 429; both carry `Retry-After` and say `slow down: too many requests with this token; retry in 3 s`. The address is the client's, also behind a proxy on a private address (the last public address in `X-Forwarded-For`). Behind a load balancer each replica counts on its own.
+
+**Quotas** are per organization: repositories, stored data, the size of one import and of one upload, and open efforts. The variables set the defaults for every organization; superadmins override them per organization on its page or with `vx-server quota ORG` ([organizations.md](organizations.md#quotas)).
+
+| Variable | Example | Quota |
+|---|---|---|
+| `VX_QUOTA_REPOS` | `50` | repositories per organization |
+| `VX_QUOTA_STORED` | `20GB` | stored data per organization |
+| `VX_QUOTA_IMPORT` | `2GB` | one repository imported from a git host; vx asks the host for its size first and downloads nothing when it is too big |
+| `VX_QUOTA_PUSH` | `500MB` | one upload of objects |
+| `VX_QUOTA_OPEN_EFFORTS` | `200` | efforts open or shipping per organization |
+
+Empty or `0` means no limit, which is the default. Sizes take `KB`, `MB`, `GB` and `TB` (powers of 1024).
+
+**Disk space.** Superadmins see a warning on every page when the data directory's disk has less than `VX_DISK_WARN_PERCENT` (default 10) percent free, and the free space on Admin > Audit.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -214,10 +310,17 @@ Organizations whose only owners were removed or left can no longer be fixed by a
 | `VX_BITBUCKET_TOKEN` | empty | Bitbucket Cloud access token, or `USERNAME:APP_PASSWORD` |
 | `VX_GITLAB_WEBHOOK_SECRET`, `VX_GITEA_WEBHOOK_SECRET`, `VX_FORGEJO_WEBHOOK_SECRET`, `VX_BITBUCKET_WEBHOOK_SECRET` | empty | Server-wide webhook secret per host, for repositories without their own |
 | `VX_<HOST>_API_URL` | derived | API address when it is not the default (`URL/api/v4`, `URL/api/v1`, `https://api.bitbucket.org/2.0`) |
+| `VX_METRICS_TOKEN` | empty | Bearer token for `GET /metrics`; empty: no `/metrics` (see [Metrics](#metrics)) |
+| `VX_RATE_API_TOKEN`, `VX_RATE_API_IP`, `VX_RATE_SIGNIN`, `VX_RATE_SIGNUP`, `VX_RATE_CLI_LOGIN`, `VX_RATE_WEBHOOK` | see [Rate limits and quotas](#rate-limits-and-quotas) | Rate limits; `VX_RATE_LIMITS=off` turns all off |
+| `VX_QUOTA_REPOS`, `VX_QUOTA_STORED`, `VX_QUOTA_IMPORT`, `VX_QUOTA_PUSH`, `VX_QUOTA_OPEN_EFFORTS` | no limit | Default quotas of every organization |
+| `VX_DISK_WARN_PERCENT` | `10` | Warn superadmins below this share of free disk |
+| `VX_AUDIT_RETENTION` | forever | Delete operation log entries older than this, like `365d` (at least 7 days) |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 
 ## Monitoring
 
 - `GET /healthz` returns `ok` when the server can reach Postgres.
+- `GET /metrics` serves Prometheus metrics with `VX_METRICS_TOKEN` (see [Metrics](#metrics)).
+- The audit log exports as JSONL or CSV: `vx admin audit` and Admin > Audit ([organizations.md](organizations.md#audit-log)).
 - Logs go to stdout: `docker compose logs -f vx`.

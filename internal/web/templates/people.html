@@ -22,7 +22,7 @@
     <h1>People</h1>
     <p class="muted">Everyone on this server: each person, how many agents act for them, and which organizations they belong to. Only superadmins see this page.</p>
   </div>
-  <div class="page-actions"><a class="btn ghost" href="/ui/admin/github">GitHub</a></div>
+  <div class="page-actions"><a class="btn ghost" href="/ui/admin/audit">Audit</a> <a class="btn ghost" href="/ui/admin/github">GitHub</a></div>
 </div>
 {{if .SuperadminReview}}{{template "superadmin-review" .}}{{end}}
 {{template "admin-flash" .Flash}}

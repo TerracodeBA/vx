@@ -77,6 +77,8 @@ func errStatus(err error) int {
 			return http.StatusForbidden
 		case service.CodeUnavailable:
 			return http.StatusServiceUnavailable
+		case service.CodeTooMany:
+			return http.StatusTooManyRequests
 		}
 	}
 	return http.StatusInternalServerError
@@ -124,6 +126,7 @@ var okMessages = map[string]string{
 	"support":        "Support access granted.",
 	"support-ended":  "Support access ended.",
 	"reviewed":       "Marked as reviewed.",
+	"quota":          "Quotas saved.",
 }
 
 func flashFrom(r *http.Request) flash { return flash{OK: okMessages[r.URL.Query().Get("ok")]} }
@@ -276,6 +279,7 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		"O": d.Org, "MyRole": d.MyRole, "Members": members, "Teams": d.Teams, "Repos": repos,
 		"Owners": owners, "Manage": manage, "IsOwner": d.MyRole == service.OrgOwner,
 		"IsHuman": actor.Kind == store.KindHuman, "OrgRoles": orgRoles, "DefaultRoles": defaultRoles,
+		"Quota": u.orgQuota(r, actor, d.Org.Handle),
 	})
 }
 

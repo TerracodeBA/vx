@@ -1,0 +1,55 @@
+{{define "crumbs"}}<span>Admin</span><span class="sep">/</span><span>Audit</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Audit log</h1>
+    <p class="muted">{{if .Super}}Every operation on this server: who did what, when, in which organization and repository. As a superadmin you see the metadata of repository operations, never their content (intents, titles, paths); organization admins see the full entries of their repositories.{{else}}The operations of the organizations you own or administer, with the full entries of the repositories you administer.{{end}} Entries are {{.Retention}}.</p>
+  </div>
+  {{if .Super}}<div class="page-actions"><a class="btn ghost" href="/ui/admin/people">People</a> <a class="btn ghost" href="/ui/admin/github">GitHub</a></div>{{end}}
+</div>
+{{with .Disk}}<p class="muted small">Data disk: {{bytes .Free}} free of {{bytes .Total}} ({{.FreePercent}}%){{with $.SizesPending}}; {{.}} objects not counted in stored data yet{{end}}.</p>{{end}}
+{{with .Disk}}{{if .Low}}<p class="note bad" role="alert">The data disk is almost full: {{.FreePercent}}% free ({{bytes .Free}} of {{bytes .Total}}) at <span class="mono">{{.Path}}</span>. Add disk space, or move objects to object storage, before lands and imports start to fail.</p>{{end}}{{end}}
+
+<section class="panel">
+  <div class="panel-head"><h2>Filter</h2><span class="muted small">newest {{.Preview}} shown; downloads have every match</span></div>
+  <form method="get" action="/ui/admin/audit" class="admin-form">
+    <div class="field"><label for="a-org">Organization</label>
+      <select id="a-org" name="org">{{if .Super}}<option value="">all</option>{{end}}{{$org := .Q.Org}}{{range .Orgs}}<option value="{{.}}"{{if eq . $org}} selected{{end}}>{{.}}</option>{{end}}</select></div>
+    <div class="field"><label for="a-repo">Repository</label>
+      <input id="a-repo" name="repo" type="text" maxlength="200" autocomplete="off" placeholder="acme/api" value="{{.Q.Repo}}"></div>
+    <div class="field"><label for="a-actor">Actor</label>
+      <input id="a-actor" name="actor" type="text" maxlength="100" autocomplete="off" placeholder="alice or agent:alice/claude" value="{{.Q.Actor}}"></div>
+    <div class="field"><label for="a-since">Since</label>
+      <input id="a-since" name="since" type="text" maxlength="40" autocomplete="off" placeholder="7d or 2026-11-01" value="{{.SinceText}}"></div>
+    <div class="field"><label for="a-until">Until</label>
+      <input id="a-until" name="until" type="text" maxlength="40" autocomplete="off" placeholder="2026-11-24" value="{{.UntilText}}"></div>
+    <button class="btn primary" type="submit">Show</button>
+    <a class="btn ghost" href="{{.JSONL}}">Download JSONL</a>
+    <a class="btn ghost" href="{{.CSV}}">Download CSV</a>
+    <p class="field-hint">From the command line: <code>vx admin audit{{with .Q.Org}} --org {{.}}{{end}} --since {{.SinceText}} --format csv &gt; audit.csv</code></p>
+  </form>
+</section>
+{{with .Err}}<p class="note bad" role="alert">{{.}}</p>{{end}}
+
+<section class="panel">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>When</th><th>Operation</th><th>Organization</th><th>Repository</th><th>Actor</th><th>Target</th></tr></thead>
+    <tbody>
+    {{range .Rows}}
+      <tr>
+        <td class="nowrap" title="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{ago .At}}</td>
+        <td class="mono">{{.Op}}</td>
+        <td class="mono">{{.Org}}</td>
+        <td class="mono">{{.Repo}}</td>
+        <td class="mono">{{if .Actor}}{{.Actor}}{{else}}<span class="muted">server</span>{{end}}</td>
+        <td class="mono">{{.Target}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="6" class="muted">No operations match.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}

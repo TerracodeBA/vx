@@ -42,6 +42,7 @@
     <div class="topbar-actions">{{block "actions" .}}{{end}}</div>
   </header>
   <main class="content">
+  {{with .DiskLow}}<p class="note bad" role="alert">The data disk of this server is almost full: {{.FreePercent}}% free ({{bytes .Free}} of {{bytes .Total}}). Add disk space before lands and imports fail. Only superadmins see this.</p>{{end}}
   {{template "content" .}}
   </main>
 </div>
