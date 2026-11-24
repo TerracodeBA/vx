@@ -130,5 +130,8 @@ func (h *Handlers) Context(ctx context.Context, req *connect.Request[vxv1.Contex
 	for _, e := range c.RecentChanges {
 		out.RecentChanges = append(out.RecentChanges, changesetRowPB(e.ChangesetRow, strings.TrimSpace(m.Effort), e.Files))
 	}
+	for _, cl := range c.Claims {
+		out.Claims = append(out.Claims, claimPB(actor, cl))
+	}
 	return connect.NewResponse(out), nil
 }

@@ -42,6 +42,7 @@ func Mount(mux *http.ServeMux, svc *service.Service) {
 	mux.Handle(vxv1connect.NewWorkspaceServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewShipServiceHandler(h, opts...))
 	mux.Handle(vxv1connect.NewBoardServiceHandler(h, opts...))
+	mux.Handle(vxv1connect.NewCoordinationServiceHandler(h, opts...))
 }
 
 func invalid(err error) error { return connect.NewError(connect.CodeInvalidArgument, err) }
@@ -395,7 +396,10 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 	out := &vxv1.LandResponse{
 		Landed: res.Landed, Rebased: res.Rebased, AutoMerged: res.AutoMerged,
 		Conflicts: conflictsPB(res.Conflicts), EffortHead: res.EffortHead.String(), EffortMoved: res.EffortMoved,
-		Warnings: warningsPB(res.Warnings),
+		Warnings: warningsPB(res.Warnings), KeptBoth: res.KeptBoth,
+	}
+	for _, c := range res.OverlappingClaims {
+		out.OverlappingClaims = append(out.OverlappingClaims, claimPB(actorFrom(ctx), c))
 	}
 	if res.Landed {
 		effort := ""
