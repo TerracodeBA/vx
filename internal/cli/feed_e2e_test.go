@@ -1,19 +1,11 @@
 package cli_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"connectrpc.com/connect"
-
-	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
-	"github.com/TerracodeBA/vx/internal/client"
 )
 
 type feedJSON struct {
@@ -26,22 +18,6 @@ type feedJSON struct {
 		}
 	}
 	Landed bool
-}
-
-// claimAs makes a claim through the API as u, in u's working copy's effort.
-func claimAs(t *testing.T, u *user, reason string, targets ...string) {
-	t.Helper()
-	var cfg struct{ Repo, Effort string }
-	data, err := os.ReadFile(filepath.Join(u.dir, ".vx", "config.json"))
-	if err != nil || json.Unmarshal(data, &cfg) != nil {
-		t.Fatalf("read %s config: %v", u.label, err)
-	}
-	c := client.New(u.h.server, u.env["VX_TOKEN"])
-	if _, err := c.Coord.Claim(context.Background(), connect.NewRequest(&vxv1.ClaimRequest{
-		Repo: cfg.Repo, Effort: cfg.Effort, Targets: targets, Reason: reason,
-	})); err != nil {
-		t.Fatalf("claim %v: %v", targets, err)
-	}
 }
 
 // Notes reach the agent in the commands it runs: a teammate's interface
@@ -81,7 +57,7 @@ func TestBoardFeedInSyncStatusLand(t *testing.T) {
 
 	// A claims x.go and posts a decision elsewhere; B's status lists the
 	// claim and counts the decision, then sync does not repeat it.
-	claimAs(t, a, "Renaming X to Answer", "x.go")
+	a.must("claim", "x.go", "--reason", "Renaming X to Answer", "--no-workspace")
 	a.must("post", "decision", "Errors wrap with %w everywhere", "--on", "internal/")
 	out = b.must("status")
 	board := out[strings.Index(out, "\nBoard:"):]
