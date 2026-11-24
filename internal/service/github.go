@@ -115,6 +115,16 @@ type GitHubSettings struct {
 	PublicURL string     // e.g. https://app.vxbench.com, for redirect and webhook URLs
 	Signup    SignupMode // empty: SignupInvite
 	SecretKey []byte     // 32 bytes from VX_SECRET_KEY, for secrets at rest
+
+	// WebURL and APIURL are GitHub's browser and REST API bases; empty:
+	// github.com. GitHub Enterprise Server: https://HOST and
+	// https://HOST/api/v3.
+	WebURL, APIURL string
+	// Connect makes the API client for the App once its credentials are
+	// known (internal/github in the server, the fake in tests). With zero
+	// credentials it returns a client that can only complete the manifest
+	// flow. nil: the App cannot be set up or loaded.
+	Connect func(creds GitHubAppCredentials) (GitHubAPI, error)
 }
 
 // ErrGitHubNotConfigured is returned when the server has no GitHub App yet.
@@ -122,18 +132,6 @@ var ErrGitHubNotConfigured = errors.New("GitHub is not configured on this server
 
 func githubNotImplemented() error {
 	return errf(CodeUnavailable, "this part of GitHub sign-in is not implemented yet")
-}
-
-// GitHubSetupManifest returns the App manifest (JSON) and a state value for
-// the manifest flow (site admins). The web page posts it to GitHub.
-func (s *Service) GitHubSetupManifest(ctx context.Context, actor Actor) (manifest []byte, state string, err error) {
-	return nil, "", githubNotImplemented()
-}
-
-// CompleteGitHubSetup exchanges the manifest code for the App's
-// credentials and stores them encrypted (site admins).
-func (s *Service) CompleteGitHubSetup(ctx context.Context, actor Actor, code, state string) error {
-	return githubNotImplemented()
 }
 
 // GitHubSignInStart returns the GitHub authorize URL for a web sign-in and

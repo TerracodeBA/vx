@@ -90,6 +90,7 @@ type Service struct {
 	// its API is nil until a GitHub App is set up.
 	GitHub GitHubSettings
 
+	gh      githubState // the GitHub App loaded from the database
 	logins  loginCodes  // one-time web sign-in codes (vx ui)
 	objects objectIndex // repositories whose objects need no backfill
 }
