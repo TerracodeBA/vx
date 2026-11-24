@@ -209,7 +209,7 @@ func TestShipToGitHub(t *testing.T) {
 	if mainRef.Hash() != newMain {
 		t.Fatal("vx must never move main")
 	}
-	shipments, err := svc.ListShipments(ctx, "acme/shop", eff.Slug)
+	shipments, err := svc.ListShipments(ctx, human, "acme/shop", eff.Slug)
 	if err != nil || len(shipments) != 1 || shipments[0].ProviderRef != "41" {
 		t.Fatalf("shipments = %+v, %v", shipments, err)
 	}

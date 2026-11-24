@@ -57,8 +57,15 @@ func (h *Handlers) ref(ctx context.Context, id uuid.UUID) string {
 
 // ---------- Auth ----------
 
+// principal is principalPB with the site admin flag filled in.
+func (h *Handlers) principal(ctx context.Context, a service.Actor) *vxv1.Principal {
+	out := principalPB(a)
+	out.SiteAdmin = h.svc.IsSiteAdmin(ctx, a)
+	return out
+}
+
 func (h *Handlers) WhoAmI(ctx context.Context, _ *connect.Request[vxv1.WhoAmIRequest]) (*connect.Response[vxv1.WhoAmIResponse], error) {
-	return connect.NewResponse(&vxv1.WhoAmIResponse{Principal: principalPB(actorFrom(ctx))}), nil
+	return connect.NewResponse(&vxv1.WhoAmIResponse{Principal: h.principal(ctx, actorFrom(ctx))}), nil
 }
 
 func (h *Handlers) CreateAgent(ctx context.Context, req *connect.Request[vxv1.CreateAgentRequest]) (*connect.Response[vxv1.CreateAgentResponse], error) {
@@ -68,7 +75,7 @@ func (h *Handlers) CreateAgent(ctx context.Context, req *connect.Request[vxv1.Cr
 		return nil, toConnect(err)
 	}
 	a := service.Actor{Principal: agent, Parent: &actor.Principal}
-	return connect.NewResponse(&vxv1.CreateAgentResponse{Agent: principalPB(a), Token: token}), nil
+	return connect.NewResponse(&vxv1.CreateAgentResponse{Agent: h.principal(ctx, a), Token: token}), nil
 }
 
 func (h *Handlers) ListAgents(ctx context.Context, _ *connect.Request[vxv1.ListAgentsRequest]) (*connect.Response[vxv1.ListAgentsResponse], error) {
@@ -80,7 +87,7 @@ func (h *Handlers) ListAgents(ctx context.Context, _ *connect.Request[vxv1.ListA
 	out := &vxv1.ListAgentsResponse{}
 	for _, a := range agents {
 		out.Agents = append(out.Agents, &vxv1.AgentSummary{
-			Agent:         principalPB(service.Actor{Principal: a.Agent, Parent: &actor.Principal}),
+			Agent:         h.principal(ctx, service.Actor{Principal: a.Agent, Parent: &actor.Principal}),
 			ActiveTokens:  int32(a.ActiveTokens),
 			RevokedTokens: int32(a.RevokedTokens),
 			LastUsedAt:    tsp(a.LastUsedAt),
@@ -100,7 +107,7 @@ func (h *Handlers) ListTokens(ctx context.Context, req *connect.Request[vxv1.Lis
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &vxv1.ListTokensResponse{Principal: principalPB(ownerActor)}
+	out := &vxv1.ListTokensResponse{Principal: h.principal(ctx, ownerActor)}
 	for _, t := range tokens {
 		out.Tokens = append(out.Tokens, tokenPB(t, owner.Ref(), actor.TokenID))
 	}
@@ -127,7 +134,7 @@ func (h *Handlers) CreateToken(ctx context.Context, req *connect.Request[vxv1.Cr
 		return nil, toConnect(err)
 	}
 	return connect.NewResponse(&vxv1.CreateTokenResponse{
-		Principal: principalPB(ownerActor), Token: tokenPB(tok, owner.Ref(), actor.TokenID), Secret: secret,
+		Principal: h.principal(ctx, ownerActor), Token: tokenPB(tok, owner.Ref(), actor.TokenID), Secret: secret,
 	}), nil
 }
 
@@ -216,24 +223,23 @@ func (h *Handlers) CreateRepo(ctx context.Context, req *connect.Request[vxv1.Cre
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	branches, _ := h.svc.Store.ListBranches(ctx, repo.ID)
-	return connect.NewResponse(&vxv1.CreateRepoResponse{Repo: repoPB(repo, branches)}), nil
-}
-
-func (h *Handlers) GetRepo(ctx context.Context, req *connect.Request[vxv1.GetRepoRequest]) (*connect.Response[vxv1.GetRepoResponse], error) {
-	repo, err := h.svc.Store.RepoByName(ctx, req.Msg.Name)
-	if err != nil {
-		return nil, toConnect(service.Classify(err))
-	}
-	branches, err := h.svc.Store.ListBranches(ctx, repo.ID)
+	v, branches, err := h.svc.GetRepo(ctx, actorFrom(ctx), repo.Name)
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&vxv1.GetRepoResponse{Repo: repoPB(repo, branches)}), nil
+	return connect.NewResponse(&vxv1.CreateRepoResponse{Repo: repoPB(v, branches)}), nil
+}
+
+func (h *Handlers) GetRepo(ctx context.Context, req *connect.Request[vxv1.GetRepoRequest]) (*connect.Response[vxv1.GetRepoResponse], error) {
+	v, branches, err := h.svc.GetRepo(ctx, actorFrom(ctx), req.Msg.Name)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.GetRepoResponse{Repo: repoPB(v, branches)}), nil
 }
 
 func (h *Handlers) ListRepos(ctx context.Context, _ *connect.Request[vxv1.ListReposRequest]) (*connect.Response[vxv1.ListReposResponse], error) {
-	repos, err := h.svc.Store.ListRepos(ctx)
+	repos, err := h.svc.ListRepos(ctx, actorFrom(ctx))
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -264,7 +270,7 @@ func (h *Handlers) CreateEffort(ctx context.Context, req *connect.Request[vxv1.C
 }
 
 func (h *Handlers) GetEffort(ctx context.Context, req *connect.Request[vxv1.GetEffortRequest]) (*connect.Response[vxv1.GetEffortResponse], error) {
-	v, err := h.svc.GetEffort(ctx, req.Msg.Repo, req.Msg.Effort)
+	v, err := h.svc.GetEffort(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Effort)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -277,7 +283,7 @@ func (h *Handlers) GetEffort(ctx context.Context, req *connect.Request[vxv1.GetE
 }
 
 func (h *Handlers) ListEfforts(ctx context.Context, req *connect.Request[vxv1.ListEffortsRequest]) (*connect.Response[vxv1.ListEffortsResponse], error) {
-	repo, effs, err := h.svc.ListEfforts(ctx, req.Msg.Repo, store.EffortState(req.Msg.State))
+	repo, effs, err := h.svc.ListEfforts(ctx, actorFrom(ctx), req.Msg.Repo, store.EffortState(req.Msg.State))
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -290,7 +296,7 @@ func (h *Handlers) ListEfforts(ctx context.Context, req *connect.Request[vxv1.Li
 }
 
 func (h *Handlers) Log(ctx context.Context, req *connect.Request[vxv1.LogRequest]) (*connect.Response[vxv1.LogResponse], error) {
-	entries, err := h.svc.Log(ctx, req.Msg.Repo, req.Msg.Effort, int(req.Msg.Limit), req.Msg.IncludeFiles)
+	entries, err := h.svc.Log(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Effort, int(req.Msg.Limit), req.Msg.IncludeFiles)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -306,7 +312,7 @@ func (h *Handlers) Log(ctx context.Context, req *connect.Request[vxv1.LogRequest
 }
 
 func (h *Handlers) GetChangeset(ctx context.Context, req *connect.Request[vxv1.GetChangesetRequest]) (*connect.Response[vxv1.GetChangesetResponse], error) {
-	_, e, err := h.svc.GetChangeset(ctx, req.Msg.Repo, req.Msg.Ref)
+	_, e, err := h.svc.GetChangeset(ctx, actorFrom(ctx), req.Msg.Repo, req.Msg.Ref)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -346,7 +352,7 @@ func (h *Handlers) GetWorkspace(ctx context.Context, req *connect.Request[vxv1.G
 	if err != nil {
 		return nil, err
 	}
-	v, err := h.svc.GetWorkspace(ctx, id)
+	v, err := h.svc.GetWorkspace(ctx, actorFrom(ctx), id)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -404,7 +410,7 @@ func (h *Handlers) Land(ctx context.Context, req *connect.Request[vxv1.LandReque
 	}
 	if res.Landed {
 		effort := ""
-		if v, err := h.svc.GetWorkspace(ctx, id); err == nil {
+		if v, err := h.svc.GetWorkspace(ctx, actorFrom(ctx), id); err == nil {
 			effort = v.Effort.Slug
 		}
 		out.Changeset = changesetRowPB(res.Changeset, effort, res.Files)

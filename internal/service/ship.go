@@ -59,9 +59,10 @@ func (p ShipPlan) Commits() []ShipStep {
 // PlanShipment replays the effort's changes, oldest first, onto the latest
 // head of the target branch. Each change becomes one commit. A change whose
 // parent is not the current tree is merged onto it, so an effort started on
-// an older commit, or on another branch, still ships cleanly.
+// an older commit, or on another branch, still ships cleanly. Shipping
+// needs admin on the repository.
 func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug, target string) (ShipPlan, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleAdmin)
 	if err != nil {
 		return ShipPlan{}, err
 	}
@@ -71,7 +72,7 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 	if target == "" {
 		target = v.Effort.BaseBranch
 	}
-	branch, _, err := s.SyncBranch(ctx, actor, repoName, target)
+	branch, _, err := s.syncBranch(ctx, actor, v.Repo, target)
 	if err != nil {
 		return ShipPlan{}, err
 	}
@@ -150,7 +151,11 @@ type ShipResult struct {
 // OpenShipment pushes the planned commits to vx/<effort> and opens or
 // updates the pull request. Shipping again replaces the branch and updates
 // the same PR. vx never merges: that stays a decision on the git host.
+// PlanShipment checks admin on the repository.
 func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (ShipResult, error) {
+	if _, _, err := s.Authorize(ctx, actor, in.Repo, RoleAdmin); err != nil {
+		return ShipResult{}, err
+	}
 	if s.Shipper == nil {
 		return ShipResult{}, errf(CodeFailedPrecondition, "this server cannot ship: no git bridge configured")
 	}
@@ -222,9 +227,9 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	return res, err
 }
 
-// ListShipments returns an effort's shipments.
-func (s *Service) ListShipments(ctx context.Context, repoName, slug string) ([]store.Shipment, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+// ListShipments returns an effort's shipments (read).
+func (s *Service) ListShipments(ctx context.Context, actor Actor, repoName, slug string) ([]store.Shipment, error) {
+	v, err := s.GetEffort(ctx, actor, repoName, slug)
 	if err != nil {
 		return nil, err
 	}

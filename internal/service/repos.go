@@ -86,20 +86,25 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 		return store.Repo{}, classify(err)
 	}
 	if in.Provider != store.ProviderNone {
-		if _, _, err := s.SyncBranch(ctx, actor, created.Name, created.DefaultBranch); err != nil {
+		if _, _, err := s.syncBranch(ctx, actor, created, created.DefaultBranch); err != nil {
 			return created, err
 		}
 	}
 	return created, nil
 }
 
-// SyncBranch imports the latest commits of an upstream branch. For repos
-// without an upstream it returns the branch as it is.
+// SyncBranch imports the latest commits of an upstream branch (write). For
+// repos without an upstream it returns the branch as it is.
 func (s *Service) SyncBranch(ctx context.Context, actor Actor, repoName, branch string) (store.Branch, int, error) {
-	repo, err := s.Store.RepoByName(ctx, repoName)
+	repo, _, err := s.Authorize(ctx, actor, repoName, RoleWrite)
 	if err != nil {
-		return store.Branch{}, 0, classify(err)
+		return store.Branch{}, 0, err
 	}
+	return s.syncBranch(ctx, actor, repo, branch)
+}
+
+// syncBranch is SyncBranch for a repository the caller was authorized on.
+func (s *Service) syncBranch(ctx context.Context, actor Actor, repo store.Repo, branch string) (store.Branch, int, error) {
 	if branch == "" {
 		branch = repo.DefaultBranch
 	}
@@ -121,7 +126,8 @@ func (s *Service) SyncBranch(ctx context.Context, actor Actor, repoName, branch 
 }
 
 // Branch returns a tracked branch, importing it first if vx does not follow
-// it yet. This is how efforts can start from any branch on the fly.
+// it yet. This is how efforts can start from any branch on the fly. The
+// caller has authorized actor on repo already.
 func (s *Service) Branch(ctx context.Context, actor Actor, repo store.Repo, name string) (store.Branch, error) {
 	b, err := s.Store.GetBranch(ctx, repo.ID, name)
 	if err == nil {
@@ -130,6 +136,6 @@ func (s *Service) Branch(ctx context.Context, actor Actor, repo store.Repo, name
 	if repo.Provider == store.ProviderNone {
 		return store.Branch{}, errf(CodeNotFound, "branch %q does not exist in %s", name, repo.Name)
 	}
-	b, _, err = s.SyncBranch(ctx, actor, repo.Name, name)
+	b, _, err = s.syncBranch(ctx, actor, repo, name)
 	return b, err
 }

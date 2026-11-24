@@ -65,7 +65,7 @@ func (e *env) effort(eff store.Effort) store.Effort {
 // chain returns the effort's changes oldest first.
 func (e *env) chain(repo store.Repo, eff store.Effort) []service.LogEntry {
 	e.t.Helper()
-	log, err := e.svc.Log(e.ctx, repo.Name, eff.Slug, 0, false)
+	log, err := e.svc.Log(e.ctx, e.alice, repo.Name, eff.Slug, 0, false)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestRebaseReplaysCleanly(t *testing.T) {
 		t.Fatalf("rebased tree = %v", got)
 	}
 	// The change id now resolves to the rebased version.
-	_, entry, err := e.svc.GetChangeset(e.ctx, repo.Name, c3.ChangeID)
+	_, entry, err := e.svc.GetChangeset(e.ctx, e.alice, repo.Name, c3.ChangeID)
 	if err != nil || entry.Hash != after.Head {
 		t.Fatalf("change id %s resolves to %s, want the rebased head %s (%v)", c3.ChangeID, entry.Hash.Short(), after.Head.Short(), err)
 	}
@@ -184,11 +184,11 @@ func TestRebaseStopsOnConflictAndContinues(t *testing.T) {
 	if _, err := e.svc.RebaseEffort(e.ctx, e.agent, repo.Name, eff.Slug, ""); err == nil || !strings.Contains(err.Error(), "already in progress") {
 		t.Fatalf("second rebase: %v", err)
 	}
-	got, ok, err := e.svc.GetRebase(e.ctx, repo.Name, eff.Slug)
+	got, ok, err := e.svc.GetRebase(e.ctx, e.alice, repo.Name, eff.Slug)
 	if err != nil || !ok || got.Rebase.ID != v.Rebase.ID || got.StartedBy != "user:alice" {
 		t.Fatalf("GetRebase = %+v %v %v", got, ok, err)
 	}
-	ev, _ := e.svc.GetEffort(e.ctx, repo.Name, eff.Slug)
+	ev, _ := e.svc.GetEffort(e.ctx, e.alice, repo.Name, eff.Slug)
 	if ev.Rebase == nil || ev.Rebase.ID != v.Rebase.ID {
 		t.Fatalf("effort view has no rebase: %+v", ev.Rebase)
 	}
@@ -238,7 +238,7 @@ func TestRebaseAbortLeavesEffortUnchanged(t *testing.T) {
 	}
 	// The change id still resolves to the effort's own version, not to the
 	// replayed one the aborted rebase stored.
-	_, entry, err := e.svc.GetChangeset(e.ctx, repo.Name, c.ChangeID)
+	_, entry, err := e.svc.GetChangeset(e.ctx, e.alice, repo.Name, c.ChangeID)
 	if err != nil || entry.Hash != c.Hash {
 		t.Fatalf("change %s resolves to %s after abort, want %s (%v)", c.ChangeID, entry.Hash.Short(), c.Hash.Short(), err)
 	}

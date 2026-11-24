@@ -26,6 +26,10 @@ Run the full suite before saying a change works.
 - `internal/cli`: the `vx` command; `e2e_test.go` runs the real CLI against an in-process server.
 - `plugins/vx`: the Claude Code plugin users install. Validate with `claude plugin validate ./plugins/vx --strict` and `claude plugin validate . --strict`.
 
+## Permissions
+
+Every service function that takes a repo (by name, or a record that lives in one: effort, workspace, changeset, shipment, note) calls `Authorize` or `AuthorizeID` first, with `RoleRead` for reads, `RoleWrite` for changing work and `RoleAdmin` for shipping and repo settings; lists filter with `ReadableRepoIDs`. A repo the caller cannot read is "not found", never "permission denied". The API, web UI and MCP call the service, never `Store` for repo data. `internal/service/authz_test.go` shows the matrix and `docs/organizations.md` lists the role per operation; add a row to both when you add a function.
+
 ## Conventions
 
 - Errors that reach users say what happened and what to do next.

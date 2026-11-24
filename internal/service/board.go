@@ -117,10 +117,9 @@ type NoteContext struct {
 	Claims        []Claim    // active claims on the targets (all when no targets)
 }
 
-// Everyone signed in may read and write every effort's board for now, the
-// same as the rest of vx, where any principal may open workspaces and land
-// in any effort. Readers learn whose note it is from TrustOf, not from
-// permissions.
+// Reading a board needs read on its repository; posting, asking and
+// answering need write. Readers learn whose note it is from TrustOf, not
+// from permissions.
 
 // PostNote adds a plan, decision, interface, blocker or handoff note.
 func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (Note, error) {
@@ -141,7 +140,7 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 	if err != nil {
 		return Note{}, err
 	}
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleWrite)
 	if err != nil {
 		return Note{}, err
 	}
@@ -175,6 +174,10 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 	case within > MaxAnswerWithin:
 		return Note{}, errf(CodeInvalid, "answer within %s is too long; questions escalate after at most %s", within, MaxAnswerWithin)
 	}
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleWrite)
+	if err != nil {
+		return Note{}, err
+	}
 	var to *store.Principal
 	if strings.TrimSpace(in.To) != "" {
 		p, err := s.resolvePrincipal(ctx, actor, in.To)
@@ -182,10 +185,6 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 			return Note{}, err
 		}
 		to = &p
-	}
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
-	if err != nil {
-		return Note{}, err
 	}
 	now := s.Now()
 	answerBy := now.Add(within)
@@ -213,6 +212,9 @@ func (s *Service) AnswerNote(ctx context.Context, actor Actor, questionID string
 	}
 	found, err := s.findNote(ctx, questionID)
 	if err != nil {
+		return Note{}, Note{}, err
+	}
+	if err := s.noteFor(ctx, actor, found, RoleWrite); err != nil {
 		return Note{}, Note{}, err
 	}
 	now := s.Now()
@@ -271,7 +273,7 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 		limit = DefaultNoteListLimit
 	}
 	limit = min(limit, maxNoteListLimit)
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleRead)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +284,13 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 	return s.newNoteCache().notes(ctx, rows, s.Now())
 }
 
-// GetInbox returns what needs the caller's attention across efforts.
+// GetInbox returns what needs the caller's attention across efforts, in
+// the repositories the caller can read.
 func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
+	readable, err := s.readableFilter(ctx, actor)
+	if err != nil {
+		return Inbox{}, err
+	}
 	ids := []uuid.UUID{actor.ID}
 	person := actor.Kind == store.KindHuman
 	if person {
@@ -302,20 +309,20 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 	if err != nil {
 		return Inbox{}, err
 	}
-	if in.Questions, err = c.notes(ctx, rows, now); err != nil {
+	if in.Questions, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
 		return Inbox{}, err
 	}
 	if rows, err = s.Store.AnswersToQuestionsBy(ctx, actor.ID, now.Add(-inboxAnswerAge), maxInboxNotes); err != nil {
 		return Inbox{}, err
 	}
-	if in.Answers, err = c.notes(ctx, rows, now); err != nil {
+	if in.Answers, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
 		return Inbox{}, err
 	}
 	if person {
 		if rows, err = s.Store.OverdueQuestions(ctx, actor.ID, ids, now, maxInboxNotes); err != nil {
 			return Inbox{}, err
 		}
-		if in.Escalated, err = c.notes(ctx, rows, now); err != nil {
+		if in.Escalated, err = c.notes(ctx, filterNotes(rows, readable), now); err != nil {
 			return Inbox{}, err
 		}
 	}
@@ -330,7 +337,7 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 	if err != nil {
 		return NoteContext{}, err
 	}
-	v, err := s.boardEffort(ctx, repo, effort)
+	v, err := s.boardEffort(ctx, actor, repo, effort, RoleRead)
 	if err != nil {
 		return NoteContext{}, err
 	}
@@ -381,6 +388,9 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 func (s *Service) GetNote(ctx context.Context, actor Actor, id string) (Note, error) {
 	row, err := s.findNote(ctx, id)
 	if err != nil {
+		return Note{}, err
+	}
+	if err := s.noteFor(ctx, actor, row, RoleRead); err != nil {
 		return Note{}, err
 	}
 	return s.newNoteCache().note(ctx, row, s.Now())

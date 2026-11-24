@@ -44,11 +44,10 @@ var errRebaseMoved = errors.New("rebase changed meanwhile")
 // landed meanwhile are replayed too. When a change conflicts the rebase
 // stops and waits for ContinueRebase or AbortRebase.
 func (s *Service) RebaseEffort(ctx context.Context, actor Actor, repoName, slug, onto string) (RebaseView, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleWrite)
 	if err != nil {
 		return RebaseView{}, err
 	}
-	// TODO(v0.2): Authorize(write) on the repository before rebasing.
 	if v.Effort.State != store.EffortOpen {
 		return RebaseView{}, errf(CodeFailedPrecondition, "effort %s is %s; only open efforts can be rebased", slug, v.Effort.State)
 	}
@@ -112,11 +111,10 @@ type ContinueInput struct {
 // version, marked as resolved by the actor, and replays the rest. It may
 // stop again on a later change.
 func (s *Service) ContinueRebase(ctx context.Context, actor Actor, in ContinueInput) (RebaseView, error) {
-	v, err := s.GetEffort(ctx, in.Repo, in.Effort)
+	v, err := s.effortFor(ctx, actor, in.Repo, in.Effort, RoleWrite)
 	if err != nil {
 		return RebaseView{}, err
 	}
-	// TODO(v0.2): Authorize(write) on the repository before continuing a rebase.
 	r, err := s.Store.ActiveRebase(ctx, v.Effort.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		return RebaseView{}, errf(CodeFailedPrecondition, "effort %s has no rebase in progress; start one with: vx effort rebase %s", in.Effort, in.Effort)
@@ -156,11 +154,10 @@ func (s *Service) ContinueRebase(ctx context.Context, actor Actor, in ContinueIn
 // AbortRebase drops the effort's rebase in progress. The effort is left as
 // it was; the changesets the rebase stored stay unreferenced.
 func (s *Service) AbortRebase(ctx context.Context, actor Actor, repoName, slug string) (RebaseView, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleWrite)
 	if err != nil {
 		return RebaseView{}, err
 	}
-	// TODO(v0.2): Authorize(write) on the repository before aborting a rebase.
 	r, err := s.Store.ActiveRebase(ctx, v.Effort.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		return RebaseView{}, errf(CodeFailedPrecondition, "effort %s has no rebase in progress", slug)
@@ -189,8 +186,8 @@ func (s *Service) AbortRebase(ctx context.Context, actor Actor, repoName, slug s
 
 // GetRebase returns the effort's rebase in progress, or else its latest
 // one. Found is false when the effort was never rebased.
-func (s *Service) GetRebase(ctx context.Context, repoName, slug string) (RebaseView, bool, error) {
-	v, err := s.GetEffort(ctx, repoName, slug)
+func (s *Service) GetRebase(ctx context.Context, actor Actor, repoName, slug string) (RebaseView, bool, error) {
+	v, err := s.effortFor(ctx, actor, repoName, slug, RoleRead)
 	if err != nil {
 		return RebaseView{}, false, err
 	}

@@ -38,7 +38,7 @@ func (s *Service) AddTask(ctx context.Context, actor Actor, in AddTaskInput) (Ta
 	if err != nil {
 		return Task{}, err
 	}
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleWrite)
 	if err != nil {
 		return Task{}, err
 	}
@@ -107,6 +107,11 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, in UpdateTaskInpu
 	}
 	found, err := s.findTask(ctx, uuid.Nil, in.ID)
 	if err != nil {
+		return Task{}, nil, err
+	}
+	// Tasks are found by id across efforts: check the caller may change
+	// work in the task's repository (unreadable ones look like unknown ids).
+	if _, err := s.AuthorizeID(ctx, actor, found.RepoID, RoleWrite); err != nil {
 		return Task{}, nil, err
 	}
 	c := s.newNoteCache()
@@ -191,7 +196,7 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, in ListTasksInput)
 			return nil, errf(CodeInvalid, "task state %q is not one of open, taken, done", st)
 		}
 	}
-	v, err := s.boardEffort(ctx, in.Repo, in.Effort)
+	v, err := s.boardEffort(ctx, actor, in.Repo, in.Effort, RoleRead)
 	if err != nil {
 		return nil, err
 	}

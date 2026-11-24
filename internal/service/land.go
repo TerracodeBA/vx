@@ -58,7 +58,7 @@ var ErrNothingToLand = errors.New("nothing to land")
 
 var errLostRace = errors.New("effort head moved")
 
-// Land merges a workspace snapshot into its effort.
+// Land merges a workspace snapshot into its effort (write).
 //
 // When the effort has not moved since the snapshot's base, the snapshot
 // becomes the new head. When it has, the snapshot is merged onto the current

@@ -116,13 +116,14 @@ func filesMatch(files []store.FileChange, want []string) bool {
 	return false
 }
 
-// boardEffort loads the effort a board call is about.
-func (s *Service) boardEffort(ctx context.Context, repo, effort string) (EffortView, error) {
+// boardEffort loads the effort a board call is about, checking need on its
+// repository.
+func (s *Service) boardEffort(ctx context.Context, actor Actor, repo, effort string, need RepoRole) (EffortView, error) {
 	repo, effort = strings.TrimSpace(repo), strings.TrimSpace(effort)
 	if repo == "" || effort == "" {
 		return EffortView{}, errf(CodeInvalid, "say which repo and effort the board is in; inside a clone vx fills them in")
 	}
-	v, err := s.GetEffort(ctx, repo, effort)
+	v, err := s.effortFor(ctx, actor, repo, effort, need)
 	if errors.Is(err, store.ErrNotFound) {
 		return EffortView{}, errf(CodeNotFound, "no effort %s in repo %s; `vx effort list --repo %s` shows them", effort, repo, repo)
 	}

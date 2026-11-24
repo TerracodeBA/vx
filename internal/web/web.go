@@ -199,8 +199,17 @@ func (u *UI) auth(next handler) http.HandlerFunc {
 			return
 		}
 		actor.TokenID = tokenID
-		next(w, r, actor)
+		next(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)), actor)
 	}
+}
+
+// actorKey carries the signed-in actor in the request context, for the
+// parts of a page (the sidebar) that render outside a handler.
+type actorKey struct{}
+
+func actorOf(r *http.Request) (service.Actor, bool) {
+	a, ok := r.Context().Value(actorKey{}).(service.Actor)
+	return a, ok
 }
 
 // navRepo and navEffort feed the sidebar on every signed-in page.
@@ -217,16 +226,21 @@ type navEffort struct {
 	Open  int
 }
 
+// nav lists the repositories the signed-in actor can read.
 func (u *UI) nav(r *http.Request) []navRepo {
 	ctx := r.Context()
-	repos, err := u.svc.Store.ListRepos(ctx)
+	actor, ok := actorOf(r)
+	if !ok {
+		return nil
+	}
+	repos, err := u.svc.ListRepos(ctx, actor)
 	if err != nil {
 		return nil
 	}
 	out := make([]navRepo, 0, len(repos))
 	for _, repo := range repos {
 		nr := navRepo{Name: repo.Name, Provider: string(repo.Provider)}
-		effs, _ := u.svc.Store.ListEfforts(ctx, repo.ID, "")
+		_, effs, _ := u.svc.ListEfforts(ctx, actor, repo.Name, "")
 		for _, e := range effs {
 			ne := navEffort{Slug: e.Slug, Name: e.Name, State: string(e.State)}
 			if ws, err := u.svc.Store.ListWorkspaces(ctx, e.ID, store.WorkspaceOpen); err == nil {
@@ -334,25 +348,25 @@ type effortRow struct {
 
 func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repos, err := u.svc.Store.ListRepos(ctx)
+	repos, err := u.svc.ListRepos(ctx, actor)
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
 	type repoRow struct {
-		store.Repo
+		service.RepoView
 		Efforts []effortRow
 	}
 	var rows []repoRow
 	for _, repo := range repos {
-		rr := repoRow{Repo: repo}
-		effs, err := u.svc.Store.ListEfforts(ctx, repo.ID, "")
+		rr := repoRow{RepoView: repo}
+		_, effs, err := u.svc.ListEfforts(ctx, actor, repo.Name, "")
 		if err != nil {
 			u.fail(w, err)
 			return
 		}
 		for _, e := range effs {
-			rr.Efforts = append(rr.Efforts, u.effortRow(r, repo, e))
+			rr.Efforts = append(rr.Efforts, u.effortRow(r, repo.Repo, e))
 		}
 		rows = append(rows, rr)
 	}
@@ -396,24 +410,19 @@ func (u *UI) ref(r *http.Request, id uuid.UUID) string {
 
 func (u *UI) repo(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	repo, err := u.svc.Store.RepoByName(ctx, param(r, "name"))
+	repo, branches, err := u.svc.GetRepo(ctx, actor, param(r, "name"))
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
-	branches, err := u.svc.Store.ListBranches(ctx, repo.ID)
-	if err != nil {
-		u.fail(w, err)
-		return
-	}
-	effs, err := u.svc.Store.ListEfforts(ctx, repo.ID, "")
+	_, effs, err := u.svc.ListEfforts(ctx, actor, repo.Name, "")
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
 	var rows []effortRow
 	for _, e := range effs {
-		rows = append(rows, u.effortRow(r, repo, e))
+		rows = append(rows, u.effortRow(r, repo.Repo, e))
 	}
 	u.render(w, r, "repo", map[string]any{"Actor": actor, "Repo": repo, "Branches": branches, "Efforts": rows, "Title": repo.Name})
 }
@@ -442,12 +451,12 @@ type agentStat struct {
 func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, slug := param(r, "repo"), param(r, "slug")
-	v, err := u.svc.GetEffort(ctx, repoName, slug)
+	v, err := u.svc.GetEffort(ctx, actor, repoName, slug)
 	if err != nil {
 		u.fail(w, err)
 		return
 	}
-	entries, err := u.svc.Log(ctx, repoName, slug, 500, true)
+	entries, err := u.svc.Log(ctx, actor, repoName, slug, 500, true)
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -532,7 +541,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		workColor[wr.Owner] = color[wr.Owner]
 	}
 	claims := u.claimRows(r, actor, repoName, slug, color)
-	shipments, _ := u.svc.Store.ListShipments(ctx, v.Effort.ID)
+	shipments, _ := u.svc.ListShipments(ctx, actor, repoName, slug)
 	baseRow, _ := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
 	changesView := param(r, "view") == "changes"
 	boardView := param(r, "view") == "board"
@@ -553,7 +562,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
-		"Claims": claims, "Rebase": u.rebaseBanner(ctx, v),
+		"Claims": claims, "Rebase": u.rebaseBanner(ctx, actor, v),
 	})
 }
 
@@ -567,11 +576,11 @@ type rebaseBanner struct {
 	Conflicts         []store.RebaseConflict
 }
 
-func (u *UI) rebaseBanner(ctx context.Context, v service.EffortView) *rebaseBanner {
+func (u *UI) rebaseBanner(ctx context.Context, actor service.Actor, v service.EffortView) *rebaseBanner {
 	if v.Rebase == nil {
 		return nil
 	}
-	rv, ok, err := u.svc.GetRebase(ctx, v.Repo.Name, v.Effort.Slug)
+	rv, ok, err := u.svc.GetRebase(ctx, actor, v.Repo.Name, v.Effort.Slug)
 	if err != nil || !ok || !rv.Rebase.State.Active() {
 		return nil
 	}
@@ -685,13 +694,13 @@ func (u *UI) readBlob(r *http.Request, h hash.Hash) ([]byte, error) {
 
 // diff renders one file's diff as an HTML fragment, either for one change
 // (ref) or for the effort as a whole (slug).
-func (u *UI) diff(w http.ResponseWriter, r *http.Request, _ service.Actor) {
+func (u *UI) diff(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, path := param(r, "repo"), param(r, "path")
 	var fc store.FileChange
 	switch {
 	case param(r, "ref") != "":
-		_, e, err := u.svc.GetChangeset(ctx, repoName, param(r, "ref"))
+		_, e, err := u.svc.GetChangeset(ctx, actor, repoName, param(r, "ref"))
 		if err != nil {
 			u.fail(w, err)
 			return
@@ -708,7 +717,7 @@ func (u *UI) diff(w http.ResponseWriter, r *http.Request, _ service.Actor) {
 			return
 		}
 	default:
-		v, err := u.svc.GetEffort(ctx, repoName, param(r, "slug"))
+		v, err := u.svc.GetEffort(ctx, actor, repoName, param(r, "slug"))
 		if err != nil {
 			u.fail(w, err)
 			return
@@ -799,7 +808,7 @@ func diffBlocks(added, deleted int) []string {
 
 // effortHead lets the page poll cheaply for changes.
 func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, actor service.Actor) {
-	v, err := u.svc.GetEffort(r.Context(), param(r, "repo"), param(r, "slug"))
+	v, err := u.svc.GetEffort(r.Context(), actor, param(r, "repo"), param(r, "slug"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -978,7 +987,7 @@ type fileDiff struct {
 func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, ref := param(r, "repo"), param(r, "ref")
-	repo, e, err := u.svc.GetChangeset(ctx, repoName, ref)
+	repo, e, err := u.svc.GetChangeset(ctx, actor, repoName, ref)
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -1222,7 +1231,7 @@ func renderHunks(edits []merge.Edit, a, b []string, context int) []diffLine {
 func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, slug, target := param(r, "repo"), param(r, "slug"), param(r, "to")
-	v, err := u.svc.GetEffort(ctx, repoName, slug)
+	v, err := u.svc.GetEffort(ctx, actor, repoName, slug)
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -1235,7 +1244,7 @@ func (u *UI) ship(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		data["Plan"] = plan
 		data["Commits"] = len(plan.Commits())
 	}
-	data["Shipments"], _ = u.svc.Store.ListShipments(ctx, v.Effort.ID)
+	data["Shipments"], _ = u.svc.ListShipments(ctx, actor, repoName, slug)
 	data["Shipped"] = r.URL.Query().Get("shipped") != ""
 	u.render(w, r, "ship", data)
 }
