@@ -14,10 +14,15 @@ vx is pre-1.0. Security fixes go into the latest release.
 
 vx is early and some protections that organizations expect are not built yet. They are documented, not hidden:
 
-- Every signed-in user can see every repository on a server.
-- Agents are not yet restricted to paths.
+- Repository content is not encrypted per organization: the server's operators can read it with direct access to the database and storage (see Superadmins below).
 
 See [docs/organizations.md](docs/organizations.md). Reports about these known limits are still welcome if you find a way they are worse than described.
+
+## Superadmins
+
+The people who run a vx server (superadmins: the operator on vx Cloud) manage people, invites, sign-up, the GitHub App and server settings, and see the operation log's metadata. They have no role on any repository from that: a customer's repository, its files and objects, changes, diffs, board notes, claims, tasks, overlaps and reviews are "not found" to them in the CLI, the API, the web UI and MCP, like to anyone without a role. They reach a repository only through a role its admins grant: an ordinary grant, or support access, which is read or write, ends by itself after at most 30 days, shows on the repository's access page, is recorded in the operation log, and can be revoked at any time. See [docs/organizations.md](docs/organizations.md#superadmins-and-support-access).
+
+This is enforced by vx, not by the infrastructure: whoever has the database, the object storage or the server's disk (and `VX_SECRET_KEY`) can read everything stored there. A report that a superadmin can reach repository content through vx without a grant is a vulnerability.
 
 ## Objects
 

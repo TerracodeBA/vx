@@ -14,7 +14,7 @@ message Principal {
   string display_name = 4;
   string email = 5;
   string on_behalf_of = 6; // the human an agent acts for
-  bool site_admin = 7; // may manage people and every organization on this server
+  bool site_admin = 7; // a superadmin: runs this server (people, invites, GitHub App); no role on any repository from it
   string github_login = 8; // set for people who signed in with GitHub
 }
 
@@ -196,10 +196,10 @@ service AuthService {
   rpc CreateLoginCode(CreateLoginCodeRequest) returns (CreateLoginCodeResponse) {}
   // GetAgent returns an agent with its path scope, budgets and today's
   // usage. An agent may read its own (agent empty), a person their agents',
-  // a site admin anyone's.
+  // a superadmin anyone's.
   rpc GetAgent(GetAgentRequest) returns (GetAgentResponse) {}
   // SetAgentScope changes an agent's path scope and budgets. Only the
-  // agent's person or a site admin may; an agent cannot, not even its own.
+  // agent's person or a superadmin may; an agent cannot, not even its own.
   rpc SetAgentScope(SetAgentScopeRequest) returns (SetAgentScopeResponse) {}
 }
 
@@ -1142,7 +1142,9 @@ message GetRebaseResponse {
 // write, admin) are granted to people or teams; an organization's members
 // also get its default repository role. Owners and admins of an organization
 // are admins of all its repositories. Agents have exactly the access of the
-// person they act for. Site admins manage people and every organization.
+// person they act for. Superadmins run the server: they manage people and
+// see every organization, but have no role on any repository unless its
+// admins grant one (support access: GrantSupport, time-limited).
 // A repository the caller cannot read behaves as if it did not exist.
 
 service OrgService {
@@ -1159,7 +1161,13 @@ service OrgService {
   rpc GrantRepo(GrantRepoRequest) returns (GrantRepoResponse) {}
   rpc RevokeRepo(RevokeRepoRequest) returns (RevokeRepoResponse) {}
   rpc RepoAccess(RepoAccessRequest) returns (RepoAccessResponse) {}
-  // People (site admins): create people and list everyone on the server.
+  // Support access (repository admins): give a superadmin read or write on
+  // one repository until a time, at most 30 days ahead; recorded in the
+  // operation log. The superadmin may also end their own early.
+  rpc GrantSupport(GrantSupportRequest) returns (GrantSupportResponse) {}
+  rpc RevokeSupport(RevokeSupportRequest) returns (RevokeSupportResponse) {}
+  rpc ListSupport(ListSupportRequest) returns (ListSupportResponse) {}
+  // People (superadmins): create people and list everyone on the server.
   rpc CreatePerson(CreatePersonRequest) returns (CreatePersonResponse) {}
   rpc ListPeople(ListPeopleRequest) returns (ListPeopleResponse) {}
 }
@@ -1169,7 +1177,7 @@ message Org {
   string display_name = 2;
   string default_repo_role = 3; // none, read or write: what every member gets on the org's repositories
   string created_at = 4;
-  string my_role = 5; // owner, admin, member, or empty for site admins who are not members
+  string my_role = 5; // owner, admin, member, or empty for superadmins who are not members
   bool personal = 6; // a person's own organization, named like them
 }
 
@@ -1204,7 +1212,7 @@ message CreateOrgRequest {
 message CreateOrgResponse { Org org = 1; }
 
 message ListOrgsRequest {
-  bool all = 1; // site admins: every organization
+  bool all = 1; // superadmins: every organization
 }
 message ListOrgsResponse { repeated Org orgs = 1; }
 
@@ -1280,6 +1288,34 @@ message RepoAccessResponse {
   repeated RepoGrant grants = 1; // direct grants
   repeated RepoAccessEntry people = 2; // everyone's effective role (repo admins only)
 }
+
+message SupportGrant {
+  string repo = 1;
+  Principal person = 2; // the superadmin
+  string role = 3; // read or write
+  string expires_at = 4;
+  string reason = 5;
+  string granted_by = 6; // ref of who granted it, empty when they are gone
+  string created_at = 7;
+}
+
+message GrantSupportRequest {
+  string repo = 1;
+  string person = 2; // handle or user:HANDLE of a superadmin
+  string role = 3; // read or write; empty: read
+  int64 duration_seconds = 4; // 0: 24 hours; at most 30 days
+  string reason = 5; // shown on the access page and in the operation log
+}
+message GrantSupportResponse { SupportGrant grant = 1; }
+
+message RevokeSupportRequest {
+  string repo = 1;
+  string person = 2;
+}
+message RevokeSupportResponse {}
+
+message ListSupportRequest { string repo = 1; }
+message ListSupportResponse { repeated SupportGrant grants = 1; }
 
 message CreatePersonRequest {
   string handle = 1;

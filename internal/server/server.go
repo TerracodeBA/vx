@@ -89,6 +89,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
+	// Upgrade notices (superadmins, #33) are logged once.
+	if err := svc.LogUpgradeNotices(ctx, log); err != nil {
+		log.Warn("could not read upgrade notices", "err", err)
+	}
 	// Repositories of an installation fetch, push and open pull requests
 	// with its installation token.
 	if b, ok := up.(interface {

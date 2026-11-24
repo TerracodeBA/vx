@@ -157,7 +157,7 @@ func (u *UI) gitHubStart(w http.ResponseWriter, r *http.Request) {
 func (u *UI) gitHubRedirect(w http.ResponseWriter, r *http.Request, f gitHubFlow, retry string) {
 	if !u.svc.GitHubSignInEnabled(r.Context()) {
 		u.gitHubFail(w, r, gitHubProblem{Status: http.StatusServiceUnavailable, Title: "GitHub sign-in is not set up",
-			Message: "This vx server has no GitHub App yet, so it cannot sign you in with GitHub. A site admin sets it up on Admin > GitHub. Until then, sign in with a token or vx ui.",
+			Message: "This vx server has no GitHub App yet, so it cannot sign you in with GitHub. A superadmin sets it up on Admin > GitHub. Until then, sign in with a token or vx ui.",
 			Retry:   "/ui/login"})
 		return
 	}
@@ -230,10 +230,10 @@ func (u *UI) gitHubFailErr(w http.ResponseWriter, r *http.Request, err error, re
 		p := gitHubProblem{Status: http.StatusForbidden, Login: refused.Login, Retry: "/ui/login"}
 		if refused.Mode == service.SignupClosed {
 			p.Title = "No new accounts"
-			p.Message = "This vx server does not take new accounts right now. If you should have one, ask a site admin to add you."
+			p.Message = "This vx server does not take new accounts right now. If you should have one, ask a superadmin to add you."
 		} else {
 			p.Title = "You are not invited yet"
-			p.Message = "This vx server is invite-only, and GitHub user " + refused.Login + " has no invite. Ask a site admin to invite " +
+			p.Message = "This vx server is invite-only, and GitHub user " + refused.Login + " has no invite. Ask a superadmin to invite " +
 				strings.ToLower(refused.Login) + " (Admin > People > Invite by GitHub login), then sign in with GitHub again."
 		}
 		u.gitHubFail(w, r, p)
@@ -313,7 +313,7 @@ func (u *UI) welcome(w http.ResponseWriter, r *http.Request, actor service.Actor
 	ctx := r.Context()
 	data := map[string]any{"Actor": actor, "Title": "Welcome", "Server": u.publicURL(r),
 		"GitHub": u.svc.GitHubSignInEnabled(r.Context()), "Shown": u.svc.ShowWelcome(ctx, actor), "IsHuman": actor.Kind == store.KindHuman,
-		"SiteAdmin": u.svc.IsSiteAdmin(ctx, actor)}
+		"SiteAdmin": u.svc.IsSuperadmin(ctx, actor)}
 	if l, ok, err := u.svc.GitHubLinkOf(ctx, actor); err == nil && ok {
 		data["GitHubLogin"] = l.Login
 	}
@@ -377,7 +377,7 @@ func (u *UI) peopleGitHub(r *http.Request, actor service.Actor, rows []personRow
 }
 
 func (u *UI) invitePost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
-	if !u.svc.IsSiteAdmin(r.Context(), actor) {
+	if !u.svc.IsSuperadmin(r.Context(), actor) {
 		http.NotFound(w, r)
 		return
 	}
@@ -390,7 +390,7 @@ func (u *UI) invitePost(w http.ResponseWriter, r *http.Request, actor service.Ac
 }
 
 func (u *UI) inviteWithdrawPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
-	if !u.svc.IsSiteAdmin(r.Context(), actor) {
+	if !u.svc.IsSuperadmin(r.Context(), actor) {
 		http.NotFound(w, r)
 		return
 	}

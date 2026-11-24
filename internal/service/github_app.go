@@ -274,8 +274,8 @@ func (s *Service) GitHubManifestFormURL(org, state string) string {
 }
 
 func (s *Service) needSiteAdmin(ctx context.Context, actor Actor, what string) error {
-	if actor.Kind != store.KindHuman || !s.IsSiteAdmin(ctx, actor) {
-		return errf(CodePermission, "only site admins can %s; ask one of them", what)
+	if actor.Kind != store.KindHuman || !s.IsSuperadmin(ctx, actor) {
+		return errf(CodePermission, "only superadmins can %s; ask one of them", what)
 	}
 	return nil
 }
@@ -332,7 +332,7 @@ func (s *Service) GitHubAppManifest() ([]byte, error) {
 }
 
 // GitHubSetupManifest returns the App manifest (JSON) and a state value for
-// the manifest flow (site admins). The web page posts it to GitHub.
+// the manifest flow (superadmins). The web page posts it to GitHub.
 func (s *Service) GitHubSetupManifest(ctx context.Context, actor Actor) (manifest []byte, state string, err error) {
 	if err := s.needSiteAdmin(ctx, actor, "set up the GitHub App"); err != nil {
 		return nil, "", err
@@ -349,7 +349,7 @@ func (s *Service) GitHubSetupManifest(ctx context.Context, actor Actor) (manifes
 }
 
 // CompleteGitHubSetup exchanges the manifest code for the App's
-// credentials and stores them encrypted (site admins).
+// credentials and stores them encrypted (superadmins).
 func (s *Service) CompleteGitHubSetup(ctx context.Context, actor Actor, code, state string) error {
 	if err := s.needSiteAdmin(ctx, actor, "set up the GitHub App"); err != nil {
 		return err

@@ -123,9 +123,9 @@ type GitHubSignupRefused struct {
 
 func (e *GitHubSignupRefused) Error() string {
 	if e.Mode == SignupClosed {
-		return "this vx server does not take new accounts; ask a site admin to add you"
+		return "this vx server does not take new accounts; ask a superadmin to add you"
 	}
-	return fmt.Sprintf("GitHub user %s is not invited to this vx server; ask a site admin to invite %s (Admin > People, or vx-server invite %s)", e.Login, e.Login, strings.ToLower(e.Login))
+	return fmt.Sprintf("GitHub user %s is not invited to this vx server; ask a superadmin to invite %s (Admin > People, or vx-server invite %s)", e.Login, e.Login, strings.ToLower(e.Login))
 }
 
 // gitHubUser exchanges a sign-in code and reads the GitHub user it is for.
@@ -313,7 +313,7 @@ func (s *Service) gitHubSignup(ctx context.Context, u GitHubUser) (store.Princip
 		}
 		return store.Principal{}, classify(err)
 	}
-	return store.Principal{}, errf(CodeExists, "could not find a free handle for GitHub user %s; ask a site admin to create your account", u.Login)
+	return store.Principal{}, errf(CodeExists, "could not find a free handle for GitHub user %s; ask a superadmin to create your account", u.Login)
 }
 
 // maxHandle is the longest handle ValidateHandle accepts.
@@ -375,20 +375,20 @@ func NormalizeGitHubLogin(v string) (string, error) {
 }
 
 // InviteGitHubUser allows a GitHub login to sign up while sign-up is
-// invite-only (site admins).
+// invite-only (superadmins).
 func (s *Service) InviteGitHubUser(ctx context.Context, actor Actor, login, note string) error {
 	if err := peopleOnly(actor, "invite people"); err != nil {
 		return err
 	}
-	if !s.IsSiteAdmin(ctx, actor) {
-		return errf(CodePermission, "only site admins can invite people; %s is not one", actor.Ref())
+	if !s.IsSuperadmin(ctx, actor) {
+		return errf(CodePermission, "only superadmins can invite people; %s is not one", actor.Ref())
 	}
 	_, err := s.InviteGitHubLogin(ctx, &actor.Principal, login, note, false)
 	return err
 }
 
 // InviteGitHubLogin invites a GitHub login on behalf of by (nil: the server
-// console, vx-server invite). siteAdmin makes the person a site admin when
+// console, vx-server invite). siteAdmin makes the person a superadmin when
 // they sign up; only the console can ask for that.
 func (s *Service) InviteGitHubLogin(ctx context.Context, by *store.Principal, login, note string, siteAdmin bool) (store.SignupInvite, error) {
 	l, err := NormalizeGitHubLogin(login)
@@ -423,22 +423,22 @@ func (s *Service) InviteGitHubLogin(ctx context.Context, by *store.Principal, lo
 	return inv, classify(err)
 }
 
-// ListGitHubInvites lists invites (site admins): open ones, or all.
+// ListGitHubInvites lists invites (superadmins): open ones, or all.
 func (s *Service) ListGitHubInvites(ctx context.Context, actor Actor, all bool) ([]store.SignupInvite, error) {
-	if !s.IsSiteAdmin(ctx, actor) {
-		return nil, errf(CodePermission, "only site admins can see invites; %s is not one", actor.Human().Ref())
+	if !s.IsSuperadmin(ctx, actor) {
+		return nil, errf(CodePermission, "only superadmins can see invites; %s is not one", actor.Human().Ref())
 	}
 	inv, err := s.Store.ListInvites(ctx, all)
 	return inv, classify(err)
 }
 
-// WithdrawGitHubInvite deletes an open invite (site admins).
+// WithdrawGitHubInvite deletes an open invite (superadmins).
 func (s *Service) WithdrawGitHubInvite(ctx context.Context, actor Actor, login string) error {
 	if err := peopleOnly(actor, "withdraw invites"); err != nil {
 		return err
 	}
-	if !s.IsSiteAdmin(ctx, actor) {
-		return errf(CodePermission, "only site admins can withdraw invites; %s is not one", actor.Ref())
+	if !s.IsSuperadmin(ctx, actor) {
+		return errf(CodePermission, "only superadmins can withdraw invites; %s is not one", actor.Ref())
 	}
 	l, err := NormalizeGitHubLogin(login)
 	if err != nil {

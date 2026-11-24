@@ -1,6 +1,6 @@
 package web
 
-// The GitHub App: Admin > GitHub (site admins create the App through
+// The GitHub App: Admin > GitHub (superadmins create the App through
 // GitHub's manifest flow), the pages GitHub sends the browser back to, and
 // the webhook endpoint. The manifest form is a plain form that posts to
 // GitHub; no script is involved, so the strict CSP holds.
@@ -46,7 +46,7 @@ func (u *UI) githubAdminPage(w http.ResponseWriter, r *http.Request, actor servi
 
 func (u *UI) renderGitHubAdmin(w http.ResponseWriter, r *http.Request, actor service.Actor, f flash) {
 	ctx := r.Context()
-	if !u.svc.IsSiteAdmin(ctx, actor) {
+	if !u.svc.IsSuperadmin(ctx, actor) {
 		http.NotFound(w, r)
 		return
 	}
@@ -54,7 +54,8 @@ func (u *UI) renderGitHubAdmin(w http.ResponseWriter, r *http.Request, actor ser
 		f.OK = "The GitHub App is set up. Install it on the organizations whose repositories vx should work on."
 	}
 	data := map[string]any{"Actor": actor, "Title": "GitHub", "Section": "admin", "Flash": f,
-		"IsHuman": actor.Kind == store.KindHuman, "WebURL": u.svc.GitHubWebURL()}
+		"IsHuman": actor.Kind == store.KindHuman, "WebURL": u.svc.GitHubWebURL(),
+		"SuperadminReview": u.svc.SuperadminReviewPending(ctx, actor)}
 	app, err := u.svc.GitHubApp(ctx)
 	switch {
 	case err == nil:

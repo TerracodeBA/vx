@@ -9,7 +9,9 @@ package service
 //     triage, read: read; none: no access). vx grants, teams, organization
 //     defaults and organization roles count for nothing there.
 //   - Only people linked to GitHub (principals.github_user_id) have a role.
-//     Site admins keep admin everywhere. Agents have their person's role.
+//     Superadmins have no role from being one; repository admins can
+//     give them support access (support.go). Agents have their person's
+//     role.
 //     Service principals have only their direct vx grants (GitHub does
 //     not know them; repository admins may grant them, nobody else).
 //   - A person who does not belong to the installation's account (it is
@@ -19,7 +21,7 @@ package service
 //     repositories give read to every GitHub user. Outside collaborators
 //     with write, maintain or admin keep it; those with only read do not.
 //   - A suspended installation, or one vx has no record of (removed),
-//     gives nobody a role (site admins aside); so does a linked repository
+//     gives nobody a role (support grants aside); so does a linked repository
 //     no installation reaches any more (github_installation_id cleared).
 //   - Answers are cached in github_role_cache and
 //     github_org_membership_cache for GitHubRoleTTL; webhooks drop them
@@ -55,11 +57,10 @@ const githubParallel = 8
 
 // githubSubject is the person whose GitHub role counts for an actor.
 type githubSubject struct {
-	person    store.Principal
-	ident     store.GitHubLink
-	linked    bool
-	siteAdmin bool
-	service   bool // service principals: direct vx grants only
+	person  store.Principal
+	ident   store.GitHubLink
+	linked  bool
+	service bool // service principals: direct vx grants only
 }
 
 func (s *Service) githubSubjectOf(ctx context.Context, p store.Principal) (githubSubject, error) {
@@ -77,11 +78,7 @@ func (s *Service) githubSubjectOf(ctx context.Context, p store.Principal) (githu
 	if p.Kind != store.KindHuman {
 		return sub, nil
 	}
-	fresh, err := s.Store.PrincipalByID(ctx, p.ID) // site admin changes apply at once
-	if err != nil {
-		return githubSubject{}, err
-	}
-	sub.siteAdmin = fresh.SiteAdmin
+	var err error
 	sub.ident, sub.linked, err = s.Store.GitHubLinkOf(ctx, p.ID)
 	sub.linked = sub.linked && sub.ident.Login != ""
 	return sub, err
@@ -117,12 +114,6 @@ func (s *Service) githubRoles(ctx context.Context, sub githubSubject, repos []st
 	roles := make(map[uuid.UUID]RepoRole, len(repos))
 	errs := map[uuid.UUID]error{}
 	if len(repos) == 0 {
-		return roles, errs
-	}
-	if sub.siteAdmin {
-		for _, r := range repos {
-			roles[r.ID] = RoleAdmin
-		}
 		return roles, errs
 	}
 	if sub.service || !sub.linked {
@@ -343,7 +334,7 @@ func (s *Service) orgMembership(ctx context.Context, sub githubSubject, inst sto
 // sub's role on each; org limits them to one vx organization. Repositories
 // GitHub could not answer for are left out (fail closed).
 func (s *Service) githubReadable(ctx context.Context, sub githubSubject, org *uuid.UUID) ([]store.Repo, map[uuid.UUID]RepoRole, error) {
-	if sub.service || (!sub.linked && !sub.siteAdmin) {
+	if sub.service || !sub.linked {
 		return nil, nil, nil
 	}
 	insts, err := s.githubInstallations(ctx)
@@ -567,7 +558,8 @@ func (s *Service) refuseOnGitHubOrg(o store.Org, what string) error {
 
 // githubRepoAccess is RepoAccess for a GitHub-backed repository: the
 // direct grants (only those of service principals count), and the roles
-// GitHub reported for people, as cached, with site admins.
+// GitHub reported for people, as cached. Support grants are added by
+// RepoAccess.
 func (s *Service) githubRepoAccess(ctx context.Context, r store.Repo, rows []store.RepoGrant) ([]RepoGrant, []AccessEntry, error) {
 	var grants []RepoGrant
 	for _, g := range rows {

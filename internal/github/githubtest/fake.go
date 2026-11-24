@@ -235,7 +235,7 @@ func (s *Server) Manifest() map[string]any {
 	return s.manifest
 }
 
-// ManifestCode registers a manifest as if a site admin had posted it to
+// ManifestCode registers a manifest as if a superadmin had posted it to
 // GitHub and confirmed, and returns the one-time code GitHub sends back.
 func (s *Server) ManifestCode(manifestJSON []byte) string {
 	s.mu.Lock()

@@ -210,6 +210,13 @@ const (
 	OrgServiceRevokeRepoProcedure = "/vx.v1.OrgService/RevokeRepo"
 	// OrgServiceRepoAccessProcedure is the fully-qualified name of the OrgService's RepoAccess RPC.
 	OrgServiceRepoAccessProcedure = "/vx.v1.OrgService/RepoAccess"
+	// OrgServiceGrantSupportProcedure is the fully-qualified name of the OrgService's GrantSupport RPC.
+	OrgServiceGrantSupportProcedure = "/vx.v1.OrgService/GrantSupport"
+	// OrgServiceRevokeSupportProcedure is the fully-qualified name of the OrgService's RevokeSupport
+	// RPC.
+	OrgServiceRevokeSupportProcedure = "/vx.v1.OrgService/RevokeSupport"
+	// OrgServiceListSupportProcedure is the fully-qualified name of the OrgService's ListSupport RPC.
+	OrgServiceListSupportProcedure = "/vx.v1.OrgService/ListSupport"
 	// OrgServiceCreatePersonProcedure is the fully-qualified name of the OrgService's CreatePerson RPC.
 	OrgServiceCreatePersonProcedure = "/vx.v1.OrgService/CreatePerson"
 	// OrgServiceListPeopleProcedure is the fully-qualified name of the OrgService's ListPeople RPC.
@@ -266,10 +273,10 @@ type AuthServiceClient interface {
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
 	// GetAgent returns an agent with its path scope, budgets and today's
 	// usage. An agent may read its own (agent empty), a person their agents',
-	// a site admin anyone's.
+	// a superadmin anyone's.
 	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
 	// SetAgentScope changes an agent's path scope and budgets. Only the
-	// agent's person or a site admin may; an agent cannot, not even its own.
+	// agent's person or a superadmin may; an agent cannot, not even its own.
 	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
@@ -422,10 +429,10 @@ type AuthServiceHandler interface {
 	CreateLoginCode(context.Context, *connect.Request[v1.CreateLoginCodeRequest]) (*connect.Response[v1.CreateLoginCodeResponse], error)
 	// GetAgent returns an agent with its path scope, budgets and today's
 	// usage. An agent may read its own (agent empty), a person their agents',
-	// a site admin anyone's.
+	// a superadmin anyone's.
 	GetAgent(context.Context, *connect.Request[v1.GetAgentRequest]) (*connect.Response[v1.GetAgentResponse], error)
 	// SetAgentScope changes an agent's path scope and budgets. Only the
-	// agent's person or a site admin may; an agent cannot, not even its own.
+	// agent's person or a superadmin may; an agent cannot, not even its own.
 	SetAgentScope(context.Context, *connect.Request[v1.SetAgentScopeRequest]) (*connect.Response[v1.SetAgentScopeResponse], error)
 }
 
@@ -2012,7 +2019,13 @@ type OrgServiceClient interface {
 	GrantRepo(context.Context, *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error)
 	RevokeRepo(context.Context, *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error)
 	RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error)
-	// People (site admins): create people and list everyone on the server.
+	// Support access (repository admins): give a superadmin read or write on
+	// one repository until a time, at most 30 days ahead; recorded in the
+	// operation log. The superadmin may also end their own early.
+	GrantSupport(context.Context, *connect.Request[v1.GrantSupportRequest]) (*connect.Response[v1.GrantSupportResponse], error)
+	RevokeSupport(context.Context, *connect.Request[v1.RevokeSupportRequest]) (*connect.Response[v1.RevokeSupportResponse], error)
+	ListSupport(context.Context, *connect.Request[v1.ListSupportRequest]) (*connect.Response[v1.ListSupportResponse], error)
+	// People (superadmins): create people and list everyone on the server.
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
 }
@@ -2106,6 +2119,24 @@ func NewOrgServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(orgServiceMethods.ByName("RepoAccess")),
 			connect.WithClientOptions(opts...),
 		),
+		grantSupport: connect.NewClient[v1.GrantSupportRequest, v1.GrantSupportResponse](
+			httpClient,
+			baseURL+OrgServiceGrantSupportProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GrantSupport")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeSupport: connect.NewClient[v1.RevokeSupportRequest, v1.RevokeSupportResponse](
+			httpClient,
+			baseURL+OrgServiceRevokeSupportProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RevokeSupport")),
+			connect.WithClientOptions(opts...),
+		),
+		listSupport: connect.NewClient[v1.ListSupportRequest, v1.ListSupportResponse](
+			httpClient,
+			baseURL+OrgServiceListSupportProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("ListSupport")),
+			connect.WithClientOptions(opts...),
+		),
 		createPerson: connect.NewClient[v1.CreatePersonRequest, v1.CreatePersonResponse](
 			httpClient,
 			baseURL+OrgServiceCreatePersonProcedure,
@@ -2136,6 +2167,9 @@ type orgServiceClient struct {
 	grantRepo        *connect.Client[v1.GrantRepoRequest, v1.GrantRepoResponse]
 	revokeRepo       *connect.Client[v1.RevokeRepoRequest, v1.RevokeRepoResponse]
 	repoAccess       *connect.Client[v1.RepoAccessRequest, v1.RepoAccessResponse]
+	grantSupport     *connect.Client[v1.GrantSupportRequest, v1.GrantSupportResponse]
+	revokeSupport    *connect.Client[v1.RevokeSupportRequest, v1.RevokeSupportResponse]
+	listSupport      *connect.Client[v1.ListSupportRequest, v1.ListSupportResponse]
 	createPerson     *connect.Client[v1.CreatePersonRequest, v1.CreatePersonResponse]
 	listPeople       *connect.Client[v1.ListPeopleRequest, v1.ListPeopleResponse]
 }
@@ -2205,6 +2239,21 @@ func (c *orgServiceClient) RepoAccess(ctx context.Context, req *connect.Request[
 	return c.repoAccess.CallUnary(ctx, req)
 }
 
+// GrantSupport calls vx.v1.OrgService.GrantSupport.
+func (c *orgServiceClient) GrantSupport(ctx context.Context, req *connect.Request[v1.GrantSupportRequest]) (*connect.Response[v1.GrantSupportResponse], error) {
+	return c.grantSupport.CallUnary(ctx, req)
+}
+
+// RevokeSupport calls vx.v1.OrgService.RevokeSupport.
+func (c *orgServiceClient) RevokeSupport(ctx context.Context, req *connect.Request[v1.RevokeSupportRequest]) (*connect.Response[v1.RevokeSupportResponse], error) {
+	return c.revokeSupport.CallUnary(ctx, req)
+}
+
+// ListSupport calls vx.v1.OrgService.ListSupport.
+func (c *orgServiceClient) ListSupport(ctx context.Context, req *connect.Request[v1.ListSupportRequest]) (*connect.Response[v1.ListSupportResponse], error) {
+	return c.listSupport.CallUnary(ctx, req)
+}
+
 // CreatePerson calls vx.v1.OrgService.CreatePerson.
 func (c *orgServiceClient) CreatePerson(ctx context.Context, req *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error) {
 	return c.createPerson.CallUnary(ctx, req)
@@ -2230,7 +2279,13 @@ type OrgServiceHandler interface {
 	GrantRepo(context.Context, *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error)
 	RevokeRepo(context.Context, *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error)
 	RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error)
-	// People (site admins): create people and list everyone on the server.
+	// Support access (repository admins): give a superadmin read or write on
+	// one repository until a time, at most 30 days ahead; recorded in the
+	// operation log. The superadmin may also end their own early.
+	GrantSupport(context.Context, *connect.Request[v1.GrantSupportRequest]) (*connect.Response[v1.GrantSupportResponse], error)
+	RevokeSupport(context.Context, *connect.Request[v1.RevokeSupportRequest]) (*connect.Response[v1.RevokeSupportResponse], error)
+	ListSupport(context.Context, *connect.Request[v1.ListSupportRequest]) (*connect.Response[v1.ListSupportResponse], error)
+	// People (superadmins): create people and list everyone on the server.
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
 }
@@ -2320,6 +2375,24 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(orgServiceMethods.ByName("RepoAccess")),
 		connect.WithHandlerOptions(opts...),
 	)
+	orgServiceGrantSupportHandler := connect.NewUnaryHandler(
+		OrgServiceGrantSupportProcedure,
+		svc.GrantSupport,
+		connect.WithSchema(orgServiceMethods.ByName("GrantSupport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRevokeSupportHandler := connect.NewUnaryHandler(
+		OrgServiceRevokeSupportProcedure,
+		svc.RevokeSupport,
+		connect.WithSchema(orgServiceMethods.ByName("RevokeSupport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceListSupportHandler := connect.NewUnaryHandler(
+		OrgServiceListSupportProcedure,
+		svc.ListSupport,
+		connect.WithSchema(orgServiceMethods.ByName("ListSupport")),
+		connect.WithHandlerOptions(opts...),
+	)
 	orgServiceCreatePersonHandler := connect.NewUnaryHandler(
 		OrgServiceCreatePersonProcedure,
 		svc.CreatePerson,
@@ -2360,6 +2433,12 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 			orgServiceRevokeRepoHandler.ServeHTTP(w, r)
 		case OrgServiceRepoAccessProcedure:
 			orgServiceRepoAccessHandler.ServeHTTP(w, r)
+		case OrgServiceGrantSupportProcedure:
+			orgServiceGrantSupportHandler.ServeHTTP(w, r)
+		case OrgServiceRevokeSupportProcedure:
+			orgServiceRevokeSupportHandler.ServeHTTP(w, r)
+		case OrgServiceListSupportProcedure:
+			orgServiceListSupportHandler.ServeHTTP(w, r)
 		case OrgServiceCreatePersonProcedure:
 			orgServiceCreatePersonHandler.ServeHTTP(w, r)
 		case OrgServiceListPeopleProcedure:
@@ -2423,6 +2502,18 @@ func (UnimplementedOrgServiceHandler) RevokeRepo(context.Context, *connect.Reque
 
 func (UnimplementedOrgServiceHandler) RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RepoAccess is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GrantSupport(context.Context, *connect.Request[v1.GrantSupportRequest]) (*connect.Response[v1.GrantSupportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GrantSupport is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RevokeSupport(context.Context, *connect.Request[v1.RevokeSupportRequest]) (*connect.Response[v1.RevokeSupportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RevokeSupport is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) ListSupport(context.Context, *connect.Request[v1.ListSupportRequest]) (*connect.Response[v1.ListSupportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListSupport is not implemented"))
 }
 
 func (UnimplementedOrgServiceHandler) CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error) {

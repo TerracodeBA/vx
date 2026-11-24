@@ -8,7 +8,7 @@ package service
 //   - A repository linked to a GitHub App installation (repos.github_repo_id
 //     set) is GitHub-backed: a person's role on it is their GitHub
 //     permission (admin, maintain: admin; write: write; triage, read: read;
-//     none: no access), never vx grants. Site admins keep admin. Agents have
+//     none: no access), never vx grants (support grants aside). Agents have
 //     their person's role. Organization owners get no extra rights on
 //     GitHub-backed repositories: GitHub decides.
 //   - People are linked to GitHub by numeric user id (logins can change).
@@ -126,7 +126,7 @@ type GitHubSettings struct {
 }
 
 // ErrGitHubNotConfigured is returned when the server has no GitHub App yet.
-var ErrGitHubNotConfigured = errors.New("GitHub is not configured on this server: a site admin sets it up on the Admin page")
+var ErrGitHubNotConfigured = errors.New("GitHub is not configured on this server: a superadmin sets it up on the Admin page")
 
 func githubNotImplemented() error {
 	return errf(CodeUnavailable, "this part of GitHub sign-in is not implemented yet")

@@ -46,7 +46,7 @@ vx.example.com {
 
 ## 4. People and agents
 
-Ask the user for the team's organization handle (lowercase, e.g. `acme`). The first person is a site admin and creates the organization as its owner; everyone else joins it as a member:
+Ask the user for the team's organization handle (lowercase, e.g. `acme`). The first person is a superadmin and creates the organization as its owner; everyone else joins it as a member:
 
 ```sh
 docker compose exec vx vx-server user-add FIRST --admin --org ORG --name "Full Name" --email EMAIL
@@ -77,11 +77,11 @@ docker compose pull && docker compose up -d
 
 Migrations run automatically when vx-server starts. Back up first.
 
-Upgrading from v0.1 (no organizations) to v0.2 keeps everyone's access: every existing person becomes an owner of the organizations made from repository owner names and a site admin. Tell the user to prune afterwards as described in docs/deploy.md, "Upgrading to v0.2" (`vx org list --all`, `vx org remove`, `vx org set-default ORG none`).
+Upgrading from v0.1 (no organizations) to v0.2 keeps everyone's access: every existing person becomes an owner of the organizations made from repository owner names and a site admin (a superadmin since v0.5, without access to repositories). Tell the user to prune afterwards as described in docs/deploy.md, "Upgrading to v0.2", and to read "Upgrading to v0.5: superadmins" (`vx org list --all`, `vx org remove`, `vx org set-default ORG none`).
 
 ## Current limits (tell the user)
 
-- People see only repositories they have a role on (organization membership, team or direct grant), but site admins see everything. Keep site admins few.
+- People see only repositories they have a role on (organization membership, team or direct grant). Superadmins run the server and see no repository without a role; a repository's admins can give them time-limited support access (`vx repo support REPO HANDLE --for 24h`). Keep superadmins few.
 - Sign-in is by token. There is no single sign-on yet.
 - File contents are stored on the server's disk, so one server instance; scale up, not out.
 - Agents are not yet limited to paths, and there are no per-agent budgets.

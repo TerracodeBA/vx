@@ -100,15 +100,16 @@ func (s *Service) scopeTarget(ctx context.Context, actor Actor, agent string) (s
 }
 
 // GetAgent returns an agent with its scope and today's usage. An agent may
-// read its own (agent empty); a person their agents'; a site admin
-// anyone's, by handle.
+// read its own (agent empty); a person their agents'; a superadmin
+// anyone's, by handle (a scope only narrows the person's role, so it gives
+// a superadmin no access to repositories).
 func (s *Service) GetAgent(ctx context.Context, actor Actor, agent string) (AgentView, error) {
 	target, err := s.scopeTarget(ctx, actor, agent)
 	if err != nil {
 		return AgentView{}, err
 	}
-	if target.ID != actor.ID && !mayManage(actor, target) && !(actor.Kind == store.KindHuman && s.IsSiteAdmin(ctx, actor)) {
-		return AgentView{}, errf(CodePermission, "%s cannot see the scope of %s: only an agent itself, its person and site admins can", actor.Ref(), target.Ref())
+	if target.ID != actor.ID && !mayManage(actor, target) && !(actor.Kind == store.KindHuman && s.IsSuperadmin(ctx, actor)) {
+		return AgentView{}, errf(CodePermission, "%s cannot see the scope of %s: only an agent itself, its person and superadmins can", actor.Ref(), target.Ref())
 	}
 	return s.agentView(ctx, target)
 }
@@ -143,7 +144,7 @@ func (s *Service) agentView(ctx context.Context, agent store.Principal) (AgentVi
 }
 
 // SetAgentScope changes an agent's path scope and budgets. Only the agent's
-// person and site admins may; an agent cannot change any scope, not even
+// person and superadmins may (budgets stop a runaway agent); an agent cannot change any scope, not even
 // its own, or a scope would limit nothing.
 func (s *Service) SetAgentScope(ctx context.Context, actor Actor, agent string, in ScopeInput) (AgentView, error) {
 	if actor.Kind != store.KindHuman {
@@ -151,7 +152,7 @@ func (s *Service) SetAgentScope(ctx context.Context, actor Actor, agent string, 
 		if strings.TrimSpace(name) == "" {
 			name = agentName(actor.Handle)
 		}
-		return AgentView{}, errf(CodePermission, "%s cannot change scopes, not even its own: only the agent's person or a site admin can. Ask %s to run: vx agent scope %s ...", actor.Ref(), ownerRef(actor), name)
+		return AgentView{}, errf(CodePermission, "%s cannot change scopes, not even its own: only the agent's person or a superadmin can. Ask %s to run: vx agent scope %s ...", actor.Ref(), ownerRef(actor), name)
 	}
 	if strings.TrimSpace(agent) == "" {
 		return AgentView{}, errf(CodeInvalid, "name the agent: vx agent scope NAME ... (vx agent list shows yours)")
@@ -160,8 +161,8 @@ func (s *Service) SetAgentScope(ctx context.Context, actor Actor, agent string, 
 	if err != nil {
 		return AgentView{}, err
 	}
-	if !mayManage(actor, target) && !s.IsSiteAdmin(ctx, actor) {
-		return AgentView{}, errf(CodePermission, "%s cannot change the scope of %s: only %s and site admins can", actor.Ref(), target.Ref(), parentRefOf(ctx, s, target))
+	if !mayManage(actor, target) && !s.IsSuperadmin(ctx, actor) {
+		return AgentView{}, errf(CodePermission, "%s cannot change the scope of %s: only %s and superadmins can", actor.Ref(), target.Ref(), parentRefOf(ctx, s, target))
 	}
 	cur, err := s.Store.AgentScope(ctx, target.ID)
 	if err != nil {

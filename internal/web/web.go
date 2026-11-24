@@ -238,7 +238,7 @@ func actorOf(r *http.Request) (service.Actor, bool) {
 func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
 	if _, signedIn := data["Actor"]; signedIn {
 		if a, ok := data["Actor"].(service.Actor); ok {
-			data["NavAdmin"] = u.svc.IsSiteAdmin(r.Context(), a)
+			data["NavAdmin"] = u.svc.IsSuperadmin(r.Context(), a)
 			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
 		}
 		if _, ok := data["Section"]; !ok {

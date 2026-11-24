@@ -129,7 +129,7 @@ type SignupInvite struct {
 	GitHubLogin string // lowercased
 	InvitedBy   *uuid.UUID
 	Note        string
-	SiteAdmin   bool // the person becomes a site admin (invites from the server console only)
+	SiteAdmin   bool // the person becomes a superadmin (invites from the server console only)
 	CreatedAt   time.Time
 	UsedAt      *time.Time
 }

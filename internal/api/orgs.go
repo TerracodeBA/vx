@@ -24,7 +24,7 @@ func orgPB(o service.Org, myRole service.OrgRole) *vxv1.Org {
 }
 
 // personPB converts a person (or service principal) that is not the
-// caller, with whether they are a site admin.
+// caller, with whether they are a superadmin.
 func personPB(p store.Principal) *vxv1.Principal {
 	out := principalPB(service.Actor{Principal: p})
 	out.SiteAdmin = p.SiteAdmin

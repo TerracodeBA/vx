@@ -356,10 +356,14 @@ func (q Q) ListRepoGrants(ctx context.Context, repo uuid.UUID) ([]RepoGrant, err
 // RoleFacts are what a principal's role on one repository is computed
 // from, read in one query.
 type RoleFacts struct {
-	SiteAdmin   bool   // the principal is a site admin
 	Grant       string // highest direct or team grant, or ""
 	OrgRole     string // role in the repo's organization, or ""
 	DefaultRole string // the organization's default role for members
+	// Support is the role of an unexpired support grant to the principal,
+	// a superadmin, or "". It counts on every repository, GitHub-backed
+	// ones too. Superadmins have no other role on a repository than what
+	// grants, teams, organizations and support grants give them.
+	Support string
 }
 
 // roleRankSQL maps a role column to a number so max() picks the highest.
@@ -369,39 +373,42 @@ func rankSQL(col string) string { return fmt.Sprintf(roleRankSQL, col) }
 
 const rankToRole = `(array['read', 'write', 'admin'])[nullif(%s, 0)]`
 
-// roleFactsSQL computes RoleFacts for principal $P and repository r.
-// directOnly ($D) leaves out team grants and organization roles.
-func roleFactsSQL(p, d string) string {
+// roleFactsSQL computes RoleFacts for principal $P and repository r at
+// time $T (for support grant expiry). directOnly ($D) leaves out team
+// grants, organization roles and support grants.
+func roleFactsSQL(p, d, t string) string {
 	best := fmt.Sprintf(`(select max(`+rankSQL("g.role")+`) from repo_grants g where g.repo_id = r.id
 		and (g.person_id = %[1]s or (not %[2]s and g.team_id in (select tm.team_id from team_members tm where tm.person_id = %[1]s))))`, p, d)
-	return fmt.Sprintf(`coalesce((select site_admin and kind = 'human' from principals where id = %[1]s), false),
-		coalesce(`+fmt.Sprintf(rankToRole, best)+`, ''),
+	return fmt.Sprintf(`coalesce(`+fmt.Sprintf(rankToRole, best)+`, ''),
 		coalesce((select m.role from org_members m where not %[2]s and m.org_id = r.org_id and m.person_id = %[1]s), ''),
-		o.default_repo_role`, p, d)
+		o.default_repo_role,
+		coalesce((select sg.role from support_grants sg join principals sp on sp.id = sg.person_id
+			where not %[2]s and sg.repo_id = r.id and sg.person_id = %[1]s and sg.expires_at > %[3]s
+			and sp.site_admin and sp.kind = 'human'), '')`, p, d, t)
 }
 
 // RepoRoleFacts looks up the repository named name together with what
 // principal's role on it is computed from, in one query.
-func (q Q) RepoRoleFacts(ctx context.Context, name string, principal uuid.UUID, directOnly bool) (Repo, RoleFacts, error) {
+func (q Q) RepoRoleFacts(ctx context.Context, name string, principal uuid.UUID, directOnly bool, at time.Time) (Repo, RoleFacts, error) {
 	var f RoleFacts
-	r, err := scanRepo(q.db.QueryRow(ctx, `select `+repoCols+`, `+roleFactsSQL("$2", "$3")+repoFrom+` where r.name = $1`,
-		name, principal, directOnly), &f.SiteAdmin, &f.Grant, &f.OrgRole, &f.DefaultRole)
+	r, err := scanRepo(q.db.QueryRow(ctx, `select `+repoCols+`, `+roleFactsSQL("$2", "$3", "$4")+repoFrom+` where r.name = $1`,
+		name, principal, directOnly, at), &f.Grant, &f.OrgRole, &f.DefaultRole, &f.Support)
 	return r, f, notFound(err, "repo "+name)
 }
 
 // RepoRoleFactsByID is RepoRoleFacts for a repository id.
-func (q Q) RepoRoleFactsByID(ctx context.Context, id, principal uuid.UUID, directOnly bool) (Repo, RoleFacts, error) {
+func (q Q) RepoRoleFactsByID(ctx context.Context, id, principal uuid.UUID, directOnly bool, at time.Time) (Repo, RoleFacts, error) {
 	var f RoleFacts
-	r, err := scanRepo(q.db.QueryRow(ctx, `select `+repoCols+`, `+roleFactsSQL("$2", "$3")+repoFrom+` where r.id = $1`,
-		id, principal, directOnly), &f.SiteAdmin, &f.Grant, &f.OrgRole, &f.DefaultRole)
+	r, err := scanRepo(q.db.QueryRow(ctx, `select `+repoCols+`, `+roleFactsSQL("$2", "$3", "$4")+repoFrom+` where r.id = $1`,
+		id, principal, directOnly, at), &f.Grant, &f.OrgRole, &f.DefaultRole, &f.Support)
 	return r, f, notFound(err, "repo")
 }
 
 // ListRepoRoleFacts returns every repository with what principal's role on
 // it is computed from, by name. Callers filter out what it cannot read.
-func (q Q) ListRepoRoleFacts(ctx context.Context, principal uuid.UUID, directOnly bool, org *uuid.UUID) ([]Repo, []RoleFacts, error) {
-	rows, err := q.db.Query(ctx, `select `+repoCols+`, `+roleFactsSQL("$1", "$2")+repoFrom+`
-		where $3::uuid is null or r.org_id = $3 order by r.name`, principal, directOnly, org)
+func (q Q) ListRepoRoleFacts(ctx context.Context, principal uuid.UUID, directOnly bool, org *uuid.UUID, at time.Time) ([]Repo, []RoleFacts, error) {
+	rows, err := q.db.Query(ctx, `select `+repoCols+`, `+roleFactsSQL("$1", "$2", "$4")+repoFrom+`
+		where $3::uuid is null or r.org_id = $3 order by r.name`, principal, directOnly, org, at)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -410,7 +417,7 @@ func (q Q) ListRepoRoleFacts(ctx context.Context, principal uuid.UUID, directOnl
 	var facts []RoleFacts
 	for rows.Next() {
 		var f RoleFacts
-		r, err := scanRepo(rows, &f.SiteAdmin, &f.Grant, &f.OrgRole, &f.DefaultRole)
+		r, err := scanRepo(rows, &f.Grant, &f.OrgRole, &f.DefaultRole, &f.Support)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -422,19 +429,22 @@ func (q Q) ListRepoRoleFacts(ctx context.Context, principal uuid.UUID, directOnl
 
 // ReadableRepoIDs returns the ids of the repositories principal can read
 // through grants, teams and organization membership (directOnly: through
-// direct grants only). Site admins are not special here; callers check.
-// GitHub-backed repositories are left out, except for directOnly
-// (service principals keep their direct grants there): roles on them come
-// from GitHub, and the service adds them.
-func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly bool) ([]uuid.UUID, error) {
+// direct grants only), and through support grants unexpired at at.
+// Superadmins are not special here. GitHub-backed repositories are left
+// out, except for directOnly (service principals keep their direct grants
+// there) and support grants: roles on them come from GitHub, and the
+// service adds them.
+func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly bool, at time.Time) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, `select x.repo_id from (select repo_id from repo_grants where person_id = $1
 		union select g.repo_id from repo_grants g join team_members tm on tm.team_id = g.team_id
 			where not $2 and tm.person_id = $1
 		union select r.id from repos r join org_members m on m.org_id = r.org_id join orgs o on o.id = r.org_id
 			where not $2 and m.person_id = $1 and (m.role in ('owner', 'admin') or o.default_repo_role <> 'none')
 		) x join repos r on r.id = x.repo_id
-		where $2 or r.github_repo_id is null`,
-		principal, directOnly)
+		where $2 or r.github_repo_id is null
+		union select sg.repo_id from support_grants sg join principals sp on sp.id = sg.person_id
+			where not $2 and sg.person_id = $1 and sg.expires_at > $3 and sp.site_admin and sp.kind = 'human'`,
+		principal, directOnly, at)
 	if err != nil {
 		return nil, err
 	}
@@ -455,17 +465,15 @@ func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly 
 type AccessFact struct {
 	Principal Principal
 	Role      string // read, write or admin
-	Via       string // "site admin", "org owner", "org admin", "org default", "user:alice", "team:acme/backend"
+	Via       string // "org owner", "org admin", "org default", "user:alice", "team:acme/backend"
 }
 
-// RepoAccessFacts returns every source of access to repo: site admins,
-// organization owners and admins, the default role for members, direct
-// grants and team grants.
+// RepoAccessFacts returns every source of access to repo: organization
+// owners and admins, the default role for members, direct grants and team
+// grants. Support grants are listed by ListSupportGrants.
 func (q Q) RepoAccessFacts(ctx context.Context, repo uuid.UUID) ([]AccessFact, error) {
 	cols := prefixed("p", principalCols)
 	rows, err := q.db.Query(ctx, `
-		select `+cols+`, 'admin', 'site admin' from principals p where p.site_admin and p.kind = 'human'
-		union all
 		select `+cols+`, case when m.role in ('owner', 'admin') then 'admin' else o.default_repo_role end,
 			case m.role when 'owner' then 'org owner' when 'admin' then 'org admin' else 'org default' end
 		from repos r join orgs o on o.id = r.org_id join org_members m on m.org_id = o.id
@@ -495,7 +503,7 @@ func (q Q) RepoAccessFacts(ctx context.Context, repo uuid.UUID) ([]AccessFact, e
 	return out, rows.Err()
 }
 
-// SetSiteAdmin makes a person a site admin or not.
+// SetSiteAdmin makes a person a superadmin (the site_admin column) or not.
 func (q Q) SetSiteAdmin(ctx context.Context, person uuid.UUID, admin bool) error {
 	tag, err := q.db.Exec(ctx, `update principals set site_admin = $2 where id = $1 and kind = 'human'`, person, admin)
 	if err == nil && tag.RowsAffected() == 0 {

@@ -27,7 +27,7 @@ Every repository belongs to one organization.
   - Members get the organization's **default repository role** on all its repositories: `read` (the default for new organizations), `write` or `none`.
   - Anyone may leave an organization (`vx org remove ORG THEMSELVES`), except its last owner.
 - **Teams** group an organization's members (`acme/backend`) so a repository can be granted to all of them at once. Removing someone from the organization removes them from its teams.
-- **Site admins** are admin on every repository and see every organization and person. They create people from the web UI or API. `vx-server user-add --admin` makes one.
+- **Superadmins** run the server: people, invites and sign-up, the GitHub App, server settings and the operation log's metadata. They see every organization and person, but have **no role on any repository** and change no organization they do not own or administer. See [Superadmins and support access](#superadmins-and-support-access). `vx-server user-add --admin` makes one.
 
 ## Repository roles
 
@@ -37,15 +37,38 @@ A repository role is `read`, `write` or `admin`; each includes the one before it
 2. a grant to a team you are in (`vx repo grant acme/api team:acme/backend --role write`),
 3. the organization's default role, if you are a member,
 4. admin, if you are an owner or admin of the organization,
-5. admin, if you are a site admin.
+5. read or write, while a support grant to you lasts (superadmins only, see below).
 
-On a GitHub-backed repository none of these but the last counts: your role is your GitHub permission (see below).
+Being a superadmin gives no role. On a GitHub-backed repository none of these but support grants count: your role is your GitHub permission (see below).
 
 **Agents** have exactly their person's role. **Service principals** (`service:ci`) have only their direct grants. Grants go to people (`alice` or `user:alice`), service principals (`service:ci`) and teams of the repository's own organization (`team:acme/backend`), never to agents.
 
 A repository you cannot read is reported exactly like one that does not exist. One you can read but need more on gives a permission error that names the role needed and who can grant it.
 
 Only people manage organizations, teams and grants. Agents are refused, like token creation.
+
+## Superadmins and support access
+
+A superadmin is a person who runs the vx server. On vx Cloud that is the operator; on a self-hosted server, whoever administers it. The role is limited to running the server:
+
+- **The admin panel:** people (Admin, People: add people, see everyone with their organizations and agents), invites and the sign-up mode, the GitHub App (Admin, GitHub), server settings, agents' scopes and budgets (to stop a runaway agent; a scope only narrows a role), and the operation log's metadata (who did what when, on which repository, without the content).
+- **No implicit role on any repository.** To a superadmin without a role, a customer's repository is "not found", exactly like to anyone else: in the CLI, the API, the web UI and MCP, for files and objects, changes, diffs, efforts, board notes, claims, tasks, overlaps, reviews, the inbox and repository lists. Their agents have the same nothing.
+- **Organizations are read-only to them.** A superadmin sees every organization, its members and teams (people administration), and only the repositories they can read. They cannot change an organization's members, teams or settings, or create repositories in it, unless they are its owner or admin: adding themselves would give them its repositories.
+- **Ordinary roles still count.** A superadmin who is a member of an organization, or whom a repository's admins grant a role, has that role like anyone else. On a self-hosted server the admin usually owns the team's organization; that is how they keep access.
+
+**Support access.** When a customer wants the operator to look at a repository (a failing land, a stuck shipment), the repository's admins give a superadmin support access: read (the default) or write on that one repository, for a limited time.
+
+```sh
+vx repo support acme/api root --role read --for 72h --reason "ticket 4711: land fails"
+vx repo support acme/api                          # what is in effect, until when, granted by whom
+vx repo support acme/api root --revoke            # end it now
+```
+
+- It lasts 24 hours unless `--for` says otherwise, at most 720 hours (30 days), and ends by itself. Granting again replaces the earlier grant.
+- It is never admin, so it cannot be used to change who has access or to ship. A customer who wants more grants an ordinary role (`vx repo grant`) and revokes it afterwards.
+- Only superadmins can receive it, and it counts only while they are one. It works on GitHub-backed repositories too, where vx grants otherwise count for nothing.
+- It shows on the access page and in `vx repo access` as "operator (support access) until DATE", in the **Support access** panel of the access page with the reason and who granted it, and in the operation log (`repo.support.grant`, `repo.support.revoke`, with the person, role, expiry and reason).
+- The repository's admins revoke it at any time (End now on the access page). The superadmin may end their own early.
 
 ## GitHub-backed repositories
 
@@ -61,12 +84,12 @@ A repository linked to a GitHub repository through an installation of the vx Git
 | Organization member | member of the linked vx organization |
 | Not a member | not in the linked vx organization |
 
-- **Who has a role.** People linked to GitHub (they signed in with GitHub). A person without a GitHub link has no role on GitHub-backed repositories. Site admins keep admin everywhere. Agents have exactly their person's role. Service principals (`service:ci`) have only their direct vx grants, since GitHub does not know them; repository admins may grant them.
+- **Who has a role.** People linked to GitHub (they signed in with GitHub). A person without a GitHub link has no role on GitHub-backed repositories. Superadmins have none from being one; support access counts. Agents have exactly their person's role. Service principals (`service:ci`) have only their direct vx grants, since GitHub does not know them; repository admins may grant them.
 - **Your account or organization.** You get a role on a repository of an installation on your own GitHub account, or of an organization GitHub says you are a member of. For anyone else only explicit grants on GitHub count: GitHub gives every user read on public repositories, and vx ignores that read, so a public repository does not show up for people outside its organization. Outside collaborators with write, maintain or admin keep it; outside collaborators with only read get nothing in vx.
 - **What does not count.** vx grants, teams, the organization's default role and organization roles give nothing on GitHub-backed repositories. `vx repo grant` for people and teams is refused with a link to the repository's access settings on GitHub; `vx repo revoke` still removes grants made before the repository was linked. A vx organization linked to a GitHub organization refuses `vx org member`, `vx org remove` and team changes, with a link to the organization's people page on GitHub.
 - **Caching.** vx caches what GitHub said for 5 minutes (`GitHubRoleTTL`) per person and repository, and per person and organization. GitHub webhooks drop the cache at once when access changes: collaborators added, removed or edited; organization membership; teams (the whole organization's cache); repository visibility, rename and transfer; installation removed, suspended or its repositories changed (everything for it); a person removed. Without a webhook, a change shows within 5 minutes. Organization membership is refreshed on sign-in, on organization webhooks and whenever vx asks GitHub again.
 - **When GitHub cannot be reached.** vx uses a cached answer up to one hour old. Without one, access fails closed: the command fails with "could not check your role on REPO with GitHub ... try again in a minute", and lists leave the repository out. vx never falls back to its own grants.
-- **Installations.** A suspended installation, or one that was removed, gives nobody a role on its repositories (site admins aside) until it is unsuspended or installed again. A repository removed from an installation, or deleted on GitHub, stays GitHub-backed with nobody but site admins having a role: grants from before it was linked never come back. A repository removed from an installation, or deleted on GitHub, stays GitHub-backed with nobody but site admins having a role: grants from before it was linked never come back.
+- **Installations.** A suspended installation, or one that was removed, gives nobody a role on its repositories (service principals and support access aside) until it is unsuspended or installed again. A repository removed from an installation, or deleted on GitHub, stays GitHub-backed with nobody but service principals and support access having a role: grants from before it was linked never come back.
 
 **Limits.** A list (repositories, efforts, the inbox) asks GitHub at most once per organization and once per repository of your organizations every 5 minutes, up to 8 calls at a time; for tens of repositories that is well under a second with a cold cache and a few database queries otherwise. Every installation counts against GitHub's API rate limit for the App (5,000 requests per hour per installation and up). Hundreds of repositories per person, or hundreds of installations on one server, would want a batch API (GraphQL) and webhook-driven membership instead of per-repository checks. The access page lists people whose role vx checked in the last 5 minutes, not everyone GitHub allows. The settings links point to github.com.
 
@@ -74,7 +97,7 @@ A repository linked to a GitHub repository through an installation of the vx Git
 
 ```sh
 vx org create acme --name "Acme Inc"            # you become its owner
-vx org list                                     # your organizations (site admins: --all)
+vx org list                                     # your organizations (superadmins: --all)
 vx org show acme                                # members, teams, repositories you can read
 vx org set-default acme none|read|write         # what every member gets
 vx org member acme bob --role owner|admin|member
@@ -90,9 +113,10 @@ vx repo create tools --org acme
 vx repo grant acme/api team:acme/backend --role write
 vx repo revoke acme/api user:bob
 vx repo access acme/api                         # direct grants and everyone's role, with why (repository admins)
+vx repo support acme/api root --for 24h         # support access for a superadmin (repository admins)
 ```
 
-Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `person.create`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
+Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
 
 ## Web UI
 
@@ -101,11 +125,11 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 | Page | Who sees it | What it shows and does |
 |---|---|---|
 | **Reviews** (`/ui/reviews`, in the sidebar for everyone) | Every signed-in person, for the repositories they can read | Changes waiting for a person under a human landing policy, with who landed them and the files under the policy, and the recently decided ones. Each links to its change page, where people who may decide it Approve (it lands) or Reject with a reason. |
-| **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Site admins can switch to every organization on the server. |
-| **An organization** (`/ui/orgs/ORG`) | Its members, and site admins | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners, admins and site admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
-| **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, ...). People who can read the repository get 403; everyone else gets 404. |
-| **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Site admins | Everyone on the server: their agents, whether they are a site admin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a site admin. With GitHub sign-in, "Invite by GitHub login" lets a GitHub user create their account by signing in, and the open invites are listed with a Withdraw button. To anyone else the page does not exist (404). |
-| **Admin, GitHub** (`/ui/admin/github`, linked from People) | Site admins | The server's GitHub App: name, App and client id, and the link to install it on GitHub organizations and accounts. "Create the GitHub App" posts vx's App manifest to GitHub (under your account or an organization you own), and "Finish setting up GitHub" on the page GitHub sends you back to stores its credentials encrypted with `VX_SECRET_KEY`. Agents see the page but cannot create the App. To anyone else the page does not exist (404). |
+| **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Superadmins can switch to every organization on the server. |
+| **An organization** (`/ui/orgs/ORG`) | Its members, and superadmins (read-only, without the repositories they cannot read) | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners and admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
+| **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Support access: the superadmins who have it, their role, until when, the reason and who granted it, with End now, and a form to give a superadmin read or write for 4 hours to 30 days. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, `operator (support access) until DATE`, ...). People who can read the repository get 403; everyone else gets 404. |
+| **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Superadmins | Everyone on the server: their agents, whether they are a superadmin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a superadmin. After an upgrade from a version with site admins, a review banner says that site admins no longer have access to repositories, until a superadmin clicks Mark as reviewed (see [deploy.md](deploy.md#upgrading-to-v05-superadmins)). With GitHub sign-in, "Invite by GitHub login" lets a GitHub user create their account by signing in, and the open invites are listed with a Withdraw button. To anyone else the page does not exist (404). |
+| **Admin, GitHub** (`/ui/admin/github`, linked from People) | Superadmins | The server's GitHub App: name, App and client id, and the link to install it on GitHub organizations and accounts. "Create the GitHub App" posts vx's App manifest to GitHub (under your account or an organization you own), and "Finish setting up GitHub" on the page GitHub sends you back to stores its credentials encrypted with `VX_SECRET_KEY`. Agents see the page but cannot create the App. To anyone else the page does not exist (404). |
 
 Adding a person shows their first token on the next page, once: vx stores only a hash, never puts the token in a URL, and cannot show it again. Give it to them privately, not in a shared channel. They run
 
@@ -134,14 +158,14 @@ v0.1 had no access control: everyone saw everything. The upgrade (migrations 009
 
 - each distinct owner part of an existing repository name becomes an organization (lowercased: `Acme/api` goes to `acme`); repositories without an owner part go to an organization named `default`,
 - every existing person becomes an owner of every one of those organizations,
-- every existing person becomes a site admin,
+- every existing person becomes a site admin (since v0.5 a superadmin, without access to repositories: see [deploy.md](deploy.md#upgrading-to-v05-superadmins)),
 - every person gets a personal organization; an organization from the step above that is named like a person becomes theirs.
 
-Prune afterwards, as a site admin: see [deploy.md](deploy.md#upgrading-to-v02).
+Prune afterwards, as a superadmin: see [deploy.md](deploy.md#upgrading-to-v02).
 
 ## Limits today
 
-- **Sign-in.** With a GitHub App set up, people sign in with GitHub (see [getting-started.md](getting-started.md#signing-in)); new accounts follow the sign-up mode (invite, open or closed). Otherwise tokens: site admins create people with `vx-server user-add`, the web UI (Admin, People) or the API.
+- **Sign-in.** With a GitHub App set up, people sign in with GitHub (see [getting-started.md](getting-started.md#signing-in)); new accounts follow the sign-up mode (invite, open or closed). Otherwise tokens: superadmins create people with `vx-server user-add`, the web UI (Admin, People) or the API.
 - **Agents.** A person can limit each agent to some paths and give it budgets for lands per day, lines and files per land and open workspaces (see [agents.md](agents.md#scopes-and-budgets)). There are no budgets per person, for check minutes or for storage yet.
 - **Scale.** Objects live on the server's disk, so one instance. It scales up well; it does not scale out yet.
 - **GitHub.** One token for the whole server, or SSH. No GitHub App yet, so no per-organization installation or fine-grained repository grants on the GitHub side.
@@ -226,11 +250,15 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
-| Set an agent's path scope and budgets (no repository role: only the agent's person or a site admin; never an agent, not even for itself) | `vx agent scope`, Settings | person or site admin |
-| See an agent's scope, budgets and usage (the agent itself, its person, site admins) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person, agent or site admin |
+| Set an agent's path scope and budgets (no repository role: only the agent's person or a superadmin; never an agent, not even for itself) | `vx agent scope`, Settings | person or superadmin |
+| See an agent's scope, budgets and usage (the agent itself, its person, superadmins) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person, agent or superadmin |
 | Plan and open a split shipment (one `vx/<effort>/<n>-<name>` branch and PR per part) | `vx ship plan --split`, `vx ship open --split`, the Prepare pull requests page | admin |
 | Set a GitLab, Gitea, Forgejo or Bitbucket repository's token, make a new webhook secret | `vx repo host` | admin |
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
+| Give a superadmin support access, list it, end it (read or write, at most 30 days; also on GitHub-backed repositories) | `vx repo support`, Support access on the access page | admin (the superadmin may end their own) |
+| Run the server: people, invites and sign-up, the GitHub App, server settings, operation log metadata, the upgrade review | `vx-server`, Admin pages, `CreatePerson`, `ListPeople`, `vx org list --all` | superadmin (no repository role) |
+
+A superadmin has none of the repository roles in this table from being one: every repository operation reports "not found" to them until they have a role or support access (tested in `TestAuthzMatrix` and `TestAuthzMatrixGitHub`).
 
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).
 

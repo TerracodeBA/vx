@@ -1,8 +1,8 @@
 package web
 
 // Admin pages: organizations (members, teams, repositories, settings),
-// repository access (direct grants and effective roles) and, for site
-// admins, the people on the server. Every change is a plain POST form
+// repository access (direct grants, support access and effective roles)
+// and, for superadmins, the people on the server. Every change is a plain POST form
 // checked with checkOrigin; agents may look but never change anything
 // here. Service errors are shown on the page as messages; things the
 // caller cannot read are 404.
@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
@@ -37,6 +38,7 @@ func (u *UI) mountAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("POST /ui/admin/people", u.auth(u.admin(u.personCreatePost)))
 	mux.HandleFunc("POST /ui/admin/invites", u.auth(u.admin(u.invitePost)))
 	mux.HandleFunc("POST /ui/admin/invites/withdraw", u.auth(u.admin(u.inviteWithdrawPost)))
+	mux.HandleFunc("POST /ui/admin/review", u.auth(u.admin(u.superadminReviewPost)))
 }
 
 // admin wraps every admin form handler: the form must come from this site
@@ -119,6 +121,9 @@ var okMessages = map[string]string{
 	"revoked":        "Access revoked.",
 	"invited":        "Invite saved. They can sign in with GitHub now.",
 	"uninvited":      "Invite withdrawn.",
+	"support":        "Support access granted.",
+	"support-ended":  "Support access ended.",
+	"reviewed":       "Marked as reviewed.",
 }
 
 func flashFrom(r *http.Request) flash { return flash{OK: okMessages[r.URL.Query().Get("ok")]} }
@@ -156,11 +161,13 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
-func canManageOrg(actor service.Actor, role service.OrgRole, siteAdmin bool) bool {
+// canManageOrg reports whether the page offers changes. Superadmins see
+// every organization but change only those they own or administer.
+func canManageOrg(actor service.Actor, role service.OrgRole) bool {
 	if actor.Kind != store.KindHuman {
 		return false
 	}
-	return role == service.OrgOwner || role == service.OrgAdmin || siteAdmin
+	return role == service.OrgOwner || role == service.OrgAdmin
 }
 
 var orgRoles = []service.OrgRole{service.OrgMember, service.OrgAdmin, service.OrgOwner}
@@ -188,7 +195,7 @@ func (u *UI) renderOrgs(w http.ResponseWriter, r *http.Request, actor service.Ac
 	ctx := r.Context()
 	data := map[string]any{"Actor": actor, "Title": "Organizations", "Section": "orgs", "Flash": f, "Form": form,
 		"IsHuman": actor.Kind == store.KindHuman}
-	siteAdmin := u.svc.IsSiteAdmin(ctx, actor)
+	siteAdmin := u.svc.IsSuperadmin(ctx, actor)
 	all := siteAdmin && param(r, "all") != ""
 	data["SiteAdmin"], data["All"] = siteAdmin, all
 	orgs, roles, err := u.svc.ListOrgs(ctx, actor, all)
@@ -250,7 +257,6 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		u.failPage(w, err)
 		return
 	}
-	siteAdmin := u.svc.IsSiteAdmin(ctx, actor)
 	members := make([]memberRow, 0, len(d.Members))
 	owners := 0
 	for _, m := range d.Members {
@@ -264,11 +270,11 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		role := u.svc.RepoRoleOf(ctx, actor, repo)
 		repos = append(repos, orgRepoRow{Repo: repo, MyRole: role, Admin: role.Includes(service.RoleAdmin)})
 	}
-	manage := canManageOrg(actor, d.MyRole, siteAdmin)
+	manage := canManageOrg(actor, d.MyRole)
 	u.renderStatus(w, r, f.Status, "org", map[string]any{
 		"Actor": actor, "Title": d.Org.Handle, "Section": "orgs", "Flash": f,
 		"O": d.Org, "MyRole": d.MyRole, "Members": members, "Teams": d.Teams, "Repos": repos,
-		"Owners": owners, "Manage": manage, "IsOwner": d.MyRole == service.OrgOwner || siteAdmin,
+		"Owners": owners, "Manage": manage, "IsOwner": d.MyRole == service.OrgOwner,
 		"IsHuman": actor.Kind == store.KindHuman, "OrgRoles": orgRoles, "DefaultRoles": defaultRoles,
 	})
 }
@@ -380,6 +386,7 @@ func (u *UI) renderAccess(w http.ResponseWriter, r *http.Request, actor service.
 		u.failPage(w, err)
 		return
 	}
+	support, _ := u.svc.ListSupport(ctx, actor, repo.Name)
 	grants, entries, err := u.svc.RepoAccess(ctx, actor, repo.Name)
 	if err != nil {
 		if isNotFound(err) || errStatus(err) == http.StatusForbidden {
@@ -414,7 +421,38 @@ func (u *UI) renderAccess(w http.ResponseWriter, r *http.Request, actor service.
 		"Admins": counts[service.RoleAdmin], "Writers": counts[service.RoleWrite], "Readers": counts[service.RoleRead],
 		"IsHuman":        actor.Kind == store.KindHuman,
 		"GitHubSettings": u.svc.GitHubSettingsURL(repo), "GitHubTTL": service.GitHubRoleTTL.String(),
+		"Support": support, "SupportDurations": supportDurations,
 	})
+}
+
+// supportDurations are the choices for how long support access lasts.
+var supportDurations = []struct {
+	Value, Label string
+}{{"4h", "4 hours"}, {"24h", "1 day"}, {"72h", "3 days"}, {"168h", "7 days"}, {"720h", "30 days"}}
+
+// supportPost grants support access from the access page.
+func (u *UI) supportPost(w http.ResponseWriter, r *http.Request, actor service.Actor, repo string) {
+	d, err := time.ParseDuration(r.PostForm.Get("for"))
+	if err != nil {
+		u.accessDone(w, r, actor, repo, &service.Error{Code: service.CodeInvalid, Msg: "choose how long the support access lasts"}, "")
+		return
+	}
+	_, err = u.svc.GrantSupport(r.Context(), actor, service.SupportInput{Repo: repo, Person: handleOf(r.PostForm.Get("person")),
+		Role: service.RepoRole(r.PostForm.Get("role")), For: d, Reason: r.PostForm.Get("reason")})
+	u.accessDone(w, r, actor, repo, err, "support")
+}
+
+// superadminReviewPost marks the upgrade review done (superadmins).
+func (u *UI) superadminReviewPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	if !u.svc.IsSuperadmin(r.Context(), actor) {
+		http.NotFound(w, r)
+		return
+	}
+	if err := u.svc.ResolveSuperadminReview(r.Context(), actor); err != nil {
+		u.failPage(w, err)
+		return
+	}
+	http.Redirect(w, r, "/ui/admin/people?ok=reviewed", http.StatusSeeOther)
 }
 
 func (u *UI) accessPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
@@ -429,6 +467,14 @@ func (u *UI) accessPost(w http.ResponseWriter, r *http.Request, actor service.Ac
 			_, err = u.svc.GrantRepo(ctx, actor, repo, subject, service.RepoRole(r.PostForm.Get("role")))
 		}
 		u.accessDone(w, r, actor, repo, err, "granted")
+		return
+	}
+	if repo, ok := accessRepo(r, "/access/support"); ok {
+		u.supportPost(w, r, actor, repo)
+		return
+	}
+	if repo, ok := accessRepo(r, "/access/support/revoke"); ok {
+		u.accessDone(w, r, actor, repo, u.svc.RevokeSupport(ctx, actor, repo, r.PostForm.Get("person")), "support-ended")
 		return
 	}
 	if repo, ok := accessRepo(r, "/access/revoke"); ok {
@@ -475,7 +521,7 @@ func grantSubject(kind, name, org string) (string, error) {
 	}
 }
 
-// ---------- people (site admins) ----------
+// ---------- people (superadmins) ----------
 
 type personRow struct {
 	store.Principal
@@ -485,7 +531,7 @@ type personRow struct {
 }
 
 func (u *UI) peoplePage(w http.ResponseWriter, r *http.Request, actor service.Actor) {
-	if !u.svc.IsSiteAdmin(r.Context(), actor) {
+	if !u.svc.IsSuperadmin(r.Context(), actor) {
 		http.NotFound(w, r)
 		return
 	}
@@ -533,6 +579,7 @@ func (u *UI) renderPeople(w http.ResponseWriter, r *http.Request, actor service.
 		rows = append(rows, row)
 	}
 	data["People"], data["Agents"], data["Admins"] = rows, agents, admins
+	data["SuperadminReview"] = u.svc.SuperadminReviewPending(ctx, actor)
 	data["OrgCount"], data["OrgChoices"] = len(shared), shared
 	u.peopleGitHub(r, actor, rows, data)
 	u.renderStatus(w, r, f.Status, "people", data)
@@ -540,7 +587,7 @@ func (u *UI) renderPeople(w http.ResponseWriter, r *http.Request, actor service.
 
 func (u *UI) personCreatePost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
-	if !u.svc.IsSiteAdmin(ctx, actor) {
+	if !u.svc.IsSuperadmin(ctx, actor) {
 		http.NotFound(w, r)
 		return
 	}

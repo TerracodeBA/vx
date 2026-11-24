@@ -132,13 +132,13 @@ func TestRepoRoleMatrix(t *testing.T) {
 		t.Errorf("org admin role = %q", r)
 	}
 
-	// Site admin: admin everywhere without being a member.
+	// Superadmin: no role on any repository from being one.
 	e.must(svc.Store.SetSiteAdmin(ctx, erin.ID, true))
-	if r := e.roleOf(erin, "acme/api"); r != service.RoleAdmin || !svc.IsSiteAdmin(ctx, erin) {
-		t.Errorf("site admin role = %q", r)
+	if r := e.roleOf(erin, "acme/api"); r != service.RoleNone || !svc.IsSuperadmin(ctx, erin) {
+		t.Errorf("superadmin role = %q", r)
 	}
-	if _, all, err := svc.ReadableRepoIDs(ctx, erin); err != nil || !all {
-		t.Errorf("site admin readable: all=%v %v", all, err)
+	if ids, all, err := svc.ReadableRepoIDs(ctx, erin); err != nil || all || len(ids) != 0 {
+		t.Errorf("superadmin readable: %v all=%v %v", ids, all, err)
 	}
 
 	// Agents have their person's role and cannot manage anything.
@@ -146,8 +146,8 @@ func TestRepoRoleMatrix(t *testing.T) {
 	if r := e.roleOf(bobAgent, "acme/api"); r != service.RoleWrite {
 		t.Errorf("agent role = %q", r)
 	}
-	if svc.IsSiteAdmin(ctx, e.agent) {
-		t.Error("alice's agent is not a site admin")
+	if svc.IsSuperadmin(ctx, e.agent) {
+		t.Error("alice's agent is not a superadmin")
 	}
 	_, _, err = svc.Authorize(ctx, bobAgent, "acme/api", service.RoleAdmin)
 	if code(err) != service.CodePermission || !strings.Contains(err.Error(), "agent:bob/helper acts for user:bob") {
@@ -207,7 +207,7 @@ func TestRepoRoleMatrix(t *testing.T) {
 	for _, p := range people {
 		via[p.Person.Handle] = string(p.Role) + " " + strings.Join(p.Via, ",")
 	}
-	if via["alice"] != "admin org owner" || via["dave"] != "admin org admin" || via["erin"] != "admin site admin" || via["ci"] != "read service:ci" {
+	if via["alice"] != "admin org owner" || via["dave"] != "admin org admin" || via["erin"] != "" || via["ci"] != "read service:ci" {
 		t.Errorf("access = %v", via)
 	}
 	if _, _, err := svc.RepoAccess(ctx, bobAgent, "acme/api"); code(err) != service.CodeNotFound {
