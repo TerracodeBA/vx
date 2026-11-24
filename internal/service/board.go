@@ -354,7 +354,9 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 
 // Context returns notes on the targets, open workspaces, active claims and
 // recent changes touching them. Without targets it returns the effort's latest notes and
-// changes.
+// changes. OtherEfforts is what other open efforts of the repository do on
+// the targets (without targets: on the files this effort changed); see
+// otherEfforts for the rules and limits.
 func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string, targets []string) (NoteContext, error) {
 	targets, err := cleanTargets(targets)
 	if err != nil {
@@ -403,6 +405,9 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 				break
 			}
 		}
+	}
+	if out.OtherEfforts, err = s.otherEfforts(ctx, v, targets, c); err != nil {
+		return NoteContext{}, err
 	}
 	return out, nil
 }

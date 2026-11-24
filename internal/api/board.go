@@ -133,5 +133,22 @@ func (h *Handlers) Context(ctx context.Context, req *connect.Request[vxv1.Contex
 	for _, cl := range c.Claims {
 		out.Claims = append(out.Claims, claimPB(actor, cl))
 	}
+	for _, o := range c.OtherEfforts {
+		out.OtherEfforts = append(out.OtherEfforts, otherEffortPB(actor, o))
+	}
 	return connect.NewResponse(out), nil
+}
+
+// otherEffortPB converts another effort's activity on the targets.
+func otherEffortPB(actor service.Actor, o service.OtherEffortActivity) *vxv1.OtherEffort {
+	pb := &vxv1.OtherEffort{
+		Effort: o.Effort.Slug, Name: o.Effort.Name, Owner: o.Owner.Ref(),
+		Claims: claimsPB(actor, o.Claims), Notes: notesPB(actor, o.Notes), ChangedPaths: o.ChangedPaths,
+	}
+	for _, w := range o.Working {
+		pb.Working = append(pb.Working, &vxv1.ContextWorkspace{
+			Owner: w.Owner.Ref(), Intent: w.Workspace.Intent, ChangeId: w.Workspace.ChangeID, CreatedAt: ts(w.Workspace.CreatedAt),
+		})
+	}
+	return pb
 }

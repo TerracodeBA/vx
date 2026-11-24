@@ -378,11 +378,14 @@ func (a *App) contextCmd() *cobra.Command {
 	var repoFlag, effortFlag string
 	cmd := &cobra.Command{
 		Use:   "context TARGET...",
-		Short: "What to know before touching some paths or symbols: notes, claims, who is working, recent changes",
+		Short: "What to know before touching some paths or symbols: notes, claims, who is working, recent changes, other efforts",
 		Long: `Read this before editing shared code. For each path ("internal/http/",
 "internal/http/limit.go") or symbol ("auth.Login"), vx context lists the
 board's notes on it, the active claims on it, the open workspaces in the
-effort and the changes that landed on it recently.`,
+effort and the changes that landed on it recently. "Other efforts on these
+paths" lists the other open efforts of the repository that changed or
+claimed the targets, or posted an interface or decision on them: they ship
+separately, so their changes do not show up in vx sync.`,
 		Example: `  vx context internal/web/web.go auth.Login`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -437,12 +440,79 @@ effort and the changes that landed on it recently.`,
 					}
 				}
 			}
+			a.printOtherEfforts(m.OtherEfforts, a.me(ctx, c))
 			a.emit(m)
 			return nil
 		},
 	}
 	boardScopeFlags(cmd, &repoFlag, &effortFlag)
 	return cmd
+}
+
+// otherEffortsShown is how many changed paths of another effort vx
+// context prints.
+const otherEffortsShown = 10
+
+// printOtherEfforts prints the "Other efforts on these paths" section of
+// vx context: per other open effort, its changed paths among the targets,
+// its claims and its interface and decision notes, framed like the
+// effort's own, and its open workspaces.
+func (a *App) printOtherEfforts(others []*vxv1.OtherEffort, me string) {
+	if len(others) == 0 {
+		return
+	}
+	a.printf("\nOther efforts on these paths (%d). They ship separately: coordinate with their owners before changing the same code. %s\n", len(others), boardFraming)
+	for _, o := range others {
+		a.printf("  effort %s (%s), owner %s\n", o.Effort, oneLine(cleanBody(o.Name)), o.Owner)
+		if len(o.ChangedPaths) > 0 {
+			shown, more := o.ChangedPaths, ""
+			if len(shown) > otherEffortsShown {
+				shown, more = shown[:otherEffortsShown], fmt.Sprintf(" and %d more", len(o.ChangedPaths)-otherEffortsShown)
+			}
+			a.printf("    Changed there: %s%s\n", oneLine(cleanBody(strings.Join(shown, ", "))), more)
+		}
+		for _, cl := range o.Claims {
+			a.printClaim(cl, "    ")
+		}
+		for _, n := range o.Notes {
+			a.printNote(n, noteOpts{me: me, where: true, indent: "    "})
+		}
+		for _, w := range o.Working {
+			a.printf("    Working there: %-30s %s  %s  since %s\n", w.Owner, w.ChangeId, oneLine(w.Intent), agoRFC(w.CreatedAt))
+		}
+	}
+}
+
+// otherEffortLine is one other effort on the changed files, for vx status:
+// "effort auth (user:bob): changed a.go, b.go; claim on a.go; interface on auth.Login".
+func otherEffortLine(o *vxv1.OtherEffort) string {
+	var parts []string
+	if len(o.ChangedPaths) > 0 {
+		shown, more := o.ChangedPaths, ""
+		if len(shown) > 3 {
+			shown, more = shown[:3], fmt.Sprintf(" and %d more", len(o.ChangedPaths)-3)
+		}
+		parts = append(parts, "changed "+strings.Join(shown, ", ")+more)
+	}
+	for i, cl := range o.Claims {
+		if i == 2 {
+			parts = append(parts, fmt.Sprintf("%d more claims", len(o.Claims)-2))
+			break
+		}
+		parts = append(parts, "claim on "+strings.Join(cl.Targets, ", ")+" by "+cl.Owner.GetRef())
+	}
+	for i, n := range o.Notes {
+		if i == 2 {
+			parts = append(parts, fmt.Sprintf("%d more notes", len(o.Notes)-2))
+			break
+		}
+		p := n.Kind
+		if len(n.Targets) > 0 {
+			p += " on " + strings.Join(n.Targets, ", ")
+		}
+		parts = append(parts, p)
+	}
+	return oneLine(cleanBody("effort " + o.Effort + " (" + o.Owner + "): " + strings.Join(parts, "; ")))
 }
 
 // touching picks the files of a change that match the targets, or, when
