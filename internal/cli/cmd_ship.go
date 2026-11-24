@@ -34,6 +34,10 @@ stays a decision on the git host.`,
 				a.printf("  %-14s %s\n", cf.Kind, cf.Path)
 			}
 		}
+		if len(p.Warnings) > 0 {
+			a.printf("\n")
+			a.printWarnings(p.Warnings)
+		}
 	}
 
 	plan := &cobra.Command{

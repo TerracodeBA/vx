@@ -14,6 +14,7 @@ func planPB(p service.ShipPlan) *vxv1.ShipmentPlan {
 	out := &vxv1.ShipmentPlan{
 		Target: p.Target, TargetGitSha: p.TargetHead.GitSHA, Branch: p.Branch,
 		Title: p.Title, Body: p.Body, Conflicts: conflictsPB(p.Conflicts),
+		Warnings: warningsPB(p.Warnings),
 	}
 	if p.ConflictedAt != nil {
 		out.ConflictedChange = p.ConflictedAt.ChangeID

@@ -47,7 +47,7 @@ The working copy is a normal directory with a `.vx` folder. **Do not use git com
   >>>>>>> effort ...
   ```
   Resolve them by understanding both changes (read `vx log --files` and `vx show <change-id>` for theirs), run the tests, then `vx land` again. `vx land` refuses files that still contain markers.
-- **The text merged but the code broke** (for example both sides added the same helper): vx cannot see this. Your `--run` checks catch it; fix it in your workspace and land.
+- **The text merged but the code broke** (for example both sides added the same helper): for Go, `vx land` prints `Warning: duplicate func clientIP in internal/httpapi (audit.go, limit.go)` when a package declares a top-level name twice; the change has landed anyway. Other breakage vx cannot see; your `--run` checks catch it. Fix it in a new workspace and land.
 - **Waiting for someone else's change:** `vx wait --timeout 10m && vx sync` instead of polling in a loop.
 
 ## Useful flags

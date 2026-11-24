@@ -144,6 +144,14 @@ func conflictsPB(cs []engine.Conflict) []*vxv1.Conflict {
 	return out
 }
 
+func warningsPB(ws []engine.Warning) []*vxv1.Warning {
+	out := make([]*vxv1.Warning, 0, len(ws))
+	for _, w := range ws {
+		out = append(out, &vxv1.Warning{Path: w.Path, Kind: string(w.Kind), Detail: w.Detail})
+	}
+	return out
+}
+
 func parseHash(field, s string) (hash.Hash, error) {
 	h, err := hash.Parse(s)
 	if err != nil {
