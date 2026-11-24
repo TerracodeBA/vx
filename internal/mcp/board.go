@@ -68,7 +68,7 @@ type postNoteInput struct {
 	Effort  string   `json:"effort" jsonschema:"effort slug"`
 	Kind    string   `json:"kind" jsonschema:"plan (what you are about to change), decision (a choice others should follow), interface (a signature others can rely on), blocker (what you wait on) or handoff (work left for the next agent)"`
 	Targets []string `json:"targets" jsonschema:"paths or symbols the note is about"`
-	Body    string   `json:"body" jsonschema:"the note, at most 2000 characters"`
+	Body    string   `json:"body" jsonschema:"the note, at most 2000 characters (interface notes: 4000)"`
 	// Supersedes replaces an earlier note instead of posting a second one
 	// that contradicts it.
 	Supersedes string `json:"supersedes,omitempty" jsonschema:"id or 8+ character id prefix of your earlier note (or one of your person's agents') that this note replaces; the old one drops out of context, the feed and these tools"`

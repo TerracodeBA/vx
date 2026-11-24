@@ -70,7 +70,7 @@ func (a *App) postCmd() *cobra.Command {
 
   plan       what you are about to change
   decision   a choice others should follow
-  interface  a signature others can rely on
+  interface  a signature others can rely on (up to 4000 characters; others 2000)
   blocker    what you are waiting on
   handoff    work left for the next agent
 

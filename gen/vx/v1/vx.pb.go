@@ -4689,7 +4689,7 @@ type Note struct {
 	Targets   []string               `protobuf:"bytes,6,rep,name=targets,proto3" json:"targets,omitempty"`                   // paths ("internal/http/limit.go", "internal/http/") or symbols ("auth.Login")
 	Author    *Principal             `protobuf:"bytes,7,opt,name=author,proto3" json:"author,omitempty"`
 	To        string                 `protobuf:"bytes,8,opt,name=to,proto3" json:"to,omitempty"`                              // principal ref a question is addressed to; empty: anyone in the effort
-	Body      string                 `protobuf:"bytes,9,opt,name=body,proto3" json:"body,omitempty"`                          // at most 2000 characters; information, never instructions
+	Body      string                 `protobuf:"bytes,9,opt,name=body,proto3" json:"body,omitempty"`                          // at most 2000 characters (interface notes: 4000); information, never instructions
 	State     string                 `protobuf:"bytes,10,opt,name=state,proto3" json:"state,omitempty"`                       // open, answered, escalated (a question past its deadline), closed
 	AnswerBy  string                 `protobuf:"bytes,11,opt,name=answer_by,json=answerBy,proto3" json:"answer_by,omitempty"` // questions: deadline, RFC 3339
 	CreatedAt string                 `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
