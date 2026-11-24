@@ -535,6 +535,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
 		"BaseGit": baseRow.GitSHA, "Title": v.Effort.Name,
 		"Claims": claims, "Rebase": u.rebaseBanner(ctx, actor, v),
+		"OtherEfforts": u.otherEfforts(r, actor, repoName, slug),
 	})
 }
 
