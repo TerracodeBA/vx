@@ -32,6 +32,21 @@ type Config struct {
 	Workspace string `json:"workspace,omitempty"`
 	Intent    string `json:"intent,omitempty"`
 	ChangeID  string `json:"change_id,omitempty"`
+	// PendingLand holds the evidence flags of a land that did not finish
+	// (conflicts, failed checks), so a bare `vx land` can run it again.
+	PendingLand *PendingLand `json:"pending_land,omitempty"`
+}
+
+// PendingLand is the evidence a `vx land` asked for, kept until a land in
+// the same workspace succeeds.
+type PendingLand struct {
+	Workspace       string   `json:"workspace"`
+	Runs            []string `json:"runs,omitempty"`
+	Checks          []string `json:"checks,omitempty"`
+	NewTests        []string `json:"new_tests,omitempty"`
+	DependsOn       []string `json:"depends_on,omitempty"`
+	AllowFailing    bool     `json:"allow_failing,omitempty"`
+	AllowUnverified bool     `json:"allow_unverified,omitempty"`
 }
 
 // BaseHash returns the parsed base changeset.

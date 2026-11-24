@@ -339,6 +339,7 @@ func (a *App) abandonCmd() *cobra.Command {
 			}
 			a.printf("Abandoned workspace %s. Local files are unchanged.\n", wc.Config.ChangeID)
 			wc.Config.Workspace, wc.Config.Intent, wc.Config.ChangeID = "", "", ""
+			wc.Config.PendingLand = nil
 			a.emit(resp.Msg)
 			return wc.Save()
 		},

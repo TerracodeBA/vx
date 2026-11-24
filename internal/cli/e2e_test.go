@@ -315,7 +315,7 @@ func TestVerifiedLandAndHonestEvidence(t *testing.T) {
 		out, _ := a.run("wait", "--timeout", "20s", "--interval", "50ms")
 		done <- out
 	}()
-	b.must("land", "-m", "Add five")
+	b.must("land", "-m", "Add five", "--fresh") // after the failing check above
 	if out := <-done; !strings.Contains(out, "Add five") {
 		t.Fatalf("wait = %s", out)
 	}
