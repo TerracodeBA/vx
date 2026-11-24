@@ -166,6 +166,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("GET /ui/repo", u.auth(u.repo))
 	mux.HandleFunc("GET /ui/effort", u.auth(u.effort))
 	mux.HandleFunc("GET /ui/effort/head", u.auth(u.effortHead))
+	mux.HandleFunc("POST /ui/board/answer", u.auth(u.answerPost))
 	mux.HandleFunc("GET /ui/change", u.auth(u.change))
 	mux.HandleFunc("GET /ui/diff", u.auth(u.diff))
 	mux.HandleFunc("GET /ui/ship", u.auth(u.ship))
@@ -532,6 +533,8 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	shipments, _ := u.svc.Store.ListShipments(ctx, v.Effort.ID)
 	baseRow, _ := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
 	changesView := param(r, "view") == "changes"
+	boardView := param(r, "view") == "board"
+	board := u.board(r, actor, repoName, slug, boardView)
 	var allFiles []changedFile
 	if changesView {
 		if allFiles, err = u.allChanges(r, v.Repo, v.Effort, entries, color); err != nil {
@@ -540,7 +543,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		}
 	}
 	u.render(w, r, "effort", map[string]any{
-		"ChangesView": changesView, "AllFiles": allFiles,
+		"ChangesView": changesView, "AllFiles": allFiles, "BoardView": boardView, "Board": board,
 		"Actor": actor, "Repo": v.Repo, "Effort": v.Effort, "Owner": u.ref(r, v.Effort.OwnerID),
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
@@ -716,7 +719,7 @@ func diffBlocks(added, deleted int) []string {
 }
 
 // effortHead lets the page poll cheaply for changes.
-func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, _ service.Actor) {
+func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	v, err := u.svc.GetEffort(r.Context(), param(r, "repo"), param(r, "slug"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
@@ -730,6 +733,125 @@ func (u *UI) effortHead(w http.ResponseWriter, r *http.Request, _ service.Actor)
 		ids = append(ids, ws.ID.String())
 	}
 	fmt.Fprintf(w, "%s %s", v.Effort.Head.String(), strings.Join(ids, ","))
+	if param(r, "board") != "" {
+		// The Board tab also goes stale when a note is posted or a question
+		// is answered or escalates.
+		if notes, err := u.svc.ListNotes(r.Context(), actor, service.ListNotesInput{Repo: param(r, "repo"), Effort: param(r, "slug")}); err == nil {
+			for _, n := range notes {
+				fmt.Fprintf(w, " %s:%s", n.ID.String()[:8], n.State)
+			}
+		}
+	}
+}
+
+// ---------- board ----------
+
+// boardNote is a note as the Board tab shows it.
+type boardNote struct {
+	service.Note
+	Trust  string // relative to the viewer
+	Author string
+	For    string // the person an agent author acts for
+	To     string // a question's addressee; empty: anyone
+}
+
+type boardThread struct {
+	boardNote
+	Replies   []boardNote // answers, oldest first
+	CanAnswer bool        // an escalated question and the viewer is a person
+}
+
+// boardView is the Board tab: escalated questions first, then threads
+// newest first.
+type boardView struct {
+	Threads   []boardThread
+	Open      int // open questions, escalated ones included
+	Escalated int
+	Err       string
+}
+
+func (u *UI) board(r *http.Request, actor service.Actor, repoName, slug string, full bool) boardView {
+	var bv boardView
+	in := service.ListNotesInput{Repo: repoName, Effort: slug}
+	if !full {
+		in.Kinds = []service.NoteKind{service.NoteQuestion}
+	}
+	notes, err := u.svc.ListNotes(r.Context(), actor, in)
+	if err != nil {
+		bv.Err = err.Error()
+		return bv
+	}
+	for _, n := range notes {
+		if n.Kind != service.NoteQuestion {
+			continue
+		}
+		switch n.State {
+		case service.NoteOpen:
+			bv.Open++
+		case service.NoteEscalated:
+			bv.Open++
+			bv.Escalated++
+		}
+	}
+	if !full {
+		return bv
+	}
+	show := func(n service.Note) boardNote {
+		bn := boardNote{Note: n, Trust: service.TrustOf(actor, n), Author: n.Author.Ref()}
+		if n.AuthorOwner != nil {
+			bn.For = n.AuthorOwner.Ref()
+		}
+		if n.To != nil {
+			bn.To = n.To.Ref()
+		}
+		return bn
+	}
+	roots := map[uuid.UUID]bool{}
+	for _, n := range notes {
+		if n.ThreadID == n.ID || n.ThreadID == uuid.Nil {
+			roots[n.ID] = true
+		}
+	}
+	replies := map[uuid.UUID][]boardNote{}
+	for i := len(notes) - 1; i >= 0; i-- {
+		if n := notes[i]; n.ThreadID != n.ID && roots[n.ThreadID] {
+			replies[n.ThreadID] = append(replies[n.ThreadID], show(n))
+		}
+	}
+	for _, n := range notes {
+		if n.ThreadID != n.ID && n.ThreadID != uuid.Nil && roots[n.ThreadID] {
+			continue
+		}
+		bv.Threads = append(bv.Threads, boardThread{
+			boardNote: show(n), Replies: replies[n.ID],
+			CanAnswer: n.Kind == service.NoteQuestion && n.State == service.NoteEscalated && actor.Kind == store.KindHuman,
+		})
+	}
+	sort.SliceStable(bv.Threads, func(i, j int) bool {
+		return bv.Threads[i].State == service.NoteEscalated && bv.Threads[j].State != service.NoteEscalated
+	})
+	return bv
+}
+
+// answerPost answers an escalated question from the Board tab.
+func (u *UI) answerPost(w http.ResponseWriter, r *http.Request, actor service.Actor) {
+	if err := r.ParseForm(); err != nil {
+		u.fail(w, err)
+		return
+	}
+	if !u.checkOrigin(w, r) {
+		return
+	}
+	if actor.Kind != store.KindHuman {
+		u.fail(w, &service.Error{Code: service.CodePermission, Msg: "only people answer questions in the web UI; agents answer with vx answer"})
+		return
+	}
+	_, q, err := u.svc.AnswerNote(r.Context(), actor, r.PostForm.Get("note"), r.PostForm.Get("body"))
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/ui/effort?repo="+url.QueryEscape(q.RepoName)+"&slug="+url.QueryEscape(q.EffortSlug)+"&view=board#n-"+q.ID.String(), http.StatusSeeOther)
 }
 
 // ---------- change ----------

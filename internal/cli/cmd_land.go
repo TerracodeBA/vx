@@ -531,12 +531,17 @@ edit them away, then land. vx land refuses files that still have markers.`,
 
 func (a *App) waitCmd() *cobra.Command {
 	var timeout, interval time.Duration
+	var noNotes bool
 	cmd := &cobra.Command{
 		Use:   "wait",
-		Short: "Wait until someone lands in the effort, then list what landed",
+		Short: "Wait until someone lands, asks you a question or answers yours",
 		Long: `Block until the effort head moves past this working copy's base, then
 print the new changes. Use it instead of polling vx log in a loop:
-  vx wait --timeout 10m && vx sync`,
+  vx wait --timeout 10m && vx sync
+
+vx wait also returns when a question addressed to you arrives or a question
+you asked is answered, and says which happened ("reason" in --json: land,
+question or answer). --no-notes waits for lands only.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			c, wc, err := a.clientAndCopy()
 			if err != nil {
@@ -544,6 +549,13 @@ print the new changes. Use it instead of polling vx log in a loop:
 			}
 			ctx := ctxOf(cmd)
 			deadline := time.Now().Add(timeout)
+			var seen *inboxSeen
+			if !noNotes {
+				if in, err := a.inboxSnapshot(ctx, c); err == nil {
+					s := seenOf(in)
+					seen = &s
+				}
+			}
 			for {
 				eff, err := c.Efforts.GetEffort(ctx, connect.NewRequest(&vxv1.GetEffortRequest{Repo: wc.Config.Repo, Effort: wc.Config.Effort}))
 				if err != nil {
@@ -566,10 +578,16 @@ print the new changes. Use it instead of polling vx log in a loop:
 						a.printf("  %s %s  %-44s %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), cs.Author.Principal)
 					}
 					a.printf("Run `vx sync` to bring them in.\n")
-					a.emit(map[string]any{"head": head, "changesets": fresh})
+					a.emit(map[string]any{"reason": "land", "head": head, "changesets": fresh})
+					return nil
+				}
+				if a.waitNotes(ctx, c, seen) {
 					return nil
 				}
 				if time.Now().After(deadline) {
+					if seen != nil {
+						return fmt.Errorf("nothing landed in %s and no question or answer arrived for you within %s", wc.Config.Effort, timeout)
+					}
 					return fmt.Errorf("nothing landed in %s within %s", wc.Config.Effort, timeout)
 				}
 				select {
@@ -582,5 +600,6 @@ print the new changes. Use it instead of polling vx log in a loop:
 	}
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "give up after this long")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "how often to check")
+	cmd.Flags().BoolVar(&noNotes, "no-notes", false, "wait for lands only, not for questions and answers")
 	return cmd
 }

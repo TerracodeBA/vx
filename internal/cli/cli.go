@@ -91,6 +91,7 @@ Start here:
 		a.repoCmd(), a.effortCmd(),
 		a.cloneCmd(), a.newCmd(), a.statusCmd(), a.diffCmd(), a.landCmd(), a.syncCmd(),
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
+		a.postCmd(), a.askCmd(), a.answerCmd(), a.boardCmd(), a.inboxCmd(), a.contextCmd(),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the vx version",

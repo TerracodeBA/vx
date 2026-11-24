@@ -122,7 +122,9 @@
         if (last === null) { last = t; return; }
         if (t === last) return;
         // Reading a diff? Offer the reload instead of losing the open files.
-        if (document.querySelector("details.fd[open]")) {
+        // Or typing an answer? Same: a reload would lose it.
+        var draft = Array.prototype.some.call(document.querySelectorAll("textarea"), function (t) { return t.value !== "" || t === document.activeElement; });
+        if (draft || document.querySelector("details.fd[open]")) {
           if (!document.querySelector(".fresh-bar")) {
             var bar = document.createElement("button");
             bar.type = "button";
