@@ -37,6 +37,7 @@ flowchart LR
 | Tree | One directory: sorted entries (name, mode, hash) | Blob store |
 | Changeset | One change: parents, tree, intent, author (agent, person, model, session), evidence, stable change ID; hashed over a canonical encoding | Postgres |
 | Effort | A shared line of work: base branch, base and head changesets, version for compare-and-swap | Postgres |
+| Rebase | One replay of an effort onto a newer branch head: state, progress, conflicts | Postgres |
 | Workspace | One task inside an effort: intent, change ID, base | Postgres |
 | Branch | An upstream branch vx follows, with its imported head | Postgres |
 | Shipment | A pushed `vx/` branch and its pull request | Postgres |
@@ -80,6 +81,18 @@ After a land, the server parses the Go packages the change touched (`internal/en
 
 `vx land --run` adds a client-side loop: sync if the effort moved, run the checks on the merged files, land with `require_up_to_date`, and repeat if someone landed in between. The evidence then describes exactly the tree that landed. When the server merges instead, the changeset records the author's `snapshot_tree`, and every view marks its evidence as gathered before the merge.
 
+## Rebasing an effort
+
+`vx effort rebase` (`EffortService.RebaseEffort`) moves an effort onto the latest head of its base branch, after syncing that branch from upstream:
+
+1. Record a running rebase (`effort_rebases`; a partial unique index allows one running or stopped rebase per effort) with the target changeset, the effort's old base and head, and the list of changes to replay: the vx changes from the old base to the head, oldest first.
+2. For each change C with parent P: if P's tree equals the rebased chain so far, take C's tree; otherwise three-way merge base P, ours C, theirs the chain so far, exactly as shipping does, so keep-both puts the branch's lines first. Store the result as a new changeset with the same change id, intent, author, evidence and creation time, the chain so far as its parent, and `rebase` provenance: target (`onto`, `onto_git_sha`, `branch`), the changeset it replays (`from`), who ran it and, after a conflict, who resolved it. The provenance is part of the hashed encoding. Replayed changesets are stored without an effort until the rebase finishes.
+3. On a conflict, save the progress and stop (`stopped`). `ContinueRebase` takes the resolved tree of that change (uploaded like a land's snapshot, on top of the chain so far), stores it as the change's rebased version marked `resolved_by`, and goes on; it may stop again. `AbortRebase` marks the rebase aborted; the effort never moved.
+4. When every change replayed, compare the effort head with the newest old-chain head the rebase knows. Changes landed since (lands never wait for a rebase) are replayed the same way, and the check repeats until the head is stable.
+5. In one transaction: compare-and-swap the rebase row (on its version, so a concurrent continue or abort wins cleanly) and the effort (base branch, base and head, on the effort version, so a land that sneaks in sends the rebase back to step 4), and attach the replayed changesets to the effort.
+
+Every step that changes the rebase row is a compare-and-swap on its version. A change id resolves to its newest version on the effort; a version stored by a stopped or aborted rebase never wins. Workspaces opened before a rebase keep their old base: `Land` and `SetBase` accept a base on the old chain of a finished rebase, and the three-way merge from that base onto the rebased head brings their edits across. Evidence on rebased changes is labelled as gathered before the rebase wherever it is shown, like the evidence of changes the server merged.
+
 ## Git bridge
 
 - One bare git mirror per repository under the data directory (go-git, no git binary needed).
@@ -90,8 +103,8 @@ After a land, the server parses the Go packages the change touched (`internal/en
 ## Shipping
 
 1. Sync the target branch.
-2. Replay each landed vx changeset, oldest first, onto the target head: take its tree when its parent equals the current tree, otherwise three-way merge it onto the current tree. Stop at the first conflict and report it.
-3. Write one git commit per change: the intent as the message, provenance trailers (`Vx-Change-Id`, `Vx-Agent`, `Vx-On-Behalf-Of`, `Vx-Model`, `Vx-Evidence`), the person as author.
+2. Replay each landed vx changeset, oldest first, onto the target head: take its tree when its parent equals the current tree, otherwise three-way merge it onto the current tree. Stop at the first conflict and report it; `vx effort rebase` resolves it inside vx (see "Rebasing an effort").
+3. Write one git commit per change: the intent as the message, provenance trailers (`Vx-Change-Id`, `Vx-Agent`, `Vx-On-Behalf-Of`, `Vx-Model`, `Vx-Evidence`, and for rebased changes `Vx-Rebased-Onto` and `Vx-Resolved-By`), the person as author.
 4. Push to `vx/<effort>` (the bridge refuses any other branch) and open or update the pull request.
 
 ## Code layout
