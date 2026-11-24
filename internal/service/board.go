@@ -322,8 +322,8 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 	return in, nil
 }
 
-// Context returns notes on the targets, open workspaces and recent changes
-// touching them. Without targets it returns the effort's latest notes and
+// Context returns notes on the targets, open workspaces, active claims and
+// recent changes touching them. Without targets it returns the effort's latest notes and
 // changes.
 func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string, targets []string) (NoteContext, error) {
 	targets, err := cleanTargets(targets)
@@ -350,6 +350,13 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 			return NoteContext{}, err
 		}
 		out.Working = append(out.Working, ContextWorkspace{Workspace: w, Owner: owner})
+	}
+	claims, err := s.activeClaims(ctx, s.Store.Q, v.Effort.ID, targets, uuid.Nil)
+	if err != nil {
+		return NoteContext{}, err
+	}
+	if out.Claims, err = c.claims(ctx, claims); err != nil {
+		return NoteContext{}, err
 	}
 	chain, err := s.Store.Chain(ctx, v.Repo.ID, v.Effort.Head, v.Effort.Base, contextChainScan)
 	if err != nil {

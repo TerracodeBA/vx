@@ -105,24 +105,6 @@ func coordinationNotImplemented() error {
 	return errf(CodeUnavailable, "claims and tasks are not implemented yet")
 }
 
-// MakeClaim records a claim and returns it with the active claims of others
-// on the same targets. It never fails because of them.
-func (s *Service) MakeClaim(ctx context.Context, actor Actor, in ClaimInput) (Claim, []Claim, error) {
-	return Claim{}, nil, coordinationNotImplemented()
-}
-
-// ReleaseClaims ends one claim (id or prefix) or all of the caller's claims
-// for a workspace, and returns what it released.
-func (s *Service) ReleaseClaims(ctx context.Context, actor Actor, id, workspaceID string) ([]Claim, error) {
-	return nil, coordinationNotImplemented()
-}
-
-// ListClaims returns the active claims of an effort, optionally only those
-// matching targets (TargetsMatch).
-func (s *Service) ListClaims(ctx context.Context, actor Actor, repo, effort string, targets []string) ([]Claim, error) {
-	return nil, coordinationNotImplemented()
-}
-
 // AddTask adds a task to an effort's plan.
 func (s *Service) AddTask(ctx context.Context, actor Actor, in AddTaskInput) (Task, error) {
 	return Task{}, coordinationNotImplemented()

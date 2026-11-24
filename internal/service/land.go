@@ -205,6 +205,12 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		if err := tx.FinishWorkspace(ctx, ws.ID, store.WorkspaceLanded, h); err != nil {
 			return err
 		}
+		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, ws.ID, nil, s.Now()); err != nil {
+			return err
+		}
+		if res.OverlappingClaims, err = s.landedOverClaims(ctx, tx, actor, eff.ID, files); err != nil {
+			return err
+		}
 		res.Changeset = store.ChangesetRow{Hash: h, RepoID: v.Repo.ID, EffortID: &eff.ID, Changeset: cs, Warnings: storeWarnings(res.Warnings)}
 		return tx.LogOp(ctx, &v.Repo.ID, &actor.ID, "land", eff.Slug,
 			map[string]string{"head": eff.Head.String()},
