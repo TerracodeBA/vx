@@ -17,6 +17,7 @@ import (
 
 	"github.com/TerracodeBA/vx/internal/api"
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/mcp"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 	"github.com/TerracodeBA/vx/internal/web"
@@ -70,6 +71,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	svc := service.New(st, blobs, up)
 	mux := http.NewServeMux()
 	api.Mount(mux, svc)
+	mcp.Mount(mux, svc, log)
 	if err := web.Mount(mux, svc, log); err != nil {
 		st.Close()
 		return nil, err

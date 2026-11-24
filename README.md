@@ -113,6 +113,10 @@ Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 More in [docs/architecture.md](docs/architecture.md).
 
+## MCP
+
+vx-server also speaks the Model Context Protocol at `/mcp`, so Claude Code and other MCP clients query efforts, changes, diffs and the effort board with tools (`vx_status`, `vx_log`, `vx_show`, `vx_diff`, `vx_context`, ...) instead of parsing CLI output. Run `vx mcp` for the `.mcp.json` snippet and the `claude mcp add` command; both read the token from `VX_TOKEN`, so it never lands in a config file. Details in [docs/agents.md](docs/agents.md#mcp).
+
 ## Documentation
 
 - [Getting started](docs/getting-started.md): one person, one machine
