@@ -37,6 +37,8 @@ const (
 	BoardServiceName = "vx.v1.BoardService"
 	// CoordinationServiceName is the fully-qualified name of the CoordinationService service.
 	CoordinationServiceName = "vx.v1.CoordinationService"
+	// OrgServiceName is the fully-qualified name of the OrgService service.
+	OrgServiceName = "vx.v1.OrgService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -156,6 +158,38 @@ const (
 	// CoordinationServiceListTasksProcedure is the fully-qualified name of the CoordinationService's
 	// ListTasks RPC.
 	CoordinationServiceListTasksProcedure = "/vx.v1.CoordinationService/ListTasks"
+	// OrgServiceCreateOrgProcedure is the fully-qualified name of the OrgService's CreateOrg RPC.
+	OrgServiceCreateOrgProcedure = "/vx.v1.OrgService/CreateOrg"
+	// OrgServiceListOrgsProcedure is the fully-qualified name of the OrgService's ListOrgs RPC.
+	OrgServiceListOrgsProcedure = "/vx.v1.OrgService/ListOrgs"
+	// OrgServiceGetOrgProcedure is the fully-qualified name of the OrgService's GetOrg RPC.
+	OrgServiceGetOrgProcedure = "/vx.v1.OrgService/GetOrg"
+	// OrgServiceUpdateOrgProcedure is the fully-qualified name of the OrgService's UpdateOrg RPC.
+	OrgServiceUpdateOrgProcedure = "/vx.v1.OrgService/UpdateOrg"
+	// OrgServiceSetMemberProcedure is the fully-qualified name of the OrgService's SetMember RPC.
+	OrgServiceSetMemberProcedure = "/vx.v1.OrgService/SetMember"
+	// OrgServiceRemoveMemberProcedure is the fully-qualified name of the OrgService's RemoveMember RPC.
+	OrgServiceRemoveMemberProcedure = "/vx.v1.OrgService/RemoveMember"
+	// OrgServiceCreateTeamProcedure is the fully-qualified name of the OrgService's CreateTeam RPC.
+	OrgServiceCreateTeamProcedure = "/vx.v1.OrgService/CreateTeam"
+	// OrgServiceDeleteTeamProcedure is the fully-qualified name of the OrgService's DeleteTeam RPC.
+	OrgServiceDeleteTeamProcedure = "/vx.v1.OrgService/DeleteTeam"
+	// OrgServiceSetTeamMemberProcedure is the fully-qualified name of the OrgService's SetTeamMember
+	// RPC.
+	OrgServiceSetTeamMemberProcedure = "/vx.v1.OrgService/SetTeamMember"
+	// OrgServiceRemoveTeamMemberProcedure is the fully-qualified name of the OrgService's
+	// RemoveTeamMember RPC.
+	OrgServiceRemoveTeamMemberProcedure = "/vx.v1.OrgService/RemoveTeamMember"
+	// OrgServiceGrantRepoProcedure is the fully-qualified name of the OrgService's GrantRepo RPC.
+	OrgServiceGrantRepoProcedure = "/vx.v1.OrgService/GrantRepo"
+	// OrgServiceRevokeRepoProcedure is the fully-qualified name of the OrgService's RevokeRepo RPC.
+	OrgServiceRevokeRepoProcedure = "/vx.v1.OrgService/RevokeRepo"
+	// OrgServiceRepoAccessProcedure is the fully-qualified name of the OrgService's RepoAccess RPC.
+	OrgServiceRepoAccessProcedure = "/vx.v1.OrgService/RepoAccess"
+	// OrgServiceCreatePersonProcedure is the fully-qualified name of the OrgService's CreatePerson RPC.
+	OrgServiceCreatePersonProcedure = "/vx.v1.OrgService/CreatePerson"
+	// OrgServiceListPeopleProcedure is the fully-qualified name of the OrgService's ListPeople RPC.
+	OrgServiceListPeopleProcedure = "/vx.v1.OrgService/ListPeople"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -1694,4 +1728,440 @@ func (UnimplementedCoordinationServiceHandler) UpdateTask(context.Context, *conn
 
 func (UnimplementedCoordinationServiceHandler) ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CoordinationService.ListTasks is not implemented"))
+}
+
+// OrgServiceClient is a client for the vx.v1.OrgService service.
+type OrgServiceClient interface {
+	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
+	UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error)
+	SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error)
+	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
+	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
+	DeleteTeam(context.Context, *connect.Request[v1.DeleteTeamRequest]) (*connect.Response[v1.DeleteTeamResponse], error)
+	SetTeamMember(context.Context, *connect.Request[v1.SetTeamMemberRequest]) (*connect.Response[v1.SetTeamMemberResponse], error)
+	RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error)
+	GrantRepo(context.Context, *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error)
+	RevokeRepo(context.Context, *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error)
+	RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error)
+	// People (site admins): create people and list everyone on the server.
+	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
+	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+}
+
+// NewOrgServiceClient constructs a client for the vx.v1.OrgService service. By default, it uses the
+// Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrgServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrgServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	orgServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("OrgService").Methods()
+	return &orgServiceClient{
+		createOrg: connect.NewClient[v1.CreateOrgRequest, v1.CreateOrgResponse](
+			httpClient,
+			baseURL+OrgServiceCreateOrgProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("CreateOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrgs: connect.NewClient[v1.ListOrgsRequest, v1.ListOrgsResponse](
+			httpClient,
+			baseURL+OrgServiceListOrgsProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("ListOrgs")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrg: connect.NewClient[v1.GetOrgRequest, v1.GetOrgResponse](
+			httpClient,
+			baseURL+OrgServiceGetOrgProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GetOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		updateOrg: connect.NewClient[v1.UpdateOrgRequest, v1.UpdateOrgResponse](
+			httpClient,
+			baseURL+OrgServiceUpdateOrgProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("UpdateOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		setMember: connect.NewClient[v1.SetMemberRequest, v1.SetMemberResponse](
+			httpClient,
+			baseURL+OrgServiceSetMemberProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("SetMember")),
+			connect.WithClientOptions(opts...),
+		),
+		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
+			httpClient,
+			baseURL+OrgServiceRemoveMemberProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RemoveMember")),
+			connect.WithClientOptions(opts...),
+		),
+		createTeam: connect.NewClient[v1.CreateTeamRequest, v1.CreateTeamResponse](
+			httpClient,
+			baseURL+OrgServiceCreateTeamProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("CreateTeam")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTeam: connect.NewClient[v1.DeleteTeamRequest, v1.DeleteTeamResponse](
+			httpClient,
+			baseURL+OrgServiceDeleteTeamProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("DeleteTeam")),
+			connect.WithClientOptions(opts...),
+		),
+		setTeamMember: connect.NewClient[v1.SetTeamMemberRequest, v1.SetTeamMemberResponse](
+			httpClient,
+			baseURL+OrgServiceSetTeamMemberProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("SetTeamMember")),
+			connect.WithClientOptions(opts...),
+		),
+		removeTeamMember: connect.NewClient[v1.RemoveTeamMemberRequest, v1.RemoveTeamMemberResponse](
+			httpClient,
+			baseURL+OrgServiceRemoveTeamMemberProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RemoveTeamMember")),
+			connect.WithClientOptions(opts...),
+		),
+		grantRepo: connect.NewClient[v1.GrantRepoRequest, v1.GrantRepoResponse](
+			httpClient,
+			baseURL+OrgServiceGrantRepoProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GrantRepo")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeRepo: connect.NewClient[v1.RevokeRepoRequest, v1.RevokeRepoResponse](
+			httpClient,
+			baseURL+OrgServiceRevokeRepoProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RevokeRepo")),
+			connect.WithClientOptions(opts...),
+		),
+		repoAccess: connect.NewClient[v1.RepoAccessRequest, v1.RepoAccessResponse](
+			httpClient,
+			baseURL+OrgServiceRepoAccessProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RepoAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		createPerson: connect.NewClient[v1.CreatePersonRequest, v1.CreatePersonResponse](
+			httpClient,
+			baseURL+OrgServiceCreatePersonProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("CreatePerson")),
+			connect.WithClientOptions(opts...),
+		),
+		listPeople: connect.NewClient[v1.ListPeopleRequest, v1.ListPeopleResponse](
+			httpClient,
+			baseURL+OrgServiceListPeopleProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("ListPeople")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// orgServiceClient implements OrgServiceClient.
+type orgServiceClient struct {
+	createOrg        *connect.Client[v1.CreateOrgRequest, v1.CreateOrgResponse]
+	listOrgs         *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
+	getOrg           *connect.Client[v1.GetOrgRequest, v1.GetOrgResponse]
+	updateOrg        *connect.Client[v1.UpdateOrgRequest, v1.UpdateOrgResponse]
+	setMember        *connect.Client[v1.SetMemberRequest, v1.SetMemberResponse]
+	removeMember     *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
+	createTeam       *connect.Client[v1.CreateTeamRequest, v1.CreateTeamResponse]
+	deleteTeam       *connect.Client[v1.DeleteTeamRequest, v1.DeleteTeamResponse]
+	setTeamMember    *connect.Client[v1.SetTeamMemberRequest, v1.SetTeamMemberResponse]
+	removeTeamMember *connect.Client[v1.RemoveTeamMemberRequest, v1.RemoveTeamMemberResponse]
+	grantRepo        *connect.Client[v1.GrantRepoRequest, v1.GrantRepoResponse]
+	revokeRepo       *connect.Client[v1.RevokeRepoRequest, v1.RevokeRepoResponse]
+	repoAccess       *connect.Client[v1.RepoAccessRequest, v1.RepoAccessResponse]
+	createPerson     *connect.Client[v1.CreatePersonRequest, v1.CreatePersonResponse]
+	listPeople       *connect.Client[v1.ListPeopleRequest, v1.ListPeopleResponse]
+}
+
+// CreateOrg calls vx.v1.OrgService.CreateOrg.
+func (c *orgServiceClient) CreateOrg(ctx context.Context, req *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
+	return c.createOrg.CallUnary(ctx, req)
+}
+
+// ListOrgs calls vx.v1.OrgService.ListOrgs.
+func (c *orgServiceClient) ListOrgs(ctx context.Context, req *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
+	return c.listOrgs.CallUnary(ctx, req)
+}
+
+// GetOrg calls vx.v1.OrgService.GetOrg.
+func (c *orgServiceClient) GetOrg(ctx context.Context, req *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error) {
+	return c.getOrg.CallUnary(ctx, req)
+}
+
+// UpdateOrg calls vx.v1.OrgService.UpdateOrg.
+func (c *orgServiceClient) UpdateOrg(ctx context.Context, req *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error) {
+	return c.updateOrg.CallUnary(ctx, req)
+}
+
+// SetMember calls vx.v1.OrgService.SetMember.
+func (c *orgServiceClient) SetMember(ctx context.Context, req *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error) {
+	return c.setMember.CallUnary(ctx, req)
+}
+
+// RemoveMember calls vx.v1.OrgService.RemoveMember.
+func (c *orgServiceClient) RemoveMember(ctx context.Context, req *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
+	return c.removeMember.CallUnary(ctx, req)
+}
+
+// CreateTeam calls vx.v1.OrgService.CreateTeam.
+func (c *orgServiceClient) CreateTeam(ctx context.Context, req *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error) {
+	return c.createTeam.CallUnary(ctx, req)
+}
+
+// DeleteTeam calls vx.v1.OrgService.DeleteTeam.
+func (c *orgServiceClient) DeleteTeam(ctx context.Context, req *connect.Request[v1.DeleteTeamRequest]) (*connect.Response[v1.DeleteTeamResponse], error) {
+	return c.deleteTeam.CallUnary(ctx, req)
+}
+
+// SetTeamMember calls vx.v1.OrgService.SetTeamMember.
+func (c *orgServiceClient) SetTeamMember(ctx context.Context, req *connect.Request[v1.SetTeamMemberRequest]) (*connect.Response[v1.SetTeamMemberResponse], error) {
+	return c.setTeamMember.CallUnary(ctx, req)
+}
+
+// RemoveTeamMember calls vx.v1.OrgService.RemoveTeamMember.
+func (c *orgServiceClient) RemoveTeamMember(ctx context.Context, req *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error) {
+	return c.removeTeamMember.CallUnary(ctx, req)
+}
+
+// GrantRepo calls vx.v1.OrgService.GrantRepo.
+func (c *orgServiceClient) GrantRepo(ctx context.Context, req *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error) {
+	return c.grantRepo.CallUnary(ctx, req)
+}
+
+// RevokeRepo calls vx.v1.OrgService.RevokeRepo.
+func (c *orgServiceClient) RevokeRepo(ctx context.Context, req *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error) {
+	return c.revokeRepo.CallUnary(ctx, req)
+}
+
+// RepoAccess calls vx.v1.OrgService.RepoAccess.
+func (c *orgServiceClient) RepoAccess(ctx context.Context, req *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error) {
+	return c.repoAccess.CallUnary(ctx, req)
+}
+
+// CreatePerson calls vx.v1.OrgService.CreatePerson.
+func (c *orgServiceClient) CreatePerson(ctx context.Context, req *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error) {
+	return c.createPerson.CallUnary(ctx, req)
+}
+
+// ListPeople calls vx.v1.OrgService.ListPeople.
+func (c *orgServiceClient) ListPeople(ctx context.Context, req *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error) {
+	return c.listPeople.CallUnary(ctx, req)
+}
+
+// OrgServiceHandler is an implementation of the vx.v1.OrgService service.
+type OrgServiceHandler interface {
+	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
+	UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error)
+	SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error)
+	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
+	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
+	DeleteTeam(context.Context, *connect.Request[v1.DeleteTeamRequest]) (*connect.Response[v1.DeleteTeamResponse], error)
+	SetTeamMember(context.Context, *connect.Request[v1.SetTeamMemberRequest]) (*connect.Response[v1.SetTeamMemberResponse], error)
+	RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error)
+	GrantRepo(context.Context, *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error)
+	RevokeRepo(context.Context, *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error)
+	RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error)
+	// People (site admins): create people and list everyone on the server.
+	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
+	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+}
+
+// NewOrgServiceHandler builds an HTTP handler from the service implementation. It returns the path
+// on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	orgServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("OrgService").Methods()
+	orgServiceCreateOrgHandler := connect.NewUnaryHandler(
+		OrgServiceCreateOrgProcedure,
+		svc.CreateOrg,
+		connect.WithSchema(orgServiceMethods.ByName("CreateOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceListOrgsHandler := connect.NewUnaryHandler(
+		OrgServiceListOrgsProcedure,
+		svc.ListOrgs,
+		connect.WithSchema(orgServiceMethods.ByName("ListOrgs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceGetOrgHandler := connect.NewUnaryHandler(
+		OrgServiceGetOrgProcedure,
+		svc.GetOrg,
+		connect.WithSchema(orgServiceMethods.ByName("GetOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceUpdateOrgHandler := connect.NewUnaryHandler(
+		OrgServiceUpdateOrgProcedure,
+		svc.UpdateOrg,
+		connect.WithSchema(orgServiceMethods.ByName("UpdateOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceSetMemberHandler := connect.NewUnaryHandler(
+		OrgServiceSetMemberProcedure,
+		svc.SetMember,
+		connect.WithSchema(orgServiceMethods.ByName("SetMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRemoveMemberHandler := connect.NewUnaryHandler(
+		OrgServiceRemoveMemberProcedure,
+		svc.RemoveMember,
+		connect.WithSchema(orgServiceMethods.ByName("RemoveMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceCreateTeamHandler := connect.NewUnaryHandler(
+		OrgServiceCreateTeamProcedure,
+		svc.CreateTeam,
+		connect.WithSchema(orgServiceMethods.ByName("CreateTeam")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceDeleteTeamHandler := connect.NewUnaryHandler(
+		OrgServiceDeleteTeamProcedure,
+		svc.DeleteTeam,
+		connect.WithSchema(orgServiceMethods.ByName("DeleteTeam")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceSetTeamMemberHandler := connect.NewUnaryHandler(
+		OrgServiceSetTeamMemberProcedure,
+		svc.SetTeamMember,
+		connect.WithSchema(orgServiceMethods.ByName("SetTeamMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRemoveTeamMemberHandler := connect.NewUnaryHandler(
+		OrgServiceRemoveTeamMemberProcedure,
+		svc.RemoveTeamMember,
+		connect.WithSchema(orgServiceMethods.ByName("RemoveTeamMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceGrantRepoHandler := connect.NewUnaryHandler(
+		OrgServiceGrantRepoProcedure,
+		svc.GrantRepo,
+		connect.WithSchema(orgServiceMethods.ByName("GrantRepo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRevokeRepoHandler := connect.NewUnaryHandler(
+		OrgServiceRevokeRepoProcedure,
+		svc.RevokeRepo,
+		connect.WithSchema(orgServiceMethods.ByName("RevokeRepo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRepoAccessHandler := connect.NewUnaryHandler(
+		OrgServiceRepoAccessProcedure,
+		svc.RepoAccess,
+		connect.WithSchema(orgServiceMethods.ByName("RepoAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceCreatePersonHandler := connect.NewUnaryHandler(
+		OrgServiceCreatePersonProcedure,
+		svc.CreatePerson,
+		connect.WithSchema(orgServiceMethods.ByName("CreatePerson")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceListPeopleHandler := connect.NewUnaryHandler(
+		OrgServiceListPeopleProcedure,
+		svc.ListPeople,
+		connect.WithSchema(orgServiceMethods.ByName("ListPeople")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.OrgService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrgServiceCreateOrgProcedure:
+			orgServiceCreateOrgHandler.ServeHTTP(w, r)
+		case OrgServiceListOrgsProcedure:
+			orgServiceListOrgsHandler.ServeHTTP(w, r)
+		case OrgServiceGetOrgProcedure:
+			orgServiceGetOrgHandler.ServeHTTP(w, r)
+		case OrgServiceUpdateOrgProcedure:
+			orgServiceUpdateOrgHandler.ServeHTTP(w, r)
+		case OrgServiceSetMemberProcedure:
+			orgServiceSetMemberHandler.ServeHTTP(w, r)
+		case OrgServiceRemoveMemberProcedure:
+			orgServiceRemoveMemberHandler.ServeHTTP(w, r)
+		case OrgServiceCreateTeamProcedure:
+			orgServiceCreateTeamHandler.ServeHTTP(w, r)
+		case OrgServiceDeleteTeamProcedure:
+			orgServiceDeleteTeamHandler.ServeHTTP(w, r)
+		case OrgServiceSetTeamMemberProcedure:
+			orgServiceSetTeamMemberHandler.ServeHTTP(w, r)
+		case OrgServiceRemoveTeamMemberProcedure:
+			orgServiceRemoveTeamMemberHandler.ServeHTTP(w, r)
+		case OrgServiceGrantRepoProcedure:
+			orgServiceGrantRepoHandler.ServeHTTP(w, r)
+		case OrgServiceRevokeRepoProcedure:
+			orgServiceRevokeRepoHandler.ServeHTTP(w, r)
+		case OrgServiceRepoAccessProcedure:
+			orgServiceRepoAccessHandler.ServeHTTP(w, r)
+		case OrgServiceCreatePersonProcedure:
+			orgServiceCreatePersonHandler.ServeHTTP(w, r)
+		case OrgServiceListPeopleProcedure:
+			orgServiceListPeopleHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrgServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrgServiceHandler struct{}
+
+func (UnimplementedOrgServiceHandler) CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.CreateOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListOrgs is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GetOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.UpdateOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.SetMember is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RemoveMember is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.CreateTeam is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) DeleteTeam(context.Context, *connect.Request[v1.DeleteTeamRequest]) (*connect.Response[v1.DeleteTeamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.DeleteTeam is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) SetTeamMember(context.Context, *connect.Request[v1.SetTeamMemberRequest]) (*connect.Response[v1.SetTeamMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.SetTeamMember is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RemoveTeamMember is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GrantRepo(context.Context, *connect.Request[v1.GrantRepoRequest]) (*connect.Response[v1.GrantRepoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GrantRepo is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RevokeRepo(context.Context, *connect.Request[v1.RevokeRepoRequest]) (*connect.Response[v1.RevokeRepoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RevokeRepo is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RepoAccess(context.Context, *connect.Request[v1.RepoAccessRequest]) (*connect.Response[v1.RepoAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RepoAccess is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.CreatePerson is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListPeople is not implemented"))
 }

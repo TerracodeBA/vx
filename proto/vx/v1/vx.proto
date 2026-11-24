@@ -14,6 +14,7 @@ message Principal {
   string display_name = 4;
   string email = 5;
   string on_behalf_of = 6; // the human an agent acts for
+  bool site_admin = 7; // may manage people and every organization on this server
 }
 
 message Branch {
@@ -29,6 +30,8 @@ message Repo {
   string remote = 3;
   string default_branch = 4;
   repeated Branch branches = 5;
+  string org = 6; // the organization that owns the repository
+  string my_role = 7; // the caller's role: read, write or admin
 }
 
 message Effort {
@@ -266,6 +269,7 @@ service ObjectService {
 
 message MissingObjectsRequest {
   repeated string hashes = 1;
+  string repo = 2; // required: objects are scoped to repositories; missing = not yet part of this repo
 }
 
 message MissingObjectsResponse {
@@ -274,6 +278,7 @@ message MissingObjectsResponse {
 
 message PutObjectsRequest {
   repeated Object objects = 1;
+  string repo = 2; // required: the caller needs write access; the objects become part of this repo
 }
 
 message PutObjectsResponse {
@@ -282,6 +287,7 @@ message PutObjectsResponse {
 
 message GetObjectsRequest {
   repeated string hashes = 1;
+  string repo = 2; // required: only objects that are part of a repo the caller can read are served
 }
 
 message GetObjectsResponse {
@@ -303,6 +309,7 @@ message CreateRepoRequest {
   string provider = 2; // github, git or none
   string remote = 3; // owner/name for github, URL or path for git
   string default_branch = 4; // empty: ask the provider, or "main"
+  string org = 5; // owning organization; empty: the org named like the repo's owner part, else the caller's personal org
 }
 
 message CreateRepoResponse {
@@ -875,3 +882,164 @@ message GetRebaseRequest {
 message GetRebaseResponse {
   Rebase rebase = 1; // empty if the effort was never rebased
 }
+
+// ---------- Organizations, teams and repository roles ----------
+//
+// Organizations own repositories. People are members of organizations with a
+// role (owner, admin, member) and may be in teams. Repository roles (read,
+// write, admin) are granted to people or teams; an organization's members
+// also get its default repository role. Owners and admins of an organization
+// are admins of all its repositories. Agents have exactly the access of the
+// person they act for. Site admins manage people and every organization.
+// A repository the caller cannot read behaves as if it did not exist.
+
+service OrgService {
+  rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse) {}
+  rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse) {}
+  rpc GetOrg(GetOrgRequest) returns (GetOrgResponse) {}
+  rpc UpdateOrg(UpdateOrgRequest) returns (UpdateOrgResponse) {}
+  rpc SetMember(SetMemberRequest) returns (SetMemberResponse) {}
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {}
+  rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse) {}
+  rpc DeleteTeam(DeleteTeamRequest) returns (DeleteTeamResponse) {}
+  rpc SetTeamMember(SetTeamMemberRequest) returns (SetTeamMemberResponse) {}
+  rpc RemoveTeamMember(RemoveTeamMemberRequest) returns (RemoveTeamMemberResponse) {}
+  rpc GrantRepo(GrantRepoRequest) returns (GrantRepoResponse) {}
+  rpc RevokeRepo(RevokeRepoRequest) returns (RevokeRepoResponse) {}
+  rpc RepoAccess(RepoAccessRequest) returns (RepoAccessResponse) {}
+  // People (site admins): create people and list everyone on the server.
+  rpc CreatePerson(CreatePersonRequest) returns (CreatePersonResponse) {}
+  rpc ListPeople(ListPeopleRequest) returns (ListPeopleResponse) {}
+}
+
+message Org {
+  string handle = 1; // lowercase, like a person's handle
+  string display_name = 2;
+  string default_repo_role = 3; // none, read or write: what every member gets on the org's repositories
+  string created_at = 4;
+  string my_role = 5; // owner, admin, member, or empty for site admins who are not members
+  bool personal = 6; // a person's own organization, named like them
+}
+
+message OrgMember {
+  Principal person = 1;
+  string role = 2; // owner, admin, member
+  repeated string teams = 3;
+}
+
+message Team {
+  string org = 1;
+  string name = 2; // lowercase
+  repeated Principal members = 3;
+}
+
+message RepoGrant {
+  string repo = 1;
+  string subject = 2; // "user:alice" or "team:acme/backend"
+  string role = 3; // read, write, admin
+}
+
+message RepoAccessEntry {
+  Principal person = 1;
+  string role = 2; // effective role
+  repeated string via = 3; // how: "org owner", "org default", "user:alice", "team:acme/backend"
+}
+
+message CreateOrgRequest {
+  string handle = 1;
+  string display_name = 2;
+}
+message CreateOrgResponse { Org org = 1; }
+
+message ListOrgsRequest {
+  bool all = 1; // site admins: every organization
+}
+message ListOrgsResponse { repeated Org orgs = 1; }
+
+message GetOrgRequest { string handle = 1; }
+message GetOrgResponse {
+  Org org = 1;
+  repeated OrgMember members = 2;
+  repeated Team teams = 3;
+  repeated Repo repos = 4; // the org's repositories the caller can read
+}
+
+message UpdateOrgRequest {
+  string handle = 1;
+  string display_name = 2; // empty: unchanged
+  string default_repo_role = 3; // empty: unchanged
+}
+message UpdateOrgResponse { Org org = 1; }
+
+message SetMemberRequest {
+  string org = 1;
+  string person = 2; // handle or ref of a person
+  string role = 3; // owner, admin, member
+}
+message SetMemberResponse { OrgMember member = 1; }
+
+message RemoveMemberRequest {
+  string org = 1;
+  string person = 2;
+}
+message RemoveMemberResponse {}
+
+message CreateTeamRequest {
+  string org = 1;
+  string name = 2;
+}
+message CreateTeamResponse { Team team = 1; }
+
+message DeleteTeamRequest {
+  string org = 1;
+  string name = 2;
+}
+message DeleteTeamResponse {}
+
+message SetTeamMemberRequest {
+  string org = 1;
+  string team = 2;
+  string person = 3;
+}
+message SetTeamMemberResponse { Team team = 1; }
+
+message RemoveTeamMemberRequest {
+  string org = 1;
+  string team = 2;
+  string person = 3;
+}
+message RemoveTeamMemberResponse { Team team = 1; }
+
+message GrantRepoRequest {
+  string repo = 1;
+  string subject = 2; // "user:alice", "alice", or "team:acme/backend"
+  string role = 3; // read, write, admin
+}
+message GrantRepoResponse { RepoGrant grant = 1; }
+
+message RevokeRepoRequest {
+  string repo = 1;
+  string subject = 2;
+}
+message RevokeRepoResponse {}
+
+message RepoAccessRequest { string repo = 1; }
+message RepoAccessResponse {
+  repeated RepoGrant grants = 1; // direct grants
+  repeated RepoAccessEntry people = 2; // everyone's effective role (repo admins only)
+}
+
+message CreatePersonRequest {
+  string handle = 1;
+  string display_name = 2;
+  string email = 3;
+  bool site_admin = 4;
+  string org = 5; // optional: add as a member of this organization
+}
+message CreatePersonResponse {
+  Principal person = 1;
+  string token = 2; // shown once
+}
+
+message ListPeopleRequest {}
+message ListPeopleResponse { repeated Principal people = 1; }
