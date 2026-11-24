@@ -98,6 +98,7 @@ vx land --run "go test ./..."</pre></div>
           <footer class="land-foot">
             <div class="pills">
               {{if .Merged}}<span class="pill warn" title="Others landed first; the server merged this change onto their work.">merged by server</span>{{end}}
+              {{range .Warnings}}<span class="pill warn" title="Found by the server when this change landed; the text merged but the code may not build."><span class="pill-dot"></span>warning · {{.Detail}}</span>{{end}}
               {{if .Evidence}}{{$merged := .Merged}}{{range .Evidence.Checks}}
                 <span class="pill {{if eq .Result "fail"}}bad{{else if .RanByVX}}ok{{else}}neutral{{end}}" title="{{if .RanByVX}}vx ran this command{{else}}reported by the agent{{end}}{{if $merged}}, before the merge{{end}}"><span class="pill-dot"></span>{{.Name}} · {{.Result}}{{if .RanByVX}} · run by vx{{else}} · reported{{end}}{{if .Passed}} · {{.Passed}} passed{{end}}</span>
               {{end}}{{else}}<span class="pill neutral">no evidence</span>{{end}}

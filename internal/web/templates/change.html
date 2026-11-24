@@ -39,6 +39,13 @@
         {{range .C.Parents}}<dt>Parent</dt><dd><a class="mono" href="/ui/change?repo={{$repo}}&amp;ref={{.}}">{{short .}}</a></dd>{{end}}
       </dl>
     </section>
+    {{if .C.Warnings}}<section class="panel panel-pad">
+      <h2 class="sec">Warnings</h2>
+      <p class="muted small">Found by the server when this change landed: the text merged, but the code may not build.</p>
+      <ul class="plain-list">
+        {{range .C.Warnings}}<li><span class="pill warn">{{.Kind}}</span><span class="mono small">{{.Detail}}</span></li>{{end}}
+      </ul>
+    </section>{{end}}
     <section class="panel panel-pad">
       <h2 class="sec">Evidence</h2>
       {{if .C.Merged}}<p class="note warn small">Others landed first and the server merged this change onto their work. The checks below ran on the author's snapshot, before that merge.</p>{{end}}
