@@ -206,8 +206,7 @@ func (s *Service) applyGitHubRepositoryEvent(ctx context.Context, p hookPayload)
 	return nil
 }
 
-// applyGitHubPush imports a push to the default branch, or to another
-// branch vx follows, like `vx repo sync`.
+// applyGitHubPush imports a push to a followed branch (applyUpstreamPush).
 func (s *Service) applyGitHubPush(ctx context.Context, p hookPayload) error {
 	if p.Repository == nil || p.Deleted || s.Upstream == nil {
 		return nil
@@ -223,27 +222,11 @@ func (s *Service) applyGitHubPush(ctx context.Context, p hookPayload) error {
 	if err != nil {
 		return err
 	}
-	if branch != r.DefaultBranch {
-		if _, err := s.Store.GetBranch(ctx, r.ID, branch); err != nil {
-			return nil // a branch vx does not follow
-		}
-	}
-	b, n, err := s.Upstream.SyncBranch(ctx, r, branch)
-	if err != nil {
-		return errf(CodeUnavailable, "import the push to %s of %s: %v", branch, r.Name, err)
-	}
-	if n > 0 {
-		_ = s.Store.LogOp(ctx, &r.ID, nil, "branch.sync", branch, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n, "by": "github push"})
-		s.markMergedEfforts(ctx, r, branch)
-		s.scheduleBranchForecast(r, branch)
-	}
-	return nil
+	return s.applyUpstreamPush(ctx, r, branch, "github push")
 }
 
-// applyGitHubMergedPR imports the base branch of a merged vx pull request
-// and marks the effort merged. With a squash merge the commits lose vx's
-// change-id trailers, so the effort named by the branch is marked merged
-// directly.
+// applyGitHubMergedPR handles a merged vx pull request
+// (applyMergedPullRequest).
 func (s *Service) applyGitHubMergedPR(ctx context.Context, p hookPayload) error {
 	if p.Repository == nil {
 		return nil
@@ -255,17 +238,5 @@ func (s *Service) applyGitHubMergedPR(ctx context.Context, p hookPayload) error 
 	if err != nil {
 		return err
 	}
-	base := p.PullRequest.Base.Ref
-	if s.Upstream != nil {
-		if b, n, err := s.Upstream.SyncBranch(ctx, r, base); err == nil && n > 0 {
-			_ = s.Store.LogOp(ctx, &r.ID, nil, "branch.sync", base, nil, map[string]any{"head": b.Head.String(), "git_sha": b.GitSHA, "imported": n, "by": "github pull request merged"})
-			s.scheduleBranchForecast(r, base)
-		}
-	}
-	s.markMergedEfforts(ctx, r, base)
-	slug := strings.TrimPrefix(p.PullRequest.Head.Ref, "vx/")
-	if e, err := s.Store.GetEffort(ctx, r.ID, slug); err == nil && (e.State == store.EffortOpen || e.State == store.EffortShipping) {
-		return s.closeEffort(ctx, nil, r, e, store.EffortMerged, "its pull request was merged on GitHub")
-	}
-	return nil
+	return s.applyMergedPullRequest(ctx, r, p.PullRequest.Head.Ref, p.PullRequest.Base.Ref, "GitHub")
 }
