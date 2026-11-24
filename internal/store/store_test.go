@@ -138,6 +138,23 @@ func TestChangesetsAndEfforts(t *testing.T) {
 	if len(chain) != 2 || chain[0].Hash != h2 || chain[1].Hash != h1 {
 		t.Fatalf("chain = %v", len(chain))
 	}
+
+	// Warnings are kept beside the changeset and do not change its hash.
+	ws := []store.Warning{{Path: "internal/httpapi", Kind: "duplicate", Name: "clientIP", Decl: "func",
+		Files: []string{"audit.go", "limit.go"}, Detail: "duplicate func clientIP in internal/httpapi (audit.go, limit.go)"}}
+	if err := s.SetChangesetWarnings(ctx, repo.ID, h2, ws); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := s.GetChangeset(ctx, repo.ID, h2); err != nil || len(r.Warnings) != 1 || r.Warnings[0].Detail != ws[0].Detail ||
+		len(r.Warnings[0].Files) != 2 || r.Warnings[0].Name != "clientIP" {
+		t.Fatalf("GetChangeset warnings = %+v, %v", r.Warnings, err)
+	}
+	if chain, err = s.Chain(ctx, repo.ID, h2, h0, 100); err != nil || len(chain[0].Warnings) != 1 || len(chain[1].Warnings) != 0 {
+		t.Fatalf("Chain warnings = %+v, %v", chain, err)
+	}
+	if err := s.SetChangesetWarnings(ctx, repo.ID, hash.Of(hash.KindChangeset, []byte("missing")), ws); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("warnings on a missing changeset: %v", err)
+	}
 	all, _ := s.Chain(ctx, repo.ID, h2, hash.Zero, 100)
 	if len(all) != 3 {
 		t.Fatalf("full chain = %d", len(all))

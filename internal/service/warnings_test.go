@@ -38,4 +38,30 @@ func TestLandWarnsAboutDuplicateGoDeclarations(t *testing.T) {
 	if err != nil || !r3.Landed || len(r3.Warnings) != 0 {
 		t.Fatalf("fix land: %+v %v", r3, err)
 	}
+
+	// Anyone reading the effort later sees the warning on the change that
+	// caused it, and only there.
+	_, got, err := e.svc.GetChangeset(e.ctx, repo.Name, w2.Workspace.ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Warnings) != 1 || got.Warnings[0].Detail != want || got.Warnings[0].Kind != string(engine.WarningDuplicate) ||
+		got.Warnings[0].Path != "internal/httpapi" || got.Warnings[0].Name != "clientIP" {
+		t.Fatalf("stored warnings = %+v, want %q", got.Warnings, want)
+	}
+	log, err := e.svc.Log(e.ctx, repo.Name, eff.Slug, 10, false)
+	if err != nil || len(log) < 3 {
+		t.Fatalf("log = %d entries, %v", len(log), err)
+	}
+	for _, entry := range log {
+		n := 0
+		for _, w := range entry.Warnings {
+			if w.Kind == string(engine.WarningDuplicate) {
+				n++
+			}
+		}
+		if (entry.Hash == r2.Changeset.Hash) != (n == 1) {
+			t.Errorf("log entry %s (%s) has %d duplicate warnings", entry.ChangeID, entry.Intent, n)
+		}
+	}
 }

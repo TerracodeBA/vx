@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,40 @@ type ChangesetRow struct {
 	RepoID   uuid.UUID
 	EffortID *uuid.UUID
 	*object.Changeset
+	// Warnings the server found in the tree when the change landed. They
+	// are not part of the changeset's encoding or hash.
+	Warnings []Warning
+}
+
+// Warning is a problem found in a landed tree that did not stop the land,
+// such as a Go function declared twice in one package.
+type Warning struct {
+	Path   string   `json:"path"`
+	Kind   string   `json:"kind"`
+	Name   string   `json:"name,omitempty"`
+	Decl   string   `json:"decl,omitempty"`
+	Files  []string `json:"files,omitempty"`
+	Detail string   `json:"detail"`
+}
+
+// SetChangesetWarnings records the warnings found when a changeset landed.
+// No warnings clears the column.
+func (q Q) SetChangesetWarnings(ctx context.Context, repoID uuid.UUID, h hash.Hash, ws []Warning) error {
+	var raw []byte
+	if len(ws) > 0 {
+		var err error
+		if raw, err = json.Marshal(ws); err != nil {
+			return err
+		}
+	}
+	tag, err := q.db.Exec(ctx, `update changesets set warnings = $3 where repo_id = $1 and hash = $2`, repoID, h, raw)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("changeset %s: %w", h.Short(), ErrNotFound)
+	}
+	return nil
 }
 
 // InsertChangeset stores a changeset and its file list. Inserting the same
@@ -72,12 +107,17 @@ func modeOf(c object.Change) object.Mode {
 
 // GetChangeset loads a changeset by hash.
 func (q Q) GetChangeset(ctx context.Context, repoID uuid.UUID, h hash.Hash) (ChangesetRow, error) {
-	var raw []byte
+	var raw, warnings []byte
 	row := ChangesetRow{Hash: h, RepoID: repoID}
-	err := q.db.QueryRow(ctx, `select raw, effort_id from changesets where repo_id = $1 and hash = $2`, repoID, h).
-		Scan(&raw, &row.EffortID)
+	err := q.db.QueryRow(ctx, `select raw, effort_id, warnings from changesets where repo_id = $1 and hash = $2`, repoID, h).
+		Scan(&raw, &row.EffortID, &warnings)
 	if err != nil {
 		return row, notFound(err, "changeset "+h.Short())
+	}
+	if warnings != nil {
+		if err := json.Unmarshal(warnings, &row.Warnings); err != nil {
+			return row, fmt.Errorf("changeset %s has unreadable warnings: %w", h.Short(), err)
+		}
 	}
 	cs, err := object.DecodeChangeset(raw)
 	if err != nil {

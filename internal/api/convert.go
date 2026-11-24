@@ -133,6 +133,16 @@ func changesetPB(h hash.Hash, cs *object.Changeset, effort string, files []store
 	return out
 }
 
+// changesetRowPB is changesetPB plus what the store keeps beside the
+// changeset, such as the warnings found when it landed.
+func changesetRowPB(r store.ChangesetRow, effort string, files []store.FileChange) *vxv1.Changeset {
+	out := changesetPB(r.Hash, r.Changeset, effort, files)
+	for _, w := range r.Warnings {
+		out.Warnings = append(out.Warnings, &vxv1.Warning{Path: w.Path, Kind: w.Kind, Detail: w.Detail})
+	}
+	return out
+}
+
 func conflictsPB(cs []engine.Conflict) []*vxv1.Conflict {
 	out := make([]*vxv1.Conflict, 0, len(cs))
 	for _, c := range cs {

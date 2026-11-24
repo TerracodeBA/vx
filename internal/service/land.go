@@ -184,6 +184,11 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		if err != nil {
 			return err
 		}
+		if len(res.Warnings) > 0 {
+			if err := tx.SetChangesetWarnings(ctx, v.Repo.ID, h, storeWarnings(res.Warnings)); err != nil {
+				return err
+			}
+		}
 		ok, err := tx.AdvanceEffort(ctx, eff.ID, eff.Version, h)
 		if err != nil {
 			return err
@@ -194,7 +199,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		if err := tx.FinishWorkspace(ctx, ws.ID, store.WorkspaceLanded, h); err != nil {
 			return err
 		}
-		res.Changeset = store.ChangesetRow{Hash: h, RepoID: v.Repo.ID, EffortID: &eff.ID, Changeset: cs}
+		res.Changeset = store.ChangesetRow{Hash: h, RepoID: v.Repo.ID, EffortID: &eff.ID, Changeset: cs, Warnings: storeWarnings(res.Warnings)}
 		return tx.LogOp(ctx, &v.Repo.ID, &actor.ID, "land", eff.Slug,
 			map[string]string{"head": eff.Head.String()},
 			map[string]any{"head": h.String(), "workspace": ws.ID.String(), "rebased": res.Rebased})
@@ -220,6 +225,18 @@ func (s *Service) treeWarnings(ctx context.Context, tree hash.Hash, changes []ob
 		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check Go packages for duplicate declarations: %v", err)}}
 	}
 	return ws
+}
+
+// storeWarnings converts engine warnings to the form kept with a changeset.
+func storeWarnings(ws []engine.Warning) []store.Warning {
+	if len(ws) == 0 {
+		return nil
+	}
+	out := make([]store.Warning, 0, len(ws))
+	for _, w := range ws {
+		out = append(out, store.Warning{Path: w.Path, Kind: string(w.Kind), Name: w.Name, Decl: w.Decl, Files: w.Files, Detail: w.Detail})
+	}
+	return out
 }
 
 // checkUploaded verifies every tree and blob the snapshot adds over base is
