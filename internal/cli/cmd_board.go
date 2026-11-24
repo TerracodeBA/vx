@@ -378,11 +378,11 @@ func (a *App) contextCmd() *cobra.Command {
 	var repoFlag, effortFlag string
 	cmd := &cobra.Command{
 		Use:   "context TARGET...",
-		Short: "What to know before touching some paths or symbols: notes, who is working, recent changes",
+		Short: "What to know before touching some paths or symbols: notes, claims, who is working, recent changes",
 		Long: `Read this before editing shared code. For each path ("internal/http/",
 "internal/http/limit.go") or symbol ("auth.Login"), vx context lists the
-board's notes on it, the open workspaces in the effort and the changes that
-landed on it recently.`,
+board's notes on it, the active claims on it, the open workspaces in the
+effort and the changes that landed on it recently.`,
 		Example: `  vx context internal/web/web.go auth.Login`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -412,6 +412,12 @@ landed on it recently.`,
 					for _, r := range replies[n.Id] {
 						a.printNote(r, noteOpts{me: me, indent: "      "})
 					}
+				}
+			}
+			if len(m.Claims) > 0 {
+				a.printf("\nClaimed now (%d). %s\n", len(m.Claims), claimFraming)
+				for _, cl := range m.Claims {
+					a.printClaim(cl, "  ")
 				}
 			}
 			if len(m.Working) > 0 {

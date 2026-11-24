@@ -233,7 +233,7 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 		b.WriteString("  on " + strings.Join(cl.Targets, ", "))
 	}
 	if cl.ExpiresAt != "" {
-		b.WriteString("  until " + clock(cl.ExpiresAt))
+		b.WriteString("  until " + clock(cl.ExpiresAt) + " (" + expiresIn(cl.ExpiresAt) + ")")
 	}
 	b.WriteString("  id " + noteID(cl.Id))
 	a.printf("%s%s\n", indent, b.String())

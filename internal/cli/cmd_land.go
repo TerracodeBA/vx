@@ -338,6 +338,7 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 		a.printf("Warning: the server did not record the check notes (it may run an older vx); the landed evidence lacks them.\n")
 	}
 	a.printWarnings(r.Warnings)
+	a.printLandedOverClaims(r.OverlappingClaims)
 	board := a.landFeed(ctx, c, wc, r) // the board comes last
 	a.emit(protoWithBoard(r, board))
 	return nil

@@ -82,8 +82,9 @@ func (a *App) cloneCmd() *cobra.Command {
 
 func (a *App) newCmd() *cobra.Command {
 	var taskID string
+	var claim claimOptions
 	cmd := &cobra.Command{
-		Use:   "new INTENT [--task ID]",
+		Use:   "new INTENT [--task ID] [--claim TARGET...]",
 		Short: "Open a workspace for one task in the current effort",
 		Long: `Open a workspace: one task, described by its intent, that ends in one land.
 Other agents see your intent in vx status while you work. The intent
@@ -93,9 +94,14 @@ Keep tasks small and land often: vx land closes the workspace, so run
 vx new again for the next task.
 
 With --task ID, vx new takes that task of the effort's plan (vx tasks
---open lists them) and uses its title as the intent when none is given.`,
+--open lists them) and uses its title as the intent when none is given.
+
+With --claim, vx new also claims the paths or symbols you are about to
+change, tied to the new workspace, so others see it before they edit them.
+Claims block nobody; they end when the workspace lands or is abandoned.`,
 		Example: `  vx new "Add limiter middleware"
-  vx new --task 1a2b3c4d`,
+  vx new --task 1a2b3c4d
+  vx new "Move clientIP into httpx" --claim internal/httpx/ --claim internal/api/limit.go`,
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, wc, err := a.clientAndCopy()
@@ -114,12 +120,20 @@ With --task ID, vx new takes that task of the effort's plan (vx tasks
 			if err != nil {
 				return err
 			}
-			a.printf("Opened workspace %s: %s\nEdit files, then run `vx land`.\n", w.ChangeId, w.Intent)
+			a.printf("Opened workspace %s: %s\n", w.ChangeId, w.Intent)
 			out := map[string]any{"workspace": w}
 			if task != nil {
 				a.printf("You took task %s; when it has landed: vx task done %s\n", noteID(task.Id), noteID(task.Id))
 				out["task"] = task
 			}
+			if len(claim.targets) > 0 {
+				m, err := a.claimOnNew(ctx, c, wc, w, claim)
+				if err != nil {
+					return err
+				}
+				out["claim"], out["overlapping"] = m.Claim, m.Overlapping
+			}
+			a.printf("Edit files, then run `vx land`.\n")
 			if len(out) == 1 {
 				a.emit(w)
 			} else {
@@ -129,6 +143,8 @@ With --task ID, vx new takes that task of the effort's plan (vx tasks
 		},
 	}
 	cmd.Flags().StringVar(&taskID, "task", "", "take this task of the effort's plan and work on it here")
+	cmd.Flags().StringSliceVar(&claim.targets, "claim", nil, "path or symbol to claim for this workspace (repeatable)")
+	claimFlags(cmd, &claim)
 	return cmd
 }
 
