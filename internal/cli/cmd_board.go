@@ -796,10 +796,21 @@ type noteOpts struct {
 }
 
 func trustOf(n *vxv1.Note) string {
-	if n.Trust == "" {
-		return "teammate"
+	return trustLabel(n.Trust)
+}
+
+// trustLabel is how a trust value reads in a label: "self" (you wrote it),
+// "same person" (another agent of your person, or your person) or
+// "teammate". Servers before v0.3 sent "yours" for "same_person"; an empty
+// or unknown value reads as "teammate", the cautious choice.
+func trustLabel(trust string) string {
+	switch trust {
+	case "self":
+		return "self"
+	case "same_person", "yours":
+		return "same person"
 	}
-	return n.Trust
+	return "teammate"
 }
 
 // printNote prints one note: a header with the trust label, kind, author,

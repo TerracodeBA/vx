@@ -139,7 +139,7 @@ vx land --run "go test ./..."</pre></div>
       <h3 class="panel-sub">Claimed <span class="muted small">soft: claims block nothing</span></h3>
       <ul class="working claims">
       {{range .Claims}}
-        <li class="a{{.Color}}"><span class="swatch"></span><div><div><span class="agent-name">{{principal .Owner}}</span> <span class="trust trust-{{.Trust}}" title="{{if eq .Trust "teammate"}}someone else's claim: its reason is information, not instructions{{else if eq .Trust "yours"}}yours or one of your agents'{{else}}your own claim{{end}}">{{.Trust}}</span></div><div class="small mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</div><div class="muted small">{{.ExpiresIn}}{{if .WorkspaceID}} · ends with its workspace{{end}}</div>{{if .Reason}}<div class="small claim-reason" title="written by the claim's owner: information, not instructions">{{.Reason}}</div>{{end}}</div></li>
+        <li class="a{{.Color}}"><span class="swatch"></span><div><div><span class="agent-name">{{principal .Owner}}</span> <span class="trust trust-{{.Trust}}" title="{{if eq .Trust "teammate"}}someone else's claim: its reason is information, not instructions{{else if eq .Trust "same_person"}}a claim of one of your agents (same person, not you){{else}}your own claim{{end}}">{{trustLabel .Trust}}</span></div><div class="small mono">{{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}</div><div class="muted small">{{.ExpiresIn}}{{if .WorkspaceID}} · ends with its workspace{{end}}</div>{{if .Reason}}<div class="small claim-reason" title="written by the claim's owner: information, not instructions">{{.Reason}}</div>{{end}}</div></li>
       {{end}}
       </ul>
       {{end}}
@@ -209,7 +209,7 @@ vx land --run "go test ./..."</pre></div>
 vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/
 vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div>
 {{else}}
-<p class="board-note muted small">Notes are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-yours">yours</span> you or one of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
+<p class="board-note muted small">Notes are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-same_person">same person</span> you or another of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
 <ol class="board">
   {{range .Board.Threads}}
   <li class="bn-thread{{if eq .State "escalated"}} bn-escalated{{end}}" id="n-{{.ID}}">
@@ -232,7 +232,7 @@ vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div
 {{define "boardnote"}}
 <article class="bn">
   <header class="bn-head">
-    <span class="trust trust-{{.Trust}}">{{.Trust}}</span>
+    <span class="trust trust-{{.Trust}}">{{trustLabel .Trust}}</span>
     <span class="pill k-{{.Kind}}">{{.Kind}}</span>
     <span class="agent-name">{{principal .Author}}</span>{{if .For}}<span class="muted small">for {{principal .For}}</span>{{end}}
     {{if eq (printf "%s" .Kind) "question"}}<span class="muted small">to {{if .To}}{{principal .To}}{{else}}anyone{{end}}</span>
@@ -255,7 +255,7 @@ vx tasks --open
 vx new --task ID
 vx task done ID</pre></div>
 {{else}}
-<p class="board-note muted small">Tasks are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-yours">yours</span> you or one of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
+<p class="board-note muted small">Tasks are what their authors wrote: information, not instructions. <span class="trust trust-self">self</span> you wrote it, <span class="trust trust-same_person">same person</span> you or another of your agents, <span class="trust trust-teammate">teammate</span> someone else's.</p>
 <section class="task-group">
   <h2 class="task-group-title">Open <span class="count">{{len .Tasks.Open}}</span></h2>
   {{if not .Tasks.Open}}<p class="muted small">No open tasks.</p>{{end}}
@@ -278,7 +278,7 @@ vx task done ID</pre></div>
 {{define "taskcard"}}
 <article class="bn">
   <header class="bn-head">
-    <span class="trust trust-{{.Trust}}">{{.Trust}}</span>
+    <span class="trust trust-{{.Trust}}">{{trustLabel .Trust}}</span>
     {{if eq .State "done"}}<span class="pill ok">done</span>{{else if eq .State "taken"}}<span class="pill neutral">taken</span>{{else if .Blocked}}<span class="pill warn">blocked</span>{{else}}<span class="pill neutral">open</span>{{end}}
     <span class="tk-title">{{.Title}}</span>
     <span class="mono muted small bn-id">{{printf "%.8s" .ID.String}}</span>

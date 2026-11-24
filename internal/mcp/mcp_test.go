@@ -368,8 +368,8 @@ func TestMCPBoardTools(t *testing.T) {
 		t.Fatalf("posted note = %+v", posted)
 	}
 
-	// The same note is "yours" for the person and "teammate" for someone else's agent.
-	if ns := call[notesOutput](t, alice, "vx_board", where).Notes; len(ns) != 1 || ns[0].Trust != "yours" {
+	// The same note is "same_person" for the person and "teammate" for someone else's agent.
+	if ns := call[notesOutput](t, alice, "vx_board", where).Notes; len(ns) != 1 || ns[0].Trust != "same_person" {
 		t.Fatalf("alice's board = %+v", ns)
 	}
 	cx := call[contextOutput](t, bobAgent, "vx_context", with("targets", []string{"internal/http/"}))
@@ -477,7 +477,7 @@ func TestMCPClaimTools(t *testing.T) {
 	if len(theirs.Overlapping) != 1 || theirs.Overlapping[0].ID != c.ID || theirs.Overlapping[0].Trust != "teammate" || theirs.Overlapping[0].Untrusted != reason {
 		t.Fatalf("overlapping = %+v", theirs.Overlapping)
 	}
-	if cs := call[claimsOutput](t, alice, "vx_claims", with("targets", []string{"internal/http/limit.go"})).Claims; len(cs) != 2 || cs[0].Trust != "yours" || cs[1].Trust != "teammate" {
+	if cs := call[claimsOutput](t, alice, "vx_claims", with("targets", []string{"internal/http/limit.go"})).Claims; len(cs) != 2 || cs[0].Trust != "same_person" || cs[1].Trust != "teammate" {
 		t.Fatalf("alice's claims = %+v", cs)
 	}
 	cx := call[contextOutput](t, bobAgent, "vx_context", with("targets", []string{"internal/http/"}))

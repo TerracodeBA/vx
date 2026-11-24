@@ -47,7 +47,7 @@ func TestClaimMakeValidatesAndOverlaps(t *testing.T) {
 		c.RepoName != "shop-api" || c.EffortSlug != b.effort.Slug {
 		t.Fatalf("claim = %+v", c)
 	}
-	if got := service.ClaimTrust(b.alice, c); got != service.TrustYours {
+	if got := service.ClaimTrust(b.alice, c); got != service.TrustSamePerson {
 		t.Fatalf("trust for alice = %s", got)
 	}
 	if got := service.ClaimTrust(b.bob, c); got != service.TrustTeammate {

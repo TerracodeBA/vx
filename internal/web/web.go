@@ -117,18 +117,28 @@ type UI struct {
 }
 
 // Mount registers the UI routes on mux.
+// trustLabel is how a trust value reads on a page: "same person" for
+// another agent of the viewer's person.
+func trustLabel(trust string) string {
+	if trust == service.TrustSamePerson {
+		return "same person"
+	}
+	return trust
+}
+
 func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	u := &UI{svc: svc, log: log, pages: map[string]*template.Template{}}
 	funcs := template.FuncMap{
-		"short":     shortHash,
-		"ago":       ago,
-		"first":     firstLine,
-		"rest":      restLines,
-		"q":         url.QueryEscape,
-		"principal": principalName,
-		"pct":       func(a, b int) int { return pct(a, b) },
-		"color":     func(m map[string]int, k string) int { return m[k] },
-		"blocks":    diffBlocks,
+		"short":      shortHash,
+		"ago":        ago,
+		"first":      firstLine,
+		"rest":       restLines,
+		"q":          url.QueryEscape,
+		"principal":  principalName,
+		"trustLabel": trustLabel,
+		"pct":        func(a, b int) int { return pct(a, b) },
+		"color":      func(m map[string]int, k string) int { return m[k] },
+		"blocks":     diffBlocks,
 		"maxLines": func(as []*agentStat) int {
 			m := 0
 			for _, a := range as {
@@ -575,7 +585,7 @@ func (u *UI) rebaseBanner(ctx context.Context, actor service.Actor, v service.Ef
 type claimRow struct {
 	service.Claim
 	Owner     string // principal ref
-	Trust     string // self, yours or teammate, for the viewer
+	Trust     string // self, same_person or teammate, for the viewer
 	ExpiresIn string
 	Color     int
 }

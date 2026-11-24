@@ -50,7 +50,7 @@ func TestTasksCLI(t *testing.T) {
 			t.Errorf("tasks --open: missing %q in\n%s", want, out)
 		}
 	}
-	if out := a.must("tasks"); !strings.Contains(out, "[yours] added by user:alice") {
+	if out := a.must("tasks"); !strings.Contains(out, "[same person] added by user:alice") {
 		t.Errorf("own person's task not labeled yours:\n%s", out)
 	}
 

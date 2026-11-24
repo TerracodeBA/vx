@@ -230,10 +230,7 @@ func (a *App) printBoardFeed(ctx context.Context, c *client.Client, f boardFeed)
 // printClaim prints a claim like a note: trust label, owner, targets,
 // expiry, then the reason under a gutter.
 func (a *App) printClaim(cl *vxv1.Claim, indent string) {
-	trust := cl.Trust
-	if trust == "" {
-		trust = "teammate"
-	}
+	trust := trustLabel(cl.Trust)
 	var b strings.Builder
 	b.WriteString("[" + trust + "] claim  " + cl.Owner.GetRef())
 	if len(cl.Targets) > 0 {
@@ -253,10 +250,7 @@ func (a *App) printClaim(cl *vxv1.Claim, indent string) {
 
 // claimLine is a claim on one line, for vx status.
 func claimLine(cl *vxv1.Claim) string {
-	trust := cl.Trust
-	if trust == "" {
-		trust = "teammate"
-	}
+	trust := trustLabel(cl.Trust)
 	s := "[" + trust + "] " + cl.Owner.GetRef() + " on " + strings.Join(cl.Targets, ", ")
 	if cl.ExpiresAt != "" {
 		s += " until " + clock(cl.ExpiresAt)

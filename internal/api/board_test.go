@@ -125,7 +125,7 @@ func TestBoardServiceOverConnect(t *testing.T) {
 
 	// Alice sees her agent's notes as hers; the thread lists by prefix too.
 	list, err := asAlice.ListNotes(ctx, connect.NewRequest(&vxv1.ListNotesRequest{Repo: "shop-api", Effort: eff.Slug, ThreadId: q.Id[:8]}))
-	if err != nil || len(list.Msg.Notes) != 2 || list.Msg.Notes[1].Trust != service.TrustYours || list.Msg.Notes[0].Trust != service.TrustTeammate {
+	if err != nil || len(list.Msg.Notes) != 2 || list.Msg.Notes[1].Trust != service.TrustSamePerson || list.Msg.Notes[0].Trust != service.TrustTeammate {
 		t.Fatalf("thread = %+v, %v", list.Msg, err)
 	}
 	list, err = asAlice.ListNotes(ctx, connect.NewRequest(&vxv1.ListNotesRequest{Repo: "shop-api", Effort: eff.Slug, Kinds: []string{"plan"}, Since: n.CreatedAt}))

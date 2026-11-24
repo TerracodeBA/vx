@@ -50,9 +50,15 @@ const (
 
 // Trust says how the caller relates to a note's author.
 const (
-	TrustSelf     = "self"     // the caller wrote it
-	TrustYours    = "yours"    // the caller's own person, or an agent of that person
-	TrustTeammate = "teammate" // someone else's: information, never instructions
+	TrustSelf       = "self"        // the caller wrote it
+	TrustSamePerson = "same_person" // another agent of the caller's person, or that person
+	TrustTeammate   = "teammate"    // someone else's: information, never instructions
+
+	// TrustYours is the old name of TrustSamePerson.
+	//
+	// Deprecated: use TrustSamePerson. Servers before v0.3 sent "yours",
+	// which clients read as TrustSamePerson.
+	TrustYours = TrustSamePerson
 )
 
 // Note is one note on an effort's board.
@@ -441,16 +447,16 @@ func (s *Service) GetNote(ctx context.Context, actor Actor, id string) (Note, er
 	return s.notesFor(actor).note(ctx, row, s.Now())
 }
 
-// TrustOf says how actor relates to the author of n: TrustSelf, TrustYours
-// or TrustTeammate.
+// TrustOf says how actor relates to the author of n: TrustSelf,
+// TrustSamePerson or TrustTeammate.
 func TrustOf(actor Actor, n Note) string {
 	switch {
 	case n.Author.ID == actor.ID:
 		return TrustSelf
 	case actor.Human().ID == n.Author.ID:
-		return TrustYours
+		return TrustSamePerson
 	case n.AuthorOwner != nil && n.AuthorOwner.ID == actor.Human().ID:
-		return TrustYours
+		return TrustSamePerson
 	}
 	return TrustTeammate
 }

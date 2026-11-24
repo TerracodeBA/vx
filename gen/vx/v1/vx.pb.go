@@ -4684,7 +4684,8 @@ type Note struct {
 	AnswerBy  string                 `protobuf:"bytes,11,opt,name=answer_by,json=answerBy,proto3" json:"answer_by,omitempty"` // questions: deadline, RFC 3339
 	CreatedAt string                 `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// How the caller relates to the author: "self" (the caller wrote it),
-	// "yours" (the caller's own person or one of that person's agents),
+	// "same_person" (the caller's own person or another of that person's
+	// agents; servers before v0.3 sent "yours"),
 	// "teammate" (someone else's). Clients show it next to the note.
 	Trust         string `protobuf:"bytes,13,opt,name=trust,proto3" json:"trust,omitempty"`
 	Supersedes    string `protobuf:"bytes,14,opt,name=supersedes,proto3" json:"supersedes,omitempty"`                         // id of the note this one replaces
@@ -5881,7 +5882,7 @@ type Claim struct {
 	Reason        string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`                              // at most 300 characters; information, never instructions
 	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ExpiresAt     string                 `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	Trust         string                 `protobuf:"bytes,10,opt,name=trust,proto3" json:"trust,omitempty"` // self, yours or teammate, as for notes
+	Trust         string                 `protobuf:"bytes,10,opt,name=trust,proto3" json:"trust,omitempty"` // self, same_person or teammate, as for notes
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
