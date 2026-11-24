@@ -15,6 +15,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/rules"
 	"github.com/TerracodeBA/vx/internal/workcopy"
 )
 
@@ -347,7 +348,7 @@ func (a *App) writeRebaseConflicts(ctx context.Context, c *client.Client, wc *wo
 	}
 	mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, base, change, onto, merge.Labels{
 		Base: "base " + parent, Ours: "change " + rb.StoppedAt.ChangeId, Theirs: ontoLabel + " (rebased)",
-	})
+	}, rules.MergeOptions(ctx, wc.Objects, change, onto)...)
 	if err != nil {
 		return err
 	}
@@ -369,6 +370,12 @@ func (a *App) writeRebaseConflicts(ctx context.Context, c *client.Client, wc *wo
 		if !cf.Ours.Hash.IsZero() {
 			fix = append(fix, object.Change{Path: cf.Path, Op: object.OpModify, New: cf.Ours})
 		}
+	}
+	// Generated files both sides changed merged to the change's version
+	// already; they still need regenerating.
+	for _, g := range mr.Generated {
+		conflicts = append(conflicts, g.Path)
+		gen = append(gen, g.Path)
 	}
 	if len(fix) > 0 {
 		if tree, err = object.ApplyChanges(ctx, wc.Objects, tree, fix); err != nil {

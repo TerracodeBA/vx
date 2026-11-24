@@ -20,6 +20,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
+	"github.com/TerracodeBA/vx/internal/rules"
 	"github.com/TerracodeBA/vx/internal/workcopy"
 )
 
@@ -350,11 +351,21 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 // printWarnings shows problems the server found in a landed or planned
 // tree. They did not stop anything, so they come after the result.
 func (a *App) printWarnings(ws []*vxv1.Warning) {
+	code, generated := false, false
 	for _, w := range ws {
 		a.printf("Warning: %s\n", w.Detail)
+		switch engine.WarningKind(w.Kind) {
+		case engine.WarningDuplicate, engine.WarningParse:
+			code = true
+		case engine.WarningGenerated:
+			generated = true
+		}
 	}
-	if len(ws) > 0 {
+	if code {
 		a.printf("  The text merged cleanly but the code may not build; fix it in a new change.\n")
+	}
+	if generated {
+		a.printf("  vx did not merge generated files that both sides changed; regenerate them and land the result.\n")
 	}
 }
 
@@ -472,14 +483,15 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	result := theirs
 	var conflicts []engine.Conflict
 	var keptBoth []string
+	var generated []engine.GeneratedFile
 	if len(local) > 0 {
 		mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, wc.Config.BaseTreeHash(), ours, theirs, merge.Labels{
 			Base: "base " + short(wc.Config.Base), Ours: "local", Theirs: "effort " + short(head),
-		})
+		}, rules.MergeOptions(ctx, wc.Objects, ours, theirs)...)
 		if err != nil {
 			return syncResult{}, err
 		}
-		result, conflicts, keptBoth = mr.Tree, mr.Conflicts, mr.KeptBoth
+		result, conflicts, keptBoth, generated = mr.Tree, mr.Conflicts, mr.KeptBoth, mr.Generated
 	}
 	incoming, err := object.DiffTrees(ctx, wc.Objects, ours, result)
 	if err != nil {
@@ -507,12 +519,24 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	a.printPaths("Merged with your edits", merged)
 	a.printKeptBoth(keptBoth)
 	warnings := syncWarnings(ctx, wc, result, local, incoming, conflicts)
+	dups := len(warnings) > 0
 	for _, w := range warnings {
 		a.printf("Warning: %s\n", w.Detail)
 	}
-	if len(warnings) > 0 {
+	if dups {
 		a.printf("  The text merged cleanly but the code will not build: your edits and the incoming changes both declare it. Remove one before landing.\n")
 	}
+	more := engine.GeneratedWarnings(generated)
+	if len(local) > 0 {
+		more = append(more, syncRuleWarnings(ctx, wc, theirs, result)...)
+	}
+	for _, w := range more {
+		a.printf("Warning: %s\n", w.Detail)
+	}
+	if len(generated) > 0 {
+		a.printf("  Both you and the effort changed generated files; vx kept yours. Regenerate them before landing.\n")
+	}
+	warnings = append(warnings, more...)
 	return syncResult{head: head, updated: len(incoming), local: len(local), conflicts: conflicts, merged: merged, keptBoth: keptBoth, warnings: warnings}, nil
 }
 
@@ -546,6 +570,21 @@ func syncWarnings(ctx context.Context, wc *workcopy.WorkingCopy, tree hash.Hash,
 		}
 	}
 	return out
+}
+
+// syncRuleWarnings checks the merged working copy against its vx.toml:
+// [[unique]] keys your local changes share with the effort (two
+// migrations with the same number). The check never fails a sync.
+func syncRuleWarnings(ctx context.Context, wc *workcopy.WorkingCopy, effort, merged hash.Hash) []engine.Warning {
+	r, err := rules.At(ctx, wc.Objects, merged)
+	if err != nil {
+		return nil
+	}
+	ws, err := rules.Check(ctx, wc.Objects, r, effort, merged)
+	if err != nil {
+		return nil
+	}
+	return ws
 }
 
 // printPaths prints "LABEL: PATH" for one path, or LABEL and an indented

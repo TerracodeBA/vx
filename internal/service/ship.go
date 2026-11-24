@@ -89,6 +89,7 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 	}
 	plan := ShipPlan{Repo: v.Repo, Effort: v.Effort, Target: target, TargetHead: head, Branch: "vx/" + v.Effort.Slug}
 	cur := head.Tree
+	var generated []engine.GeneratedFile
 	for i := len(chain) - 1; i >= 0; i-- {
 		c := chain[i]
 		if c.Origin != object.OriginVX {
@@ -100,7 +101,8 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 		}
 		next := c.Tree
 		if parent.Tree != cur {
-			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur, merge.Labels{Base: "base", Ours: c.ChangeID, Theirs: target})
+			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur, merge.Labels{Base: "base", Ours: c.ChangeID, Theirs: target},
+				s.mergeOptions(ctx, c.Tree, cur)...)
 			if err != nil {
 				return ShipPlan{}, err
 			}
@@ -114,6 +116,7 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 				return ShipPlan{}, err
 			}
 			next = mr.Tree
+			generated = append(generated, mr.Generated...)
 		}
 		changes, err := object.DiffTrees(ctx, s.Blobs, cur, next)
 		if err != nil {
@@ -131,6 +134,8 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 			return ShipPlan{}, err
 		}
 		plan.Warnings = s.treeWarnings(ctx, cur, changes)
+		plan.Warnings = append(plan.Warnings, engine.GeneratedWarnings(uniqueGenerated(generated))...)
+		plan.Warnings = append(plan.Warnings, s.ruleWarnings(ctx, head.Tree, cur)...)
 	}
 	plan.Title = v.Effort.Name
 	plan.Body = prBody(plan)
@@ -351,6 +356,12 @@ func prBody(p ShipPlan) string {
 		b.WriteString(strings.Join(checks, "\n"))
 		b.WriteString("\n")
 	}
+	if len(p.Warnings) > 0 {
+		b.WriteString("\n## Warnings\n\n")
+		for _, w := range p.Warnings {
+			fmt.Fprintf(&b, "- %s\n", w.Detail)
+		}
+	}
 	fmt.Fprintf(&b, "\n---\nBuilt in vx effort `%s` by %d agent(s)", p.Effort.Slug, len(agents))
 	if len(people) > 0 {
 		fmt.Fprintf(&b, " for %d person(s)", len(people))
@@ -371,4 +382,20 @@ func short(sha string) string {
 		return sha[:12]
 	}
 	return sha
+}
+
+// uniqueGenerated keeps the last report of each generated path (a file
+// several replayed changes touched is listed once).
+func uniqueGenerated(gs []engine.GeneratedFile) []engine.GeneratedFile {
+	idx := map[string]int{}
+	var out []engine.GeneratedFile
+	for _, g := range gs {
+		if i, ok := idx[g.Path]; ok {
+			out[i] = g
+			continue
+		}
+		idx[g.Path] = len(out)
+		out = append(out, g)
+	}
+	return out
 }
