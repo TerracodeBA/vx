@@ -56,7 +56,7 @@ func (a *App) cloneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := c.FetchTree(ctx, wc.Objects, tree); err != nil {
+			if err := c.FetchTree(ctx, repo, wc.Objects, tree); err != nil {
 				return err
 			}
 			files, err := object.DiffTrees(ctx, wc.Objects, hash.Zero, tree)

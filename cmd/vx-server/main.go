@@ -149,12 +149,68 @@ func root() *cobra.Command {
 			return nil
 		},
 	}
+	var backfillRepo string
+	backfill := &cobra.Command{
+		Use:   "backfill-objects",
+		Short: "Record which objects belong to which repository, for data from before v0.2",
+		Long: `Objects are served only through repositories they are part of. Repositories
+created before v0.2 have their objects indexed once: the server does it on
+start, in the background, and on first use of each repository. This command
+does the same by hand: every queued repository, or one with --repo (walked
+again even when already indexed). It is safe to run while the server runs.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			st, err := openMigrated(ctx, dbURL)
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			blobs, err := blob.NewDisk(filepath.Join(dataDir, "objects"))
+			if err != nil {
+				return err
+			}
+			svc := service.New(st, blobs, nil)
+			log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+			var done []service.BackfillStats
+			switch {
+			case backfillRepo != "":
+				repo, err := st.RepoByName(ctx, backfillRepo)
+				if err != nil {
+					return fmt.Errorf("repo %s: %w", backfillRepo, err)
+				}
+				s, err := svc.BackfillRepoObjects(ctx, repo.ID, true, log)
+				if err != nil {
+					return err
+				}
+				done = append(done, s)
+			default:
+				if done, err = svc.BackfillObjects(ctx, log); err != nil {
+					return err
+				}
+			}
+			if len(done) == 0 {
+				fmt.Println("No repository needed an object backfill.")
+				return nil
+			}
+			for _, s := range done {
+				fmt.Printf("%s: %d changesets, %d objects recorded", s.Repo, s.Changesets, s.Objects)
+				if s.Skipped > 0 {
+					fmt.Printf(", %d trees missing from the object store", s.Skipped)
+				}
+				fmt.Println()
+			}
+			return nil
+		},
+	}
+	backfill.Flags().StringVar(&backfillRepo, "repo", "", "only this repository (OWNER/NAME), even if already indexed")
+
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the vx-server version",
 		Run:   func(*cobra.Command, []string) { fmt.Println("vx-server " + version.String()) },
 	}
-	cmd.AddCommand(serve, migrate, userAdd, tokenCreate, versionCmd)
+	cmd.AddCommand(serve, migrate, userAdd, tokenCreate, backfill, versionCmd)
 	return cmd
 }
 

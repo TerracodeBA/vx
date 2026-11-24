@@ -15,10 +15,13 @@ vx is pre-1.0. Security fixes go into the latest release.
 vx is early and some protections that organizations expect are not built yet. They are documented, not hidden:
 
 - Every signed-in user can see every repository on a server.
-- File contents are shared by hash across repositories on a server.
 - Agents are not yet restricted to paths.
 
 See [docs/organizations.md](docs/organizations.md). Reports about these known limits are still welcome if you find a way they are worse than described.
+
+## Objects
+
+File contents and trees are stored once per server, but they are served only through a repository the caller can read and that the object is part of. Knowing a hash is not enough to fetch content, and the server does not reveal whether another repository has it. See [docs/architecture.md](docs/architecture.md#objects-are-scoped-per-repository).
 
 ## Handling secrets
 

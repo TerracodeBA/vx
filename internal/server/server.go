@@ -69,6 +69,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	}
 	svc := service.New(st, blobs, up)
+	// Repositories from before objects were scoped to repositories get their
+	// objects indexed: queue them now, so object requests for them wait for
+	// their backfill, and walk them in the background once serving.
+	if n, err := st.QueueObjectBackfills(ctx); err != nil {
+		st.Close()
+		return nil, fmt.Errorf("queue object backfill: %w", err)
+	} else if n > 0 {
+		log.Info("queued repositories for object backfill", "count", n)
+	}
 	mux := http.NewServeMux()
 	api.Mount(mux, svc)
 	mcp.Mount(mux, svc, log)
@@ -101,6 +110,9 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
+	if s.Service != nil {
+		go s.backfillObjects(ctx)
+	}
 	s.log.Info("vx server listening", "addr", addr)
 	select {
 	case err := <-errc:
@@ -120,6 +132,20 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	}
 	s.log.Info("vx server stopped")
 	return nil
+}
+
+// backfillObjects indexes the objects of repositories queued for a
+// backfill, one repository at a time. Requests for a queued repository
+// backfill it on demand, so they do not wait for the others.
+func (s *Server) backfillObjects(ctx context.Context) {
+	done, err := s.Service.BackfillObjects(ctx, s.log)
+	if err != nil && ctx.Err() == nil {
+		s.log.Error("object backfill stopped; it resumes on the next start or on first use of each repository", "err", err)
+		return
+	}
+	if len(done) > 0 {
+		s.log.Info("object backfill finished", "repos", len(done))
+	}
 }
 
 // shutdownGrace is how long in-flight requests get to finish on shutdown.

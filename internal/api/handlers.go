@@ -11,7 +11,6 @@ import (
 	vxv1 "github.com/TerracodeBA/vx/gen/vx/v1"
 	"github.com/TerracodeBA/vx/gen/vx/v1/vxv1connect"
 	"github.com/TerracodeBA/vx/internal/hash"
-	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -145,19 +144,17 @@ func (h *Handlers) MissingObjects(ctx context.Context, req *connect.Request[vxv1
 	if len(req.Msg.Hashes) > 50*MaxObjectsPerCall {
 		return nil, invalid(fmt.Errorf("at most %d hashes per call", 50*MaxObjectsPerCall))
 	}
-	out := &vxv1.MissingObjectsResponse{}
-	for _, s := range req.Msg.Hashes {
-		hh, err := parseHash("hash", s)
-		if err != nil {
-			return nil, invalid(err)
-		}
-		ok, err := h.svc.Blobs.Has(ctx, hh)
-		if err != nil {
-			return nil, toConnect(err)
-		}
-		if !ok {
-			out.Missing = append(out.Missing, s)
-		}
+	hashes, err := parseHashes(req.Msg.Hashes)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	missing, err := h.svc.MissingObjects(ctx, actorFrom(ctx), req.Msg.Repo, hashes)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.MissingObjectsResponse{Missing: make([]string, 0, len(missing))}
+	for _, m := range missing {
+		out.Missing = append(out.Missing, m.String())
 	}
 	return connect.NewResponse(out), nil
 }
@@ -166,24 +163,24 @@ func (h *Handlers) PutObjects(ctx context.Context, req *connect.Request[vxv1.Put
 	if len(req.Msg.Objects) > MaxObjectsPerCall {
 		return nil, invalid(fmt.Errorf("at most %d objects per call", MaxObjectsPerCall))
 	}
-	out := &vxv1.PutObjectsResponse{}
+	objs := make([]service.Object, 0, len(req.Msg.Objects))
 	for _, o := range req.Msg.Objects {
-		kind := hash.Kind(o.Kind)
-		if kind != hash.KindBlob && kind != hash.KindTree {
-			return nil, invalid(fmt.Errorf("object kind must be blob or tree, got %q", o.Kind))
-		}
-		if kind == hash.KindTree {
-			if err := validTree(o.Data); err != nil {
+		obj := service.Object{Kind: hash.Kind(o.Kind), Data: o.Data}
+		if o.Hash != "" {
+			hh, err := parseHash("hash", o.Hash)
+			if err != nil {
 				return nil, invalid(err)
 			}
+			obj.Hash = hh
 		}
-		hh, err := h.svc.Blobs.Put(ctx, kind, o.Data)
-		if err != nil {
-			return nil, toConnect(err)
-		}
-		if o.Hash != "" && o.Hash != hh.String() {
-			return nil, invalid(fmt.Errorf("object hash mismatch: client says %s, content is %s", o.Hash, hh))
-		}
+		objs = append(objs, obj)
+	}
+	hashes, err := h.svc.PutObjects(ctx, actorFrom(ctx), req.Msg.Repo, objs)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.PutObjectsResponse{Hashes: make([]string, 0, len(hashes))}
+	for _, hh := range hashes {
 		out.Hashes = append(out.Hashes, hh.String())
 	}
 	return connect.NewResponse(out), nil
@@ -193,25 +190,32 @@ func (h *Handlers) GetObjects(ctx context.Context, req *connect.Request[vxv1.Get
 	if len(req.Msg.Hashes) > MaxObjectsPerCall {
 		return nil, invalid(fmt.Errorf("at most %d objects per call", MaxObjectsPerCall))
 	}
-	out := &vxv1.GetObjectsResponse{}
-	size := 0
-	for _, s := range req.Msg.Hashes {
-		hh, err := parseHash("hash", s)
-		if err != nil {
-			return nil, invalid(err)
-		}
-		kind, data, err := h.svc.Blobs.Get(ctx, hh)
-		if err != nil {
-			return nil, toConnect(service.Classify(err))
-		}
-		size += len(data)
-		if size > MaxMessageBytes-(1<<20) && len(out.Objects) > 0 {
-			// The client asks again for what did not fit.
-			break
-		}
-		out.Objects = append(out.Objects, &vxv1.Object{Kind: string(kind), Data: data, Hash: s})
+	hashes, err := parseHashes(req.Msg.Hashes)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	// The client asks again for what did not fit.
+	objs, err := h.svc.GetObjects(ctx, actorFrom(ctx), req.Msg.Repo, hashes, MaxMessageBytes-(1<<20))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.GetObjectsResponse{Objects: make([]*vxv1.Object, 0, len(objs))}
+	for _, o := range objs {
+		out.Objects = append(out.Objects, &vxv1.Object{Kind: string(o.Kind), Data: o.Data, Hash: o.Hash.String()})
 	}
 	return connect.NewResponse(out), nil
+}
+
+func parseHashes(in []string) ([]hash.Hash, error) {
+	out := make([]hash.Hash, 0, len(in))
+	for _, s := range in {
+		hh, err := parseHash("hash", s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, hh)
+	}
+	return out, nil
 }
 
 // ---------- Repos ----------
@@ -429,12 +433,4 @@ func (h *Handlers) Abandon(ctx context.Context, req *connect.Request[vxv1.Abando
 		return nil, toConnect(err)
 	}
 	return connect.NewResponse(&vxv1.AbandonResponse{Workspace: h.workspaceResp(ctx, v)}), nil
-}
-
-// validTree rejects malformed tree objects before they are stored.
-func validTree(data []byte) error {
-	if _, err := object.DecodeTree(data); err != nil {
-		return fmt.Errorf("invalid tree object: %w", err)
-	}
-	return nil
 }

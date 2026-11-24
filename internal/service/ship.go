@@ -110,6 +110,9 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 				plan.ConflictedAt = &cc
 				break
 			}
+			if err := s.recordTree(ctx, v.Repo.ID, cur, mr.Tree); err != nil {
+				return ShipPlan{}, err
+			}
 			next = mr.Tree
 		}
 		changes, err := object.DiffTrees(ctx, s.Blobs, cur, next)

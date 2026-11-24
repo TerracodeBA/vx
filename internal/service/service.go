@@ -86,7 +86,8 @@ type Service struct {
 	// land into the same effort at once.
 	MaxLandAttempts int
 
-	logins loginCodes // one-time web sign-in codes (vx ui)
+	logins  loginCodes  // one-time web sign-in codes (vx ui)
+	objects objectIndex // repositories whose objects need no backfill
 }
 
 // New returns a Service with defaults filled in.

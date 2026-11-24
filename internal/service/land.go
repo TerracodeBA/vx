@@ -83,7 +83,7 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (LandResu
 	if err != nil {
 		return LandResult{}, classify(err)
 	}
-	if err := s.checkUploaded(ctx, base.Tree, in.Tree); err != nil {
+	if err := s.checkInRepo(ctx, v.Repo, base.Tree, in.Tree); err != nil {
 		return LandResult{}, err
 	}
 	intent := strings.TrimSpace(in.Intent)
@@ -136,6 +136,11 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		if !mr.Clean() {
 			res.Conflicts = mr.Conflicts
 			return res, nil
+		}
+		// The merge made new trees and blobs from the repository's own
+		// objects: they are part of it now.
+		if err := s.recordTree(ctx, v.Repo.ID, head.Tree, mr.Tree); err != nil {
+			return LandResult{}, err
 		}
 		newTree = mr.Tree
 		res.Rebased = true
@@ -250,41 +255,6 @@ func storeWarnings(ws []engine.Warning) []store.Warning {
 		out = append(out, store.Warning{Path: w.Path, Kind: string(w.Kind), Name: w.Name, Decl: w.Decl, Files: w.Files, Detail: w.Detail})
 	}
 	return out
-}
-
-// checkUploaded verifies every tree and blob the snapshot adds over base is
-// in the blob store, so a land never references missing content.
-func (s *Service) checkUploaded(ctx context.Context, baseTree, tree hash.Hash) error {
-	if tree.IsZero() {
-		return errf(CodeInvalid, "land needs a snapshot tree")
-	}
-	changes, err := object.DiffTrees(ctx, s.Blobs, baseTree, tree)
-	if errors.Is(err, blob.ErrNotFound) {
-		return errf(CodeFailedPrecondition, "snapshot trees are missing on the server: upload objects first (%v)", err)
-	}
-	if err != nil {
-		return err
-	}
-	var missing []string
-	for _, c := range changes {
-		if c.Op == object.OpDelete {
-			continue
-		}
-		ok, err := s.Blobs.Has(ctx, c.New.Hash)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			missing = append(missing, c.Path)
-		}
-	}
-	if len(missing) > 0 {
-		if len(missing) > 5 {
-			missing = append(missing[:5], fmt.Sprintf("and %d more", len(missing)-5))
-		}
-		return errf(CodeFailedPrecondition, "file contents missing on the server: %s", strings.Join(missing, ", "))
-	}
-	return nil
 }
 
 // lineStats counts added and deleted lines for each change.

@@ -375,9 +375,19 @@ func (c *converter) remember(g plumbing.Hash, v hash.Hash, kind string) {
 	c.pending = append(c.pending, store.GitObject{GitHash: g.String(), VXHash: v, Kind: kind})
 }
 
+// flush saves the git mappings and records the converted objects as part
+// of the repo, so they are served through it. Objects reused from earlier
+// imports of the same repo were recorded then.
 func (c *converter) flush(ctx context.Context) error {
 	for len(c.pending) > 0 {
 		n := min(len(c.pending), 5000)
+		hashes := make([]hash.Hash, 0, n)
+		for _, g := range c.pending[:n] {
+			hashes = append(hashes, g.VXHash)
+		}
+		if err := c.b.Store.AddRepoObjects(ctx, c.repoID, hashes); err != nil {
+			return err
+		}
 		if err := c.b.Store.SaveGitObjects(ctx, c.repoID, c.pending[:n]); err != nil {
 			return err
 		}

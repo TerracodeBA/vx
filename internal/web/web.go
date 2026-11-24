@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
@@ -550,7 +549,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	tasks := u.tasks(r, actor, repoName, slug)
 	var allFiles []changedFile
 	if changesView {
-		if allFiles, err = u.allChanges(r, v.Repo, v.Effort, entries, color); err != nil {
+		if allFiles, err = u.allChanges(r, actor, v.Repo, v.Effort, entries, color); err != nil {
 			u.fail(w, err)
 			return
 		}
@@ -646,8 +645,12 @@ type changedFile struct {
 }
 
 // allChanges is the effort's combined diff from its base to its head.
-func (u *UI) allChanges(r *http.Request, repo store.Repo, e store.Effort, entries []service.LogEntry, color map[string]int) ([]changedFile, error) {
+func (u *UI) allChanges(r *http.Request, actor service.Actor, repo store.Repo, e store.Effort, entries []service.LogEntry, color map[string]int) ([]changedFile, error) {
 	ctx := r.Context()
+	read, err := u.svc.BlobReader(ctx, actor, repo.ID)
+	if err != nil {
+		return nil, err
+	}
 	base, err := u.svc.Store.GetChangeset(ctx, repo.ID, e.Base)
 	if err != nil {
 		return nil, err
@@ -676,20 +679,13 @@ func (u *UI) allChanges(r *http.Request, repo store.Repo, e store.Effort, entrie
 	for _, c := range changes {
 		cf := changedFile{FileChange: store.FileChange{Change: c}, Agents: touched[c.Path]}
 		if len(changes) <= 300 {
-			a, _ := u.readBlob(r, c.Old.Hash)
-			b, _ := u.readBlob(r, c.New.Hash)
+			a, _ := read(ctx, c.Old.Hash)
+			b, _ := read(ctx, c.New.Hash)
 			cf.Added, cf.Deleted = merge.LineStats(a, b)
 		}
 		out = append(out, cf)
 	}
 	return out, nil
-}
-
-func (u *UI) readBlob(r *http.Request, h hash.Hash) ([]byte, error) {
-	if h.IsZero() {
-		return nil, nil
-	}
-	return blob.GetKind(r.Context(), u.svc.Blobs, hash.KindBlob, h)
 }
 
 // diff renders one file's diff as an HTML fragment, either for one change
@@ -698,6 +694,7 @@ func (u *UI) diff(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 	ctx := r.Context()
 	repoName, path := param(r, "repo"), param(r, "path")
 	var fc store.FileChange
+	var repoID uuid.UUID
 	switch {
 	case param(r, "ref") != "":
 		_, e, err := u.svc.GetChangeset(ctx, actor, repoName, param(r, "ref"))
@@ -705,6 +702,7 @@ func (u *UI) diff(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 			u.fail(w, err)
 			return
 		}
+		repoID = e.RepoID
 		found := false
 		for _, f := range e.Files {
 			if f.Path == path {
@@ -722,6 +720,7 @@ func (u *UI) diff(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 			u.fail(w, err)
 			return
 		}
+		repoID = v.Repo.ID
 		base, err := u.svc.Store.GetChangeset(ctx, v.Repo.ID, v.Effort.Base)
 		if err != nil {
 			u.fail(w, err)
@@ -761,7 +760,12 @@ func (u *UI) diff(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 			fc.New = object.File{Hash: cur.Hash, Mode: cur.Mode}
 		}
 	}
-	fd, err := u.fileDiff(r, fc)
+	read, err := u.svc.BlobReader(ctx, actor, repoID)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
+	fd, err := u.fileDiff(ctx, read, fc)
 	if err != nil {
 		u.fail(w, err)
 		return
@@ -998,10 +1002,15 @@ func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor)
 			effort = &eff
 		}
 	}
+	read, err := u.svc.BlobReader(ctx, actor, e.RepoID)
+	if err != nil {
+		u.fail(w, err)
+		return
+	}
 	var diffs []fileDiff
 	var added, deleted int
 	for _, f := range e.Files {
-		fd, err := u.fileDiff(r, f)
+		fd, err := u.fileDiff(ctx, read, f)
 		if err != nil {
 			u.fail(w, err)
 			return
@@ -1016,19 +1025,15 @@ func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	})
 }
 
-func (u *UI) fileDiff(r *http.Request, f store.FileChange) (fileDiff, error) {
+// fileDiff renders one file's change, reading contents with read (a
+// service.BlobReader for the file's repository).
+func (u *UI) fileDiff(ctx context.Context, read func(context.Context, hash.Hash) ([]byte, error), f store.FileChange) (fileDiff, error) {
 	fd := fileDiff{FileChange: f}
-	read := func(h hash.Hash) ([]byte, error) {
-		if h.IsZero() {
-			return nil, nil
-		}
-		return blob.GetKind(r.Context(), u.svc.Blobs, hash.KindBlob, h)
-	}
-	a, err := read(f.Old.Hash)
+	a, err := read(ctx, f.Old.Hash)
 	if err != nil {
 		return fd, err
 	}
-	b, err := read(f.New.Hash)
+	b, err := read(ctx, f.New.Hash)
 	if err != nil {
 		return fd, err
 	}

@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/TerracodeBA/vx/internal/blob"
-	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/merge"
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
@@ -395,11 +393,15 @@ func (t *tools) diff(ctx context.Context, req *sdk.CallToolRequest, in diffInput
 		return nil, diffOutput{}, invalid("change " + e.ChangeID + " does not touch " + path + "; vx_show lists the files it touched")
 	}
 	out := diffOutput{Path: fc.Path, Op: string(fc.Op)}
-	a, err := t.readBlob(ctx, fc.Old.Hash)
+	read, err := t.svc.BlobReader(ctx, actor, e.RepoID)
 	if err != nil {
 		return nil, diffOutput{}, t.userError("vx_diff", err)
 	}
-	b, err := t.readBlob(ctx, fc.New.Hash)
+	a, err := read(ctx, fc.Old.Hash)
+	if err != nil {
+		return nil, diffOutput{}, t.userError("vx_diff", err)
+	}
+	b, err := read(ctx, fc.New.Hash)
 	if err != nil {
 		return nil, diffOutput{}, t.userError("vx_diff", err)
 	}
@@ -420,13 +422,6 @@ func (t *tools) diff(ctx context.Context, req *sdk.CallToolRequest, in diffInput
 	}
 	out.Diff, out.Truncated = capText(merge.Unified(oldName, newName, a, b, 3), maxDiffBytes)
 	return nil, out, nil
-}
-
-func (t *tools) readBlob(ctx context.Context, h hash.Hash) ([]byte, error) {
-	if h.IsZero() {
-		return nil, nil
-	}
-	return blob.GetKind(ctx, t.svc.Blobs, hash.KindBlob, h)
 }
 
 // ---------- conversion ----------
