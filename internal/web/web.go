@@ -76,7 +76,9 @@ func clearSession(w http.ResponseWriter, r *http.Request) {
 // sameOrigin reports why a state-changing form post must be refused, or ""
 // when it came from a page of this server. It trusts the Origin header and
 // falls back to Referer when a browser sends no Origin; a post with
-// neither is refused, since no browser form sends that.
+// neither is refused, since no browser form sends that. Pages with forms
+// must not use Referrer-Policy no-referrer: browsers then send
+// "Origin: null", which is refused.
 func sameOrigin(r *http.Request) string {
 	src, header := r.Header.Get("Origin"), "Origin"
 	if src == "" {
@@ -250,6 +252,12 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:")
 	w.Header().Set("X-Frame-Options", "DENY")
+	// Links to other sites (GitHub, docs) do not carry vx URLs with repo and
+	// effort names. same-origin, not no-referrer: form posts must keep their
+	// Origin header for checkOrigin.
+	if w.Header().Get("Referrer-Policy") == "" {
+		w.Header().Set("Referrer-Policy", "same-origin")
+	}
 	if err := u.pages[page].Execute(w, data); err != nil {
 		u.log.Error("render", "page", page, "err", err)
 	}
