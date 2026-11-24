@@ -46,4 +46,10 @@ What the first multi-agent runs showed agents need most. Next up: efforts that s
 
 A hosted vx, for teams that do not want to run their own server, is planned alongside v0.2 and v0.3. Self-hosting stays free and fully featured under Apache-2.0.
 
+Before vx Cloud holds code from more than one customer:
+
+- [#33](https://github.com/TerracodeBA/vx/issues/33) Superadmin role for the admin panel, without access to repository content
+- [#40](https://github.com/TerracodeBA/vx/issues/40) Delete an organization and all its data
+- [#41](https://github.com/TerracodeBA/vx/issues/41) Accept the data processing agreement in the app
+
 See [docs/organizations.md](docs/organizations.md) for the reasoning behind this order.
