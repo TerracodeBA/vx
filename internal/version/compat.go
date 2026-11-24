@@ -1,6 +1,7 @@
 package version
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -39,6 +40,14 @@ func Compare(a, b string) (int, bool) {
 	}
 	switch {
 	case pa.pre == pb.pre:
+		// Same release: a build N commits after its tag (git describe)
+		// comes after it.
+		switch {
+		case pa.post < pb.post:
+			return -1, true
+		case pa.post > pb.post:
+			return 1, true
+		}
 		return 0, true
 	case pa.pre == "": // 1.0.0 > 1.0.0-rc.1
 		return 1, true
@@ -51,9 +60,15 @@ func Compare(a, b string) (int, bool) {
 }
 
 type semver struct {
-	n   [3]int
-	pre string
+	n    [3]int
+	pre  string
+	post int // commits after the tag, from git describe (v0.1.0-73-gf389dfe)
 }
+
+// describeSuffix is what git describe appends to a tag: -N-gHASH and
+// optionally -dirty. It means "N commits after this tag", not a
+// pre-release, so v0.1.0-73-gf389dfe is newer than v0.1.0.
+var describeSuffix = regexp.MustCompile(`-(\d+)-g[0-9a-f]{4,40}(-dirty)?$`)
 
 func parse(v string) (semver, bool) {
 	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
@@ -61,6 +76,10 @@ func parse(v string) (semver, bool) {
 		v = v[:i]
 	}
 	var s semver
+	if m := describeSuffix.FindStringSubmatchIndex(v); m != nil {
+		s.post, _ = strconv.Atoi(v[m[2]:m[3]])
+		v = v[:m[0]]
+	}
 	core, pre, _ := strings.Cut(v, "-")
 	s.pre = pre
 	parts := strings.Split(core, ".")
