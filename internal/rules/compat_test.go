@@ -54,7 +54,7 @@ strategy = "ours"
 		`vx.toml line 10: rule [[unique]] "proto-field" uses key "future", which this vx does not know; the rule is ignored: update vx (known: name, glob, key, content, scope)`,
 		`vx.toml line 15: rule [[generated]] "gen/**" uses key "cache", which this vx does not know; the rule is ignored: update vx (known: glob, command)`,
 		`vx.toml line 22: [checks] uses key "parallel", which this vx does not know; ignored: update vx (known: required)`,
-		`vx.toml line 24: table or key "merge" is unknown to this vx; ignored: update vx if it is new (known: [[unique]], [[generated]], [checks], [automation], [[policy]], [files])`,
+		`vx.toml line 24: table or key "merge" is unknown to this vx; ignored: update vx if it is new (known: [[unique]], [[generated]], [checks], [automation], [[policy]], [[check]], [files])`,
 	}
 	if !reflect.DeepEqual(r.Ignored, want) {
 		t.Fatalf("ignored:\n%s\nwant\n%s", strings.Join(r.Ignored, "\n"), strings.Join(want, "\n"))

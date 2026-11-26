@@ -47,6 +47,9 @@ func rulesPB(r service.Rules) *vxv1.RepoRules {
 	for _, p := range r.Policies {
 		out.Policies = append(out.Policies, &vxv1.LandingPolicy{Paths: p.Paths, Mode: string(p.Mode), Require: p.Require, Approvers: p.Approvers, Line: int32(p.Line)})
 	}
+	for _, c := range r.Checks {
+		out.Checks = append(out.Checks, CheckDefPB(c))
+	}
 	return out
 }
 

@@ -31,7 +31,7 @@ const verifiedAttempts = 3
 func (a *App) landCmd() *cobra.Command {
 	var intent, model, session string
 	var checks, runs, dependsOn, newTests []string
-	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh, noReuse, allowBinary bool
+	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh, noReuse, keepGoing, allowBinary bool
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land your changes into the effort",
@@ -58,9 +58,18 @@ effort. Any change to the files, including a sync that brought in others'
 work, runs every command again: a check reads the whole tree, so only a
 run on exactly what lands describes it. --no-reuse always runs them.
 
-A failed command prints its last 30 lines of output; the full output of
-each command is in .vx/last-check-N.log (N: its place among the --run
-flags).
+The commands run cheapest first (by the time each took when it last ran
+in this working copy) and stop at the first failure; --keep-going runs
+them all. A failed command prints its failing lines: for Go tests the
+--- FAIL blocks, panics and FAIL lines of each package, otherwise its last
+30 lines; then one line says how many failed ("1 of 3 checks failed:
+..."). The full output of each command is in .vx/last-check-N.log (N: its
+place among the --run flags).
+
+vx.toml [[check]] tables may say that some checks block land: a change
+they apply to lands only with a passing result on exactly its files,
+from vx land --run (run checks), vx check run or vx check report. See
+vx check status and docs/checks.md.
 
 --check records a result you report yourself; it is marked as reported:
   vx land --check "go test ./...=pass:142"
@@ -210,7 +219,7 @@ the result.`,
 				}
 				// Stop the checks when someone lands meanwhile, except on
 				// the last attempt, which lands merged if it has to.
-				run, err := a.runChecks(ctx, c, wc, runs, checkOptions{stopIfMoved: attempt < verifiedAttempts, reuse: !noReuse})
+				run, err := a.runChecks(ctx, c, wc, runs, checkOptions{stopIfMoved: attempt < verifiedAttempts, reuse: !noReuse, keepGoing: keepGoing || allowFailing})
 				if err != nil {
 					return err
 				}
@@ -256,6 +265,7 @@ the result.`,
 	cmd.Flags().BoolVar(&fresh, "fresh", false, "ignore the evidence flags saved from an interrupted land")
 	cmd.Flags().BoolVar(&a.noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files a merge kept from one side")
 	cmd.Flags().BoolVar(&noReuse, "no-reuse", false, "with --run: run every command, even one that already passed on exactly these files")
+	cmd.Flags().BoolVar(&keepGoing, "keep-going", false, "with --run: run every command even after one failed (default: stop at the first failure)")
 	return cmd
 }
 

@@ -251,7 +251,7 @@ func TestMCPListsTools(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	want := []string{"vx_answer", "vx_ask", "vx_board", "vx_check_job", "vx_check_jobs", "vx_check_next", "vx_check_release", "vx_check_renew", "vx_check_request", "vx_claim", "vx_claims", "vx_context", "vx_diff", "vx_efforts", "vx_inbox", "vx_log", "vx_overlaps", "vx_post_note", "vx_release", "vx_reserve", "vx_rules", "vx_show", "vx_status", "vx_task_add", "vx_task_update", "vx_tasks", "vx_whoami"}
+	want := []string{"vx_answer", "vx_ask", "vx_board", "vx_check_job", "vx_check_jobs", "vx_check_next", "vx_check_release", "vx_check_renew", "vx_check_report", "vx_check_request", "vx_check_show", "vx_check_status", "vx_claim", "vx_claims", "vx_context", "vx_diff", "vx_efforts", "vx_inbox", "vx_log", "vx_overlaps", "vx_post_note", "vx_release", "vx_reserve", "vx_rules", "vx_show", "vx_status", "vx_task_add", "vx_task_update", "vx_tasks", "vx_whoami"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
