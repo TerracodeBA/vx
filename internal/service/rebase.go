@@ -346,7 +346,7 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 			return hash.Zero, nil, err
 		}
 		if parent.Tree != cur.Tree {
-			mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur.Tree, rebaseLabels(c, r), s.mergeOptions(ctx, c.Tree, cur.Tree)...)
+			mr, err := engine.MergeTrees(ctx, s.repoWrites(repo.ID), parent.Tree, c.Tree, cur.Tree, rebaseLabels(c, r), s.mergeOptions(ctx, c.Tree, cur.Tree)...)
 			if err != nil {
 				return hash.Zero, nil, err
 			}
