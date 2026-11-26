@@ -52,7 +52,14 @@ func (s *Service) objectRepo(ctx context.Context, actor Actor, repo string, need
 	if strings.TrimSpace(repo) == "" {
 		return store.Repo{}, errf(CodeFailedPrecondition, MsgClientTooOld)
 	}
-	r, _, err := s.Authorize(ctx, actor, repo, need)
+	var r store.Repo
+	var err error
+	if need == RoleRead {
+		// CI tokens read the files their jobs name (checkjobs.go).
+		r, err = s.authorizeCheckRead(ctx, actor, repo)
+	} else {
+		r, _, err = s.Authorize(ctx, actor, repo, need)
+	}
 	if err != nil {
 		return store.Repo{}, err
 	}

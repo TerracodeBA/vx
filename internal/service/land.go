@@ -145,6 +145,7 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (res Land
 				res.Overlaps, err = nil, nil
 			}
 			s.scheduleForecast(v.Repo, v.Effort.ID)
+			s.jobsAfterLand(ctx, v.Repo, v.Effort.ID, res)
 		}
 		return res, err
 	}

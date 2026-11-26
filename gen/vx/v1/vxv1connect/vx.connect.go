@@ -45,6 +45,8 @@ const (
 	RulesServiceName = "vx.v1.RulesService"
 	// ReviewServiceName is the fully-qualified name of the ReviewService service.
 	ReviewServiceName = "vx.v1.ReviewService"
+	// CheckQueueServiceName is the fully-qualified name of the CheckQueueService service.
+	CheckQueueServiceName = "vx.v1.CheckQueueService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -261,6 +263,39 @@ const (
 	// ReviewServiceRejectReviewProcedure is the fully-qualified name of the ReviewService's
 	// RejectReview RPC.
 	ReviewServiceRejectReviewProcedure = "/vx.v1.ReviewService/RejectReview"
+	// CheckQueueServiceRequestCheckProcedure is the fully-qualified name of the CheckQueueService's
+	// RequestCheck RPC.
+	CheckQueueServiceRequestCheckProcedure = "/vx.v1.CheckQueueService/RequestCheck"
+	// CheckQueueServiceNextCheckJobProcedure is the fully-qualified name of the CheckQueueService's
+	// NextCheckJob RPC.
+	CheckQueueServiceNextCheckJobProcedure = "/vx.v1.CheckQueueService/NextCheckJob"
+	// CheckQueueServiceGetCheckJobProcedure is the fully-qualified name of the CheckQueueService's
+	// GetCheckJob RPC.
+	CheckQueueServiceGetCheckJobProcedure = "/vx.v1.CheckQueueService/GetCheckJob"
+	// CheckQueueServiceRenewCheckJobProcedure is the fully-qualified name of the CheckQueueService's
+	// RenewCheckJob RPC.
+	CheckQueueServiceRenewCheckJobProcedure = "/vx.v1.CheckQueueService/RenewCheckJob"
+	// CheckQueueServiceReleaseCheckJobProcedure is the fully-qualified name of the CheckQueueService's
+	// ReleaseCheckJob RPC.
+	CheckQueueServiceReleaseCheckJobProcedure = "/vx.v1.CheckQueueService/ReleaseCheckJob"
+	// CheckQueueServiceListCheckJobsProcedure is the fully-qualified name of the CheckQueueService's
+	// ListCheckJobs RPC.
+	CheckQueueServiceListCheckJobsProcedure = "/vx.v1.CheckQueueService/ListCheckJobs"
+	// CheckQueueServiceGetAgentRunnerProcedure is the fully-qualified name of the CheckQueueService's
+	// GetAgentRunner RPC.
+	CheckQueueServiceGetAgentRunnerProcedure = "/vx.v1.CheckQueueService/GetAgentRunner"
+	// CheckQueueServiceSetAgentRunnerProcedure is the fully-qualified name of the CheckQueueService's
+	// SetAgentRunner RPC.
+	CheckQueueServiceSetAgentRunnerProcedure = "/vx.v1.CheckQueueService/SetAgentRunner"
+	// CheckQueueServiceCreateCITokenProcedure is the fully-qualified name of the CheckQueueService's
+	// CreateCIToken RPC.
+	CheckQueueServiceCreateCITokenProcedure = "/vx.v1.CheckQueueService/CreateCIToken"
+	// CheckQueueServiceListCITokensProcedure is the fully-qualified name of the CheckQueueService's
+	// ListCITokens RPC.
+	CheckQueueServiceListCITokensProcedure = "/vx.v1.CheckQueueService/ListCITokens"
+	// CheckQueueServiceRevokeCITokenProcedure is the fully-qualified name of the CheckQueueService's
+	// RevokeCIToken RPC.
+	CheckQueueServiceRevokeCITokenProcedure = "/vx.v1.CheckQueueService/RevokeCIToken"
 )
 
 // AuthServiceClient is a client for the vx.v1.AuthService service.
@@ -3095,4 +3130,344 @@ func (UnimplementedReviewServiceHandler) ApproveReview(context.Context, *connect
 
 func (UnimplementedReviewServiceHandler) RejectReview(context.Context, *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.RejectReview is not implemented"))
+}
+
+// CheckQueueServiceClient is a client for the vx.v1.CheckQueueService service.
+type CheckQueueServiceClient interface {
+	// Make a job for a check with a runner, on the effort head or one change.
+	RequestCheck(context.Context, *connect.Request[v1.RequestCheckRequest]) (*connect.Response[v1.RequestCheckResponse], error)
+	// Take the oldest job the caller may run, with a lease; no job: empty.
+	NextCheckJob(context.Context, *connect.Request[v1.NextCheckJobRequest]) (*connect.Response[v1.NextCheckJobResponse], error)
+	GetCheckJob(context.Context, *connect.Request[v1.GetCheckJobRequest]) (*connect.Response[v1.GetCheckJobResponse], error)
+	RenewCheckJob(context.Context, *connect.Request[v1.RenewCheckJobRequest]) (*connect.Response[v1.RenewCheckJobResponse], error)
+	// Give a leased job back without counting an attempt.
+	ReleaseCheckJob(context.Context, *connect.Request[v1.ReleaseCheckJobRequest]) (*connect.Response[v1.ReleaseCheckJobResponse], error)
+	ListCheckJobs(context.Context, *connect.Request[v1.ListCheckJobsRequest]) (*connect.Response[v1.ListCheckJobsResponse], error)
+	// Which runner kinds an agent serves (set by its person).
+	GetAgentRunner(context.Context, *connect.Request[v1.GetAgentRunnerRequest]) (*connect.Response[v1.GetAgentRunnerResponse], error)
+	SetAgentRunner(context.Context, *connect.Request[v1.SetAgentRunnerRequest]) (*connect.Response[v1.SetAgentRunnerResponse], error)
+	// CI tokens: service principals that only report results on one repository.
+	CreateCIToken(context.Context, *connect.Request[v1.CreateCITokenRequest]) (*connect.Response[v1.CreateCITokenResponse], error)
+	ListCITokens(context.Context, *connect.Request[v1.ListCITokensRequest]) (*connect.Response[v1.ListCITokensResponse], error)
+	RevokeCIToken(context.Context, *connect.Request[v1.RevokeCITokenRequest]) (*connect.Response[v1.RevokeCITokenResponse], error)
+}
+
+// NewCheckQueueServiceClient constructs a client for the vx.v1.CheckQueueService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewCheckQueueServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CheckQueueServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	checkQueueServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CheckQueueService").Methods()
+	return &checkQueueServiceClient{
+		requestCheck: connect.NewClient[v1.RequestCheckRequest, v1.RequestCheckResponse](
+			httpClient,
+			baseURL+CheckQueueServiceRequestCheckProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("RequestCheck")),
+			connect.WithClientOptions(opts...),
+		),
+		nextCheckJob: connect.NewClient[v1.NextCheckJobRequest, v1.NextCheckJobResponse](
+			httpClient,
+			baseURL+CheckQueueServiceNextCheckJobProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("NextCheckJob")),
+			connect.WithClientOptions(opts...),
+		),
+		getCheckJob: connect.NewClient[v1.GetCheckJobRequest, v1.GetCheckJobResponse](
+			httpClient,
+			baseURL+CheckQueueServiceGetCheckJobProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("GetCheckJob")),
+			connect.WithClientOptions(opts...),
+		),
+		renewCheckJob: connect.NewClient[v1.RenewCheckJobRequest, v1.RenewCheckJobResponse](
+			httpClient,
+			baseURL+CheckQueueServiceRenewCheckJobProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("RenewCheckJob")),
+			connect.WithClientOptions(opts...),
+		),
+		releaseCheckJob: connect.NewClient[v1.ReleaseCheckJobRequest, v1.ReleaseCheckJobResponse](
+			httpClient,
+			baseURL+CheckQueueServiceReleaseCheckJobProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("ReleaseCheckJob")),
+			connect.WithClientOptions(opts...),
+		),
+		listCheckJobs: connect.NewClient[v1.ListCheckJobsRequest, v1.ListCheckJobsResponse](
+			httpClient,
+			baseURL+CheckQueueServiceListCheckJobsProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("ListCheckJobs")),
+			connect.WithClientOptions(opts...),
+		),
+		getAgentRunner: connect.NewClient[v1.GetAgentRunnerRequest, v1.GetAgentRunnerResponse](
+			httpClient,
+			baseURL+CheckQueueServiceGetAgentRunnerProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("GetAgentRunner")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentRunner: connect.NewClient[v1.SetAgentRunnerRequest, v1.SetAgentRunnerResponse](
+			httpClient,
+			baseURL+CheckQueueServiceSetAgentRunnerProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("SetAgentRunner")),
+			connect.WithClientOptions(opts...),
+		),
+		createCIToken: connect.NewClient[v1.CreateCITokenRequest, v1.CreateCITokenResponse](
+			httpClient,
+			baseURL+CheckQueueServiceCreateCITokenProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("CreateCIToken")),
+			connect.WithClientOptions(opts...),
+		),
+		listCITokens: connect.NewClient[v1.ListCITokensRequest, v1.ListCITokensResponse](
+			httpClient,
+			baseURL+CheckQueueServiceListCITokensProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("ListCITokens")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeCIToken: connect.NewClient[v1.RevokeCITokenRequest, v1.RevokeCITokenResponse](
+			httpClient,
+			baseURL+CheckQueueServiceRevokeCITokenProcedure,
+			connect.WithSchema(checkQueueServiceMethods.ByName("RevokeCIToken")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// checkQueueServiceClient implements CheckQueueServiceClient.
+type checkQueueServiceClient struct {
+	requestCheck    *connect.Client[v1.RequestCheckRequest, v1.RequestCheckResponse]
+	nextCheckJob    *connect.Client[v1.NextCheckJobRequest, v1.NextCheckJobResponse]
+	getCheckJob     *connect.Client[v1.GetCheckJobRequest, v1.GetCheckJobResponse]
+	renewCheckJob   *connect.Client[v1.RenewCheckJobRequest, v1.RenewCheckJobResponse]
+	releaseCheckJob *connect.Client[v1.ReleaseCheckJobRequest, v1.ReleaseCheckJobResponse]
+	listCheckJobs   *connect.Client[v1.ListCheckJobsRequest, v1.ListCheckJobsResponse]
+	getAgentRunner  *connect.Client[v1.GetAgentRunnerRequest, v1.GetAgentRunnerResponse]
+	setAgentRunner  *connect.Client[v1.SetAgentRunnerRequest, v1.SetAgentRunnerResponse]
+	createCIToken   *connect.Client[v1.CreateCITokenRequest, v1.CreateCITokenResponse]
+	listCITokens    *connect.Client[v1.ListCITokensRequest, v1.ListCITokensResponse]
+	revokeCIToken   *connect.Client[v1.RevokeCITokenRequest, v1.RevokeCITokenResponse]
+}
+
+// RequestCheck calls vx.v1.CheckQueueService.RequestCheck.
+func (c *checkQueueServiceClient) RequestCheck(ctx context.Context, req *connect.Request[v1.RequestCheckRequest]) (*connect.Response[v1.RequestCheckResponse], error) {
+	return c.requestCheck.CallUnary(ctx, req)
+}
+
+// NextCheckJob calls vx.v1.CheckQueueService.NextCheckJob.
+func (c *checkQueueServiceClient) NextCheckJob(ctx context.Context, req *connect.Request[v1.NextCheckJobRequest]) (*connect.Response[v1.NextCheckJobResponse], error) {
+	return c.nextCheckJob.CallUnary(ctx, req)
+}
+
+// GetCheckJob calls vx.v1.CheckQueueService.GetCheckJob.
+func (c *checkQueueServiceClient) GetCheckJob(ctx context.Context, req *connect.Request[v1.GetCheckJobRequest]) (*connect.Response[v1.GetCheckJobResponse], error) {
+	return c.getCheckJob.CallUnary(ctx, req)
+}
+
+// RenewCheckJob calls vx.v1.CheckQueueService.RenewCheckJob.
+func (c *checkQueueServiceClient) RenewCheckJob(ctx context.Context, req *connect.Request[v1.RenewCheckJobRequest]) (*connect.Response[v1.RenewCheckJobResponse], error) {
+	return c.renewCheckJob.CallUnary(ctx, req)
+}
+
+// ReleaseCheckJob calls vx.v1.CheckQueueService.ReleaseCheckJob.
+func (c *checkQueueServiceClient) ReleaseCheckJob(ctx context.Context, req *connect.Request[v1.ReleaseCheckJobRequest]) (*connect.Response[v1.ReleaseCheckJobResponse], error) {
+	return c.releaseCheckJob.CallUnary(ctx, req)
+}
+
+// ListCheckJobs calls vx.v1.CheckQueueService.ListCheckJobs.
+func (c *checkQueueServiceClient) ListCheckJobs(ctx context.Context, req *connect.Request[v1.ListCheckJobsRequest]) (*connect.Response[v1.ListCheckJobsResponse], error) {
+	return c.listCheckJobs.CallUnary(ctx, req)
+}
+
+// GetAgentRunner calls vx.v1.CheckQueueService.GetAgentRunner.
+func (c *checkQueueServiceClient) GetAgentRunner(ctx context.Context, req *connect.Request[v1.GetAgentRunnerRequest]) (*connect.Response[v1.GetAgentRunnerResponse], error) {
+	return c.getAgentRunner.CallUnary(ctx, req)
+}
+
+// SetAgentRunner calls vx.v1.CheckQueueService.SetAgentRunner.
+func (c *checkQueueServiceClient) SetAgentRunner(ctx context.Context, req *connect.Request[v1.SetAgentRunnerRequest]) (*connect.Response[v1.SetAgentRunnerResponse], error) {
+	return c.setAgentRunner.CallUnary(ctx, req)
+}
+
+// CreateCIToken calls vx.v1.CheckQueueService.CreateCIToken.
+func (c *checkQueueServiceClient) CreateCIToken(ctx context.Context, req *connect.Request[v1.CreateCITokenRequest]) (*connect.Response[v1.CreateCITokenResponse], error) {
+	return c.createCIToken.CallUnary(ctx, req)
+}
+
+// ListCITokens calls vx.v1.CheckQueueService.ListCITokens.
+func (c *checkQueueServiceClient) ListCITokens(ctx context.Context, req *connect.Request[v1.ListCITokensRequest]) (*connect.Response[v1.ListCITokensResponse], error) {
+	return c.listCITokens.CallUnary(ctx, req)
+}
+
+// RevokeCIToken calls vx.v1.CheckQueueService.RevokeCIToken.
+func (c *checkQueueServiceClient) RevokeCIToken(ctx context.Context, req *connect.Request[v1.RevokeCITokenRequest]) (*connect.Response[v1.RevokeCITokenResponse], error) {
+	return c.revokeCIToken.CallUnary(ctx, req)
+}
+
+// CheckQueueServiceHandler is an implementation of the vx.v1.CheckQueueService service.
+type CheckQueueServiceHandler interface {
+	// Make a job for a check with a runner, on the effort head or one change.
+	RequestCheck(context.Context, *connect.Request[v1.RequestCheckRequest]) (*connect.Response[v1.RequestCheckResponse], error)
+	// Take the oldest job the caller may run, with a lease; no job: empty.
+	NextCheckJob(context.Context, *connect.Request[v1.NextCheckJobRequest]) (*connect.Response[v1.NextCheckJobResponse], error)
+	GetCheckJob(context.Context, *connect.Request[v1.GetCheckJobRequest]) (*connect.Response[v1.GetCheckJobResponse], error)
+	RenewCheckJob(context.Context, *connect.Request[v1.RenewCheckJobRequest]) (*connect.Response[v1.RenewCheckJobResponse], error)
+	// Give a leased job back without counting an attempt.
+	ReleaseCheckJob(context.Context, *connect.Request[v1.ReleaseCheckJobRequest]) (*connect.Response[v1.ReleaseCheckJobResponse], error)
+	ListCheckJobs(context.Context, *connect.Request[v1.ListCheckJobsRequest]) (*connect.Response[v1.ListCheckJobsResponse], error)
+	// Which runner kinds an agent serves (set by its person).
+	GetAgentRunner(context.Context, *connect.Request[v1.GetAgentRunnerRequest]) (*connect.Response[v1.GetAgentRunnerResponse], error)
+	SetAgentRunner(context.Context, *connect.Request[v1.SetAgentRunnerRequest]) (*connect.Response[v1.SetAgentRunnerResponse], error)
+	// CI tokens: service principals that only report results on one repository.
+	CreateCIToken(context.Context, *connect.Request[v1.CreateCITokenRequest]) (*connect.Response[v1.CreateCITokenResponse], error)
+	ListCITokens(context.Context, *connect.Request[v1.ListCITokensRequest]) (*connect.Response[v1.ListCITokensResponse], error)
+	RevokeCIToken(context.Context, *connect.Request[v1.RevokeCITokenRequest]) (*connect.Response[v1.RevokeCITokenResponse], error)
+}
+
+// NewCheckQueueServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewCheckQueueServiceHandler(svc CheckQueueServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	checkQueueServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CheckQueueService").Methods()
+	checkQueueServiceRequestCheckHandler := connect.NewUnaryHandler(
+		CheckQueueServiceRequestCheckProcedure,
+		svc.RequestCheck,
+		connect.WithSchema(checkQueueServiceMethods.ByName("RequestCheck")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceNextCheckJobHandler := connect.NewUnaryHandler(
+		CheckQueueServiceNextCheckJobProcedure,
+		svc.NextCheckJob,
+		connect.WithSchema(checkQueueServiceMethods.ByName("NextCheckJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceGetCheckJobHandler := connect.NewUnaryHandler(
+		CheckQueueServiceGetCheckJobProcedure,
+		svc.GetCheckJob,
+		connect.WithSchema(checkQueueServiceMethods.ByName("GetCheckJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceRenewCheckJobHandler := connect.NewUnaryHandler(
+		CheckQueueServiceRenewCheckJobProcedure,
+		svc.RenewCheckJob,
+		connect.WithSchema(checkQueueServiceMethods.ByName("RenewCheckJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceReleaseCheckJobHandler := connect.NewUnaryHandler(
+		CheckQueueServiceReleaseCheckJobProcedure,
+		svc.ReleaseCheckJob,
+		connect.WithSchema(checkQueueServiceMethods.ByName("ReleaseCheckJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceListCheckJobsHandler := connect.NewUnaryHandler(
+		CheckQueueServiceListCheckJobsProcedure,
+		svc.ListCheckJobs,
+		connect.WithSchema(checkQueueServiceMethods.ByName("ListCheckJobs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceGetAgentRunnerHandler := connect.NewUnaryHandler(
+		CheckQueueServiceGetAgentRunnerProcedure,
+		svc.GetAgentRunner,
+		connect.WithSchema(checkQueueServiceMethods.ByName("GetAgentRunner")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceSetAgentRunnerHandler := connect.NewUnaryHandler(
+		CheckQueueServiceSetAgentRunnerProcedure,
+		svc.SetAgentRunner,
+		connect.WithSchema(checkQueueServiceMethods.ByName("SetAgentRunner")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceCreateCITokenHandler := connect.NewUnaryHandler(
+		CheckQueueServiceCreateCITokenProcedure,
+		svc.CreateCIToken,
+		connect.WithSchema(checkQueueServiceMethods.ByName("CreateCIToken")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceListCITokensHandler := connect.NewUnaryHandler(
+		CheckQueueServiceListCITokensProcedure,
+		svc.ListCITokens,
+		connect.WithSchema(checkQueueServiceMethods.ByName("ListCITokens")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkQueueServiceRevokeCITokenHandler := connect.NewUnaryHandler(
+		CheckQueueServiceRevokeCITokenProcedure,
+		svc.RevokeCIToken,
+		connect.WithSchema(checkQueueServiceMethods.ByName("RevokeCIToken")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.CheckQueueService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case CheckQueueServiceRequestCheckProcedure:
+			checkQueueServiceRequestCheckHandler.ServeHTTP(w, r)
+		case CheckQueueServiceNextCheckJobProcedure:
+			checkQueueServiceNextCheckJobHandler.ServeHTTP(w, r)
+		case CheckQueueServiceGetCheckJobProcedure:
+			checkQueueServiceGetCheckJobHandler.ServeHTTP(w, r)
+		case CheckQueueServiceRenewCheckJobProcedure:
+			checkQueueServiceRenewCheckJobHandler.ServeHTTP(w, r)
+		case CheckQueueServiceReleaseCheckJobProcedure:
+			checkQueueServiceReleaseCheckJobHandler.ServeHTTP(w, r)
+		case CheckQueueServiceListCheckJobsProcedure:
+			checkQueueServiceListCheckJobsHandler.ServeHTTP(w, r)
+		case CheckQueueServiceGetAgentRunnerProcedure:
+			checkQueueServiceGetAgentRunnerHandler.ServeHTTP(w, r)
+		case CheckQueueServiceSetAgentRunnerProcedure:
+			checkQueueServiceSetAgentRunnerHandler.ServeHTTP(w, r)
+		case CheckQueueServiceCreateCITokenProcedure:
+			checkQueueServiceCreateCITokenHandler.ServeHTTP(w, r)
+		case CheckQueueServiceListCITokensProcedure:
+			checkQueueServiceListCITokensHandler.ServeHTTP(w, r)
+		case CheckQueueServiceRevokeCITokenProcedure:
+			checkQueueServiceRevokeCITokenHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedCheckQueueServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedCheckQueueServiceHandler struct{}
+
+func (UnimplementedCheckQueueServiceHandler) RequestCheck(context.Context, *connect.Request[v1.RequestCheckRequest]) (*connect.Response[v1.RequestCheckResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.RequestCheck is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) NextCheckJob(context.Context, *connect.Request[v1.NextCheckJobRequest]) (*connect.Response[v1.NextCheckJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.NextCheckJob is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) GetCheckJob(context.Context, *connect.Request[v1.GetCheckJobRequest]) (*connect.Response[v1.GetCheckJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.GetCheckJob is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) RenewCheckJob(context.Context, *connect.Request[v1.RenewCheckJobRequest]) (*connect.Response[v1.RenewCheckJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.RenewCheckJob is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) ReleaseCheckJob(context.Context, *connect.Request[v1.ReleaseCheckJobRequest]) (*connect.Response[v1.ReleaseCheckJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.ReleaseCheckJob is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) ListCheckJobs(context.Context, *connect.Request[v1.ListCheckJobsRequest]) (*connect.Response[v1.ListCheckJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.ListCheckJobs is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) GetAgentRunner(context.Context, *connect.Request[v1.GetAgentRunnerRequest]) (*connect.Response[v1.GetAgentRunnerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.GetAgentRunner is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) SetAgentRunner(context.Context, *connect.Request[v1.SetAgentRunnerRequest]) (*connect.Response[v1.SetAgentRunnerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.SetAgentRunner is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) CreateCIToken(context.Context, *connect.Request[v1.CreateCITokenRequest]) (*connect.Response[v1.CreateCITokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.CreateCIToken is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) ListCITokens(context.Context, *connect.Request[v1.ListCITokensRequest]) (*connect.Response[v1.ListCITokensResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.ListCITokens is not implemented"))
+}
+
+func (UnimplementedCheckQueueServiceHandler) RevokeCIToken(context.Context, *connect.Request[v1.RevokeCITokenRequest]) (*connect.Response[v1.RevokeCITokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckQueueService.RevokeCIToken is not implemented"))
 }

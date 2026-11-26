@@ -396,6 +396,14 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Approve or reject a pending review (a person, not the change's author, in the policy's approvers when it names them; never an agent) | `vx review approve`, `vx review reject`, Approve and Reject on the change page | write |
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
+| List check jobs and see one with its inputs (a CI token: its repository's) | `vx check jobs`, `vx check job`, `vx_check_jobs`, `vx_check_job`, `ListCheckJobs`, `GetCheckJob` | read |
+| Ask for a check with a runner to run (it becomes a job) | `vx check request`, `vx_check_request`, `RequestCheck` | write |
+| Take, renew and release check jobs (agents only for the runner kinds their person declared; a CI token only its repository's ci jobs; people human jobs) | `vx check next`, `vx check renew`, `vx check release`, `vx_check_next`, `vx_check_renew`, `vx_check_release` | write |
+| Read the job's files through the object API (a CI token: only its repository) | `GetObjects` with the job's repository | read |
+| Set which runner kinds an agent serves (no repository role: only the agent's person; never an agent, not even for itself) | `vx agent runner NAME --kinds browser`, `SetAgentRunner` | person |
+| See an agent's runner kinds (the agent itself and its person) | `vx agent runner NAME`, `GetAgentRunner` | person or agent |
+| Create a CI token (a person; never an agent), list and revoke CI tokens | `vx repo ci-token create`, `vx repo ci-token list`, `vx repo ci-token revoke` | admin |
+| Anything a CI token does besides reporting results of its checks on its repository, reading its jobs and their files | every other row | none: "not found" (tested in `TestCITokenLimits`) |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
 | Set an agent's path scope and budgets (no repository role: only the agent's person; never a superadmin or an agent, not even for itself) | `vx agent scope`, Settings | person |
 | See an agent's scope, budgets and usage (the agent itself and its person) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person or agent |

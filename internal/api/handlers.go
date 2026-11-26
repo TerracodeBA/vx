@@ -56,6 +56,7 @@ func MountWithLog(mux *http.ServeMux, svc *service.Service, log *slog.Logger) {
 	handle(vxv1connect.NewRulesServiceHandler(h, opts...))
 	handle(vxv1connect.NewOrgServiceHandler(h, opts...))
 	handle(vxv1connect.NewReviewServiceHandler(h, opts...))
+	handle(vxv1connect.NewCheckQueueServiceHandler(h, opts...))
 	// The only service without authInterceptor.
 	public := append([]connect.HandlerOption{connect.WithInterceptors(versions)}, limits...)
 	handle(vxv1connect.NewPublicServiceHandler(h, public...))

@@ -93,6 +93,8 @@ var countNames = []struct{ key, name string }{
 	{"reservations", "reservations"},
 	{"grants", "repository grants"},
 	{"support_grants", "support grants"},
+	{"check_jobs", "check jobs"},
+	{"ci_tokens", "CI tokens"},
 	{"object_records", "object records"},
 	{"blobs", "stored objects (files and trees no other repository uses)"},
 	{"git_mappings", "git object mappings"},

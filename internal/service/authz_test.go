@@ -363,6 +363,46 @@ var authzOps = []authzOp{
 		}
 		return err
 	}},
+	// The check queue (#47).
+	{"ListCheckJobs", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListCheckJobs(e.ctx, a, service.ListJobsInput{Repo: "acme/shop", Effort: e.eff.Slug})
+		return err
+	}},
+	{"NextCheckJob", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.NextCheckJob(e.ctx, a, service.NextJobInput{Repo: "acme/shop"})
+		if a.Kind == store.KindAgent && isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: the agent serves no runner kinds
+		}
+		return err
+	}},
+	{"RequestCheck", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.RequestCheck(e.ctx, a, service.RequestCheckInput{Repo: "acme/shop", Effort: e.eff.Slug, Check: "e2e"})
+		if isCode(err, service.CodeFailedPrecondition) {
+			return nil // past the access check: acme/shop's vx.toml has no check e2e
+		}
+		return err
+	}},
+	{"ListCITokens", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ListCITokens(e.ctx, a, "acme/shop", true)
+		return err
+	}},
+	{"CreateCIToken", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		e.n++
+		_, _, err := e.svc.CreateCIToken(e.ctx, a, "acme/shop", fmt.Sprintf("ci-%d", e.n), []string{"unit"})
+		if a.Kind == store.KindAgent && isCode(err, service.CodePermission) && strings.Contains(err.Error(), "only people create CI tokens") {
+			return nil // past the access check: agents never mint tokens
+		}
+		return err
+	}},
+	{"RevokeCIToken", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
+		e.n++
+		name := fmt.Sprintf("ci-%d", e.n)
+		if _, _, err := e.svc.CreateCIToken(e.ctx, e.alice, "acme/shop", name, nil); err != nil {
+			return err // not found for everyone once acme is deleted
+		}
+		_, err := e.svc.RevokeCIToken(e.ctx, a, "acme/shop", name)
+		return err
+	}},
 }
 
 func TestAuthzMatrix(t *testing.T) {

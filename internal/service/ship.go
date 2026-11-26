@@ -85,6 +85,8 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 	if err := s.requireAgreement(ctx, v.Repo, "shipping"); err != nil {
 		return ShipPlan{}, err
 	}
+	// Asking to ship queues the effort's ship checks (checkjobs.go).
+	s.jobsBeforeShip(ctx, v.Repo, v.Effort)
 	if v.Repo.Provider == store.ProviderNone {
 		return ShipPlan{}, errf(CodeFailedPrecondition, "repo %s has no git upstream to ship to", v.Repo.Name)
 	}

@@ -1671,3 +1671,217 @@ message RejectReviewRequest {
 message RejectReviewResponse {
   Review review = 1;
 }
+
+// ---------- Check queue: jobs, runners, CI tokens (#47) ----------
+
+// Checks whose runner is not the landing agent (agent:KIND, ci, human)
+// become jobs. Runners take them with a lease and report a result with
+// CheckService.ReportCheck, which finishes the job.
+service CheckQueueService {
+  // Make a job for a check with a runner, on the effort head or one change.
+  rpc RequestCheck(RequestCheckRequest) returns (RequestCheckResponse) {}
+  // Take the oldest job the caller may run, with a lease; no job: empty.
+  rpc NextCheckJob(NextCheckJobRequest) returns (NextCheckJobResponse) {}
+  rpc GetCheckJob(GetCheckJobRequest) returns (GetCheckJobResponse) {}
+  rpc RenewCheckJob(RenewCheckJobRequest) returns (RenewCheckJobResponse) {}
+  // Give a leased job back without counting an attempt.
+  rpc ReleaseCheckJob(ReleaseCheckJobRequest) returns (ReleaseCheckJobResponse) {}
+  rpc ListCheckJobs(ListCheckJobsRequest) returns (ListCheckJobsResponse) {}
+  // Which runner kinds an agent serves (set by its person).
+  rpc GetAgentRunner(GetAgentRunnerRequest) returns (GetAgentRunnerResponse) {}
+  rpc SetAgentRunner(SetAgentRunnerRequest) returns (SetAgentRunnerResponse) {}
+  // CI tokens: service principals that only report results on one repository.
+  rpc CreateCIToken(CreateCITokenRequest) returns (CreateCITokenResponse) {}
+  rpc ListCITokens(ListCITokensRequest) returns (ListCITokensResponse) {}
+  rpc RevokeCIToken(RevokeCITokenRequest) returns (RevokeCITokenResponse) {}
+}
+
+message CheckJob {
+  string id = 1;
+  string repo = 2;
+  string effort = 3;
+  string check = 4;
+  string runner = 5; // agent:KIND, ci or human
+  string reporter = 6; // the check's reporter rule: self, independent, ci, human
+  string trigger = 7; // land, ship or manual
+  string change_id = 8; // the change it was made for
+  string changeset = 9;
+  string base_tree = 10; // the diff input is from this tree
+  string tree = 11; // the result must be for this tree
+  string author = 12; // who made the change
+  string state = 13; // queued, leased, done, failed, superseded
+  int32 attempts = 14; // leases that expired
+  int32 max_attempts = 15;
+  int64 timeout_seconds = 16; // the lease a take gives
+  string lease_owner = 17; // ref of who holds the lease
+  string lease_expires_at = 18;
+  string reason = 19; // why it failed, was superseded or released
+  string result_id = 20; // the result that finished it
+  map<string, string> values = 21; // named inputs: preview_url, build.preview_url
+  repeated string inputs = 22; // the check's declared inputs
+  string created_at = 23;
+  string updated_at = 24;
+  string superseded_by = 25;
+  CheckJobInputs bundle = 26; // set by NextCheckJob and GetCheckJob
+  string on_behalf_of = 27; // the person of the change's author
+}
+
+// The inputs of a job. Files are fetched with ObjectService.GetObjects
+// (repo = the job's repository) by their hashes.
+message CheckJobInputs {
+  CheckJobEffort effort = 1;
+  CheckJobChange change = 2;
+  repeated CheckJobFile changed_files = 3;
+  repeated CheckJobFile files = 4; // changed files that exist in the tree
+  string diff = 5; // unified diff, base_tree to tree (when the check takes diff)
+  bool diff_cut = 6; // the diff was cut at 256 KiB
+  map<string, string> values = 7;
+  repeated string missing = 8; // declared inputs without a value yet
+}
+
+message CheckJobEffort {
+  string repo = 1;
+  string slug = 2;
+  string name = 3;
+  string goal = 4;
+  string base_branch = 5;
+}
+
+message CheckJobChange {
+  string id = 1;
+  string changeset = 2;
+  string intent = 3;
+  string author = 4;
+  string on_behalf_of = 5;
+  string base_tree = 6;
+  string tree = 7;
+}
+
+message CheckJobFile {
+  string path = 1;
+  string status = 2; // add, modify, delete
+  string hash = 3;
+  string mode = 4;
+}
+
+message RequestCheckRequest {
+  string repo = 1;
+  string effort = 2;
+  string check = 3;
+  string change_id = 4; // empty: the effort head, its whole diff
+  map<string, string> values = 5; // named inputs, e.g. preview_url
+}
+
+message RequestCheckResponse {
+  CheckJob job = 1;
+}
+
+message NextCheckJobRequest {
+  string repo = 1; // empty: every repository the caller may run jobs in
+  string effort = 2; // needs repo
+  string runner = 3; // browser (agent:browser), ci or human; empty: every kind the caller serves
+}
+
+message NextCheckJobResponse {
+  CheckJob job = 1; // unset: no job for the caller now
+}
+
+message GetCheckJobRequest {
+  string repo = 1; // empty: any repository the caller can read
+  string id = 2; // id or 8+ characters of it
+}
+
+message GetCheckJobResponse {
+  CheckJob job = 1;
+}
+
+message RenewCheckJobRequest {
+  string repo = 1;
+  string id = 2;
+  int64 seconds = 3; // 0: the check's timeout, from now
+}
+
+message RenewCheckJobResponse {
+  CheckJob job = 1;
+}
+
+message ReleaseCheckJobRequest {
+  string repo = 1;
+  string id = 2;
+  string reason = 3;
+}
+
+message ReleaseCheckJobResponse {
+  CheckJob job = 1;
+}
+
+message ListCheckJobsRequest {
+  string repo = 1; // empty: every repository the caller can read
+  string effort = 2; // needs repo
+  repeated string states = 3; // empty: all
+  string runner = 4;
+  int32 limit = 5;
+}
+
+message ListCheckJobsResponse {
+  repeated CheckJob jobs = 1;
+}
+
+message GetAgentRunnerRequest {
+  string agent = 1; // empty: the caller
+}
+
+message GetAgentRunnerResponse {
+  Principal agent = 1;
+  repeated string kinds = 2;
+}
+
+message SetAgentRunnerRequest {
+  string agent = 1;
+  repeated string kinds = 2; // empty: serves no agent jobs
+}
+
+message SetAgentRunnerResponse {
+  Principal agent = 1;
+  repeated string kinds = 2;
+}
+
+message CIToken {
+  string id = 1;
+  string repo = 2;
+  string name = 3;
+  string principal = 4; // service:ci-..., what its results are recorded under
+  repeated string checks = 5; // empty: every check
+  string created_by = 6;
+  string created_at = 7;
+  string revoked_at = 8;
+}
+
+message CreateCITokenRequest {
+  string repo = 1;
+  string name = 2;
+  repeated string checks = 3;
+}
+
+message CreateCITokenResponse {
+  CIToken token = 1;
+  string secret = 2; // shown once
+}
+
+message ListCITokensRequest {
+  string repo = 1;
+  bool revoked = 2; // include revoked tokens
+}
+
+message ListCITokensResponse {
+  repeated CIToken tokens = 1;
+}
+
+message RevokeCITokenRequest {
+  string repo = 1;
+  string name = 2;
+}
+
+message RevokeCITokenResponse {
+  CIToken token = 1;
+}

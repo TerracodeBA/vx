@@ -362,6 +362,8 @@ var repoCascadeCounts = []struct{ name, sql string }{
 	{"reservations", `select count(*) from rule_reservations where repo_id = $1`},
 	{"grants", `select count(*) from repo_grants where repo_id = $1`},
 	{"support_grants", `select count(*) from support_grants where repo_id = $1`},
+	{"check_jobs", `select count(*) from check_jobs where repo_id = $1`},
+	{"ci_tokens", `select count(*) from ci_tokens where repo_id = $1`},
 }
 
 // PurgeRepoObjects deletes up to PurgeBatch of a repository's object
