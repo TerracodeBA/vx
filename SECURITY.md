@@ -24,6 +24,10 @@ The people who run a vx server (superadmins: the operator on vx Cloud) manage pe
 
 This is enforced by vx, not by the infrastructure: whoever has the database, the object storage or the server's disk (and `VX_SECRET_KEY`) can read everything stored there. A report that a superadmin can reach repository content through vx without a grant is a vulnerability.
 
+## Deleting an organization
+
+When an organization's owners delete it, its repositories are "not found" for everyone at once, and after the grace period (30 days unless the server sets `VX_ORG_DELETE_GRACE`) a background job deletes every row of it, its git mirrors and the stored objects no other repository uses. What is kept is a deletion record without repository names or content, and the `org.delete`, `org.restore` and `org.purge` entries of the operation log. Backups are not changed: they keep the data until they expire. See [docs/organizations.md](docs/organizations.md#deleting-an-organization) and [docs/deploy.md](docs/deploy.md#deleting-organizations). A way to read or change a deleted organization's repositories through vx, or data of it that survives the purge in the database or the blob store, is a vulnerability.
+
 ## Objects
 
 File contents and trees are stored once per server, but they are served only through a repository the caller can read and that the object is part of. Knowing a hash is not enough to fetch content, and the server does not reveal whether another repository has it. See [docs/architecture.md](docs/architecture.md#objects-are-scoped-per-repository).

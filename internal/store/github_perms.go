@@ -44,7 +44,7 @@ func (q Q) SetOrgGitHub(ctx context.Context, org uuid.UUID, githubOrgID *int64, 
 
 // OrgByGitHubID looks up the organization linked to a GitHub organization.
 func (q Q) OrgByGitHubID(ctx context.Context, githubOrgID int64) (Org, error) {
-	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.github_org_id = $1`, githubOrgID))
+	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.github_org_id = $1 and o.deleted_at is null`, githubOrgID))
 	return o, notFound(err, fmt.Sprintf("organization linked to GitHub organization %d", githubOrgID))
 }
 

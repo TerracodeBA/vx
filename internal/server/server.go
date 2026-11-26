@@ -58,6 +58,9 @@ type Config struct {
 	// Agreement is the data processing agreement step (VX_REQUIRE_DPA,
 	// VX_DPA_DIR); off by default.
 	Agreement service.AgreementSettings
+	// OrgDeletion is the grace period before a deleted organization is
+	// purged (VX_ORG_DELETE_GRACE).
+	OrgDeletion service.OrgDeletionSettings
 }
 
 // Server is a running vx server.
@@ -107,7 +110,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if cfg.Limits != nil {
 		svc.Limits = ratelimit.New(cfg.Limits)
 	}
-	svc.Quotas, svc.Audit, svc.Agreement = cfg.Quotas, cfg.Audit, cfg.Agreement
+	svc.Quotas, svc.Audit, svc.Agreement, svc.OrgDeletion = cfg.Quotas, cfg.Audit, cfg.Agreement, cfg.OrgDeletion
 	if err := svc.CheckAgreements(ctx); err != nil {
 		st.Close()
 		return nil, err
@@ -196,6 +199,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		go s.Service.RunPushNotifier(ctx, s.log)
 		go s.Service.PruneAuditLoop(ctx, s.log)
 		go s.Service.RunObjectSizer(ctx, s.log)
+		go s.Service.RunOrgPurger(ctx, s.log)
 	}
 	s.log.Info("vx server listening", "addr", addr)
 	select {

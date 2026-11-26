@@ -190,6 +190,16 @@ const (
 	OrgServiceGetOrgProcedure = "/vx.v1.OrgService/GetOrg"
 	// OrgServiceUpdateOrgProcedure is the fully-qualified name of the OrgService's UpdateOrg RPC.
 	OrgServiceUpdateOrgProcedure = "/vx.v1.OrgService/UpdateOrg"
+	// OrgServiceDeleteOrgProcedure is the fully-qualified name of the OrgService's DeleteOrg RPC.
+	OrgServiceDeleteOrgProcedure = "/vx.v1.OrgService/DeleteOrg"
+	// OrgServiceRestoreOrgProcedure is the fully-qualified name of the OrgService's RestoreOrg RPC.
+	OrgServiceRestoreOrgProcedure = "/vx.v1.OrgService/RestoreOrg"
+	// OrgServiceGetOrgDeletionProcedure is the fully-qualified name of the OrgService's GetOrgDeletion
+	// RPC.
+	OrgServiceGetOrgDeletionProcedure = "/vx.v1.OrgService/GetOrgDeletion"
+	// OrgServiceListDeletedOrgsProcedure is the fully-qualified name of the OrgService's
+	// ListDeletedOrgs RPC.
+	OrgServiceListDeletedOrgsProcedure = "/vx.v1.OrgService/ListDeletedOrgs"
 	// OrgServiceSetMemberProcedure is the fully-qualified name of the OrgService's SetMember RPC.
 	OrgServiceSetMemberProcedure = "/vx.v1.OrgService/SetMember"
 	// OrgServiceRemoveMemberProcedure is the fully-qualified name of the OrgService's RemoveMember RPC.
@@ -2013,6 +2023,15 @@ type OrgServiceClient interface {
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
 	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
 	UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error)
+	// Deleting an organization (owners, never agents; not personal ones): it
+	// is hidden at once (its repositories are not found, it leaves every
+	// list, its handle stays reserved), owners restore it until the grace
+	// period ends, then the server purges it. The deletion record names no
+	// repository: owners read it until the purge.
+	DeleteOrg(context.Context, *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error)
+	RestoreOrg(context.Context, *connect.Request[v1.RestoreOrgRequest]) (*connect.Response[v1.RestoreOrgResponse], error)
+	GetOrgDeletion(context.Context, *connect.Request[v1.GetOrgDeletionRequest]) (*connect.Response[v1.GetOrgDeletionResponse], error)
+	ListDeletedOrgs(context.Context, *connect.Request[v1.ListDeletedOrgsRequest]) (*connect.Response[v1.ListDeletedOrgsResponse], error)
 	SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error)
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
@@ -2071,6 +2090,30 @@ func NewOrgServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+OrgServiceUpdateOrgProcedure,
 			connect.WithSchema(orgServiceMethods.ByName("UpdateOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteOrg: connect.NewClient[v1.DeleteOrgRequest, v1.DeleteOrgResponse](
+			httpClient,
+			baseURL+OrgServiceDeleteOrgProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("DeleteOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		restoreOrg: connect.NewClient[v1.RestoreOrgRequest, v1.RestoreOrgResponse](
+			httpClient,
+			baseURL+OrgServiceRestoreOrgProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("RestoreOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrgDeletion: connect.NewClient[v1.GetOrgDeletionRequest, v1.GetOrgDeletionResponse](
+			httpClient,
+			baseURL+OrgServiceGetOrgDeletionProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GetOrgDeletion")),
+			connect.WithClientOptions(opts...),
+		),
+		listDeletedOrgs: connect.NewClient[v1.ListDeletedOrgsRequest, v1.ListDeletedOrgsResponse](
+			httpClient,
+			baseURL+OrgServiceListDeletedOrgsProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("ListDeletedOrgs")),
 			connect.WithClientOptions(opts...),
 		),
 		setMember: connect.NewClient[v1.SetMemberRequest, v1.SetMemberResponse](
@@ -2172,6 +2215,10 @@ type orgServiceClient struct {
 	listOrgs         *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
 	getOrg           *connect.Client[v1.GetOrgRequest, v1.GetOrgResponse]
 	updateOrg        *connect.Client[v1.UpdateOrgRequest, v1.UpdateOrgResponse]
+	deleteOrg        *connect.Client[v1.DeleteOrgRequest, v1.DeleteOrgResponse]
+	restoreOrg       *connect.Client[v1.RestoreOrgRequest, v1.RestoreOrgResponse]
+	getOrgDeletion   *connect.Client[v1.GetOrgDeletionRequest, v1.GetOrgDeletionResponse]
+	listDeletedOrgs  *connect.Client[v1.ListDeletedOrgsRequest, v1.ListDeletedOrgsResponse]
 	setMember        *connect.Client[v1.SetMemberRequest, v1.SetMemberResponse]
 	removeMember     *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
 	createTeam       *connect.Client[v1.CreateTeamRequest, v1.CreateTeamResponse]
@@ -2207,6 +2254,26 @@ func (c *orgServiceClient) GetOrg(ctx context.Context, req *connect.Request[v1.G
 // UpdateOrg calls vx.v1.OrgService.UpdateOrg.
 func (c *orgServiceClient) UpdateOrg(ctx context.Context, req *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error) {
 	return c.updateOrg.CallUnary(ctx, req)
+}
+
+// DeleteOrg calls vx.v1.OrgService.DeleteOrg.
+func (c *orgServiceClient) DeleteOrg(ctx context.Context, req *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error) {
+	return c.deleteOrg.CallUnary(ctx, req)
+}
+
+// RestoreOrg calls vx.v1.OrgService.RestoreOrg.
+func (c *orgServiceClient) RestoreOrg(ctx context.Context, req *connect.Request[v1.RestoreOrgRequest]) (*connect.Response[v1.RestoreOrgResponse], error) {
+	return c.restoreOrg.CallUnary(ctx, req)
+}
+
+// GetOrgDeletion calls vx.v1.OrgService.GetOrgDeletion.
+func (c *orgServiceClient) GetOrgDeletion(ctx context.Context, req *connect.Request[v1.GetOrgDeletionRequest]) (*connect.Response[v1.GetOrgDeletionResponse], error) {
+	return c.getOrgDeletion.CallUnary(ctx, req)
+}
+
+// ListDeletedOrgs calls vx.v1.OrgService.ListDeletedOrgs.
+func (c *orgServiceClient) ListDeletedOrgs(ctx context.Context, req *connect.Request[v1.ListDeletedOrgsRequest]) (*connect.Response[v1.ListDeletedOrgsResponse], error) {
+	return c.listDeletedOrgs.CallUnary(ctx, req)
 }
 
 // SetMember calls vx.v1.OrgService.SetMember.
@@ -2290,6 +2357,15 @@ type OrgServiceHandler interface {
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
 	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
 	UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error)
+	// Deleting an organization (owners, never agents; not personal ones): it
+	// is hidden at once (its repositories are not found, it leaves every
+	// list, its handle stays reserved), owners restore it until the grace
+	// period ends, then the server purges it. The deletion record names no
+	// repository: owners read it until the purge.
+	DeleteOrg(context.Context, *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error)
+	RestoreOrg(context.Context, *connect.Request[v1.RestoreOrgRequest]) (*connect.Response[v1.RestoreOrgResponse], error)
+	GetOrgDeletion(context.Context, *connect.Request[v1.GetOrgDeletionRequest]) (*connect.Response[v1.GetOrgDeletionResponse], error)
+	ListDeletedOrgs(context.Context, *connect.Request[v1.ListDeletedOrgsRequest]) (*connect.Response[v1.ListDeletedOrgsResponse], error)
 	SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error)
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
@@ -2344,6 +2420,30 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 		OrgServiceUpdateOrgProcedure,
 		svc.UpdateOrg,
 		connect.WithSchema(orgServiceMethods.ByName("UpdateOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceDeleteOrgHandler := connect.NewUnaryHandler(
+		OrgServiceDeleteOrgProcedure,
+		svc.DeleteOrg,
+		connect.WithSchema(orgServiceMethods.ByName("DeleteOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceRestoreOrgHandler := connect.NewUnaryHandler(
+		OrgServiceRestoreOrgProcedure,
+		svc.RestoreOrg,
+		connect.WithSchema(orgServiceMethods.ByName("RestoreOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceGetOrgDeletionHandler := connect.NewUnaryHandler(
+		OrgServiceGetOrgDeletionProcedure,
+		svc.GetOrgDeletion,
+		connect.WithSchema(orgServiceMethods.ByName("GetOrgDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceListDeletedOrgsHandler := connect.NewUnaryHandler(
+		OrgServiceListDeletedOrgsProcedure,
+		svc.ListDeletedOrgs,
+		connect.WithSchema(orgServiceMethods.ByName("ListDeletedOrgs")),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgServiceSetMemberHandler := connect.NewUnaryHandler(
@@ -2446,6 +2546,14 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 			orgServiceGetOrgHandler.ServeHTTP(w, r)
 		case OrgServiceUpdateOrgProcedure:
 			orgServiceUpdateOrgHandler.ServeHTTP(w, r)
+		case OrgServiceDeleteOrgProcedure:
+			orgServiceDeleteOrgHandler.ServeHTTP(w, r)
+		case OrgServiceRestoreOrgProcedure:
+			orgServiceRestoreOrgHandler.ServeHTTP(w, r)
+		case OrgServiceGetOrgDeletionProcedure:
+			orgServiceGetOrgDeletionHandler.ServeHTTP(w, r)
+		case OrgServiceListDeletedOrgsProcedure:
+			orgServiceListDeletedOrgsHandler.ServeHTTP(w, r)
 		case OrgServiceSetMemberProcedure:
 			orgServiceSetMemberHandler.ServeHTTP(w, r)
 		case OrgServiceRemoveMemberProcedure:
@@ -2499,6 +2607,22 @@ func (UnimplementedOrgServiceHandler) GetOrg(context.Context, *connect.Request[v
 
 func (UnimplementedOrgServiceHandler) UpdateOrg(context.Context, *connect.Request[v1.UpdateOrgRequest]) (*connect.Response[v1.UpdateOrgResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.UpdateOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) DeleteOrg(context.Context, *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.DeleteOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) RestoreOrg(context.Context, *connect.Request[v1.RestoreOrgRequest]) (*connect.Response[v1.RestoreOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.RestoreOrg is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GetOrgDeletion(context.Context, *connect.Request[v1.GetOrgDeletionRequest]) (*connect.Response[v1.GetOrgDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GetOrgDeletion is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) ListDeletedOrgs(context.Context, *connect.Request[v1.ListDeletedOrgsRequest]) (*connect.Response[v1.ListDeletedOrgsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListDeletedOrgs is not implemented"))
 }
 
 func (UnimplementedOrgServiceHandler) SetMember(context.Context, *connect.Request[v1.SetMemberRequest]) (*connect.Response[v1.SetMemberResponse], error) {

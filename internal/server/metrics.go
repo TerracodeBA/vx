@@ -134,12 +134,15 @@ func registerGauges(st *store.Store, svc *service.Service) {
 	reg.SetCounterFunc("vx_db_pool_empty_acquires_total", "Acquires that had to wait because every connection was in use.", func() []metrics.Sample {
 		return metrics.One(float64(st.PoolStat().EmptyAcquireCount()))
 	})
-	reg.SetGaugeFunc("vx_queue_depth", "Work waiting in background queues: forecast (repositories with overlap forecasts queued), object_backfill (repositories whose objects are not indexed yet).", func() []metrics.Sample {
+	reg.SetGaugeFunc("vx_queue_depth", "Work waiting in background queues: forecast (repositories with overlap forecasts queued), object_backfill (repositories whose objects are not indexed yet), org_purge (deleted organizations not purged yet).", func() []metrics.Sample {
 		out := []metrics.Sample{{Labels: []string{"forecast"}, Value: float64(svc.ForecastQueueDepth())}}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if n, err := st.CountObjectBackfills(ctx); err == nil {
 			out = append(out, metrics.Sample{Labels: []string{"object_backfill"}, Value: float64(n)})
+		}
+		if n, err := st.CountOrgsPendingPurge(ctx); err == nil {
+			out = append(out, metrics.Sample{Labels: []string{"org_purge"}, Value: float64(n)})
 		}
 		return out
 	}, "queue")

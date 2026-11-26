@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -57,6 +58,13 @@ func applyOps(cfg *server.Config, getenv func(string) string) error {
 		return err
 	}
 	cfg.Agreement = agreement
+	if v := strings.TrimSpace(getenv("VX_ORG_DELETE_GRACE")); v != "" {
+		g, err := parseGrace(v)
+		if err != nil {
+			return fmt.Errorf("VX_ORG_DELETE_GRACE: %w", err)
+		}
+		cfg.OrgDeletion.Grace = g
+	}
 	return nil
 }
 
@@ -83,6 +91,39 @@ func agreementSettings(getenv func(string) string) (service.AgreementSettings, e
 	}
 	a.Versions = versions
 	return a, nil
+}
+
+// parseGrace reads the grace period of deleted organizations: days, weeks
+// or a Go duration (30d, 2w, 72h); 0 purges at the purger's next run.
+func parseGrace(v string) (time.Duration, error) {
+	if v == "0" || v == "none" {
+		return -1, nil
+	}
+	mult := time.Duration(0)
+	switch {
+	case strings.HasSuffix(v, "d"):
+		mult = 24 * time.Hour
+	case strings.HasSuffix(v, "w"):
+		mult = 7 * 24 * time.Hour
+	}
+	if mult > 0 {
+		n, err := strconv.Atoi(strings.TrimSpace(v[:len(v)-1]))
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("%q: write days or weeks like 30d or 4w, or 0 for no grace period", v)
+		}
+		if n == 0 {
+			return -1, nil
+		}
+		return time.Duration(n) * mult, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("%q: write days or weeks like 30d or 4w, or 0 for no grace period", v)
+	}
+	if d == 0 {
+		return -1, nil
+	}
+	return d, nil
 }
 
 func quotaDefaults(getenv func(string) string) (service.Quota, error) {

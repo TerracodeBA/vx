@@ -37,6 +37,7 @@ type authzEnv struct {
 	n             int
 	rules         bool                // acme/shop has a vx.toml with a human policy on db/**
 	linkRoot      func(service.Actor) // links the superadmin to GitHub, for the GitHub matrix
+	frozenReview  string              // when set, pendingReview returns it (acme is deleted: no new reviews)
 }
 
 // pendingReview lands a file under a human landing policy as alice's agent
@@ -44,6 +45,9 @@ type authzEnv struct {
 func (e *authzEnv) pendingReview() string {
 	e.t.Helper()
 	defer e.ungated()()
+	if e.frozenReview != "" {
+		return e.frozenReview
+	}
 	eff, err := e.svc.Store.EffortByID(e.ctx, e.eff.ID)
 	if err != nil {
 		e.t.Fatal(err)
@@ -454,6 +458,7 @@ func (e *authzEnv) agreementRows(t *testing.T) {
 			}
 		}
 	}
+	e.deletedRows(t)
 }
 
 // superadminRows is the matrix for root, a superadmin outside both

@@ -163,7 +163,11 @@ func (q Q) CreateRepo(ctx context.Context, r Repo) (Repo, error) {
 
 const repoCols = `r.id, r.name, u.provider, u.remote, u.default_branch, u.base_url, r.org_id, o.handle, r.created_at, r.github_repo_id, r.github_installation_id`
 
-const repoFrom = ` from repos r join upstreams u on u.repo_id = r.id join orgs o on o.id = r.org_id`
+// repoFrom leaves out the repositories of deleted organizations (#40):
+// from the moment an owner deletes an organization its repositories read
+// like ones that never existed, to every caller of RepoByName, RepoByID,
+// the role facts and the lists. The purge reads them by organization id.
+const repoFrom = ` from repos r join upstreams u on u.repo_id = r.id join orgs o on o.id = r.org_id and o.deleted_at is null`
 
 const repoSelect = `select ` + repoCols + repoFrom
 

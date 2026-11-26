@@ -19,7 +19,14 @@ import (
 
 // SyncInstallation reads an installation's account and repositories from
 // GitHub and creates or updates the matching vx organization and repos.
+//
+// An installation of a deleted organization (#40) is left alone: syncing
+// stops at the deletion, a restore brings it back as it was, and the purge
+// drops the link.
 func (s *Service) SyncInstallation(ctx context.Context, installationID int64) error {
+	if _, deleted, err := s.Store.DeletedOrgGitHub(ctx, installationID, 0); err != nil || deleted {
+		return err
+	}
 	api, err := s.GitHubClient(ctx)
 	if err != nil {
 		return err
@@ -27,6 +34,9 @@ func (s *Service) SyncInstallation(ctx context.Context, installationID int64) er
 	in, err := api.Installation(ctx, installationID)
 	if err != nil {
 		return errf(CodeUnavailable, "read GitHub installation %d: %v", installationID, err)
+	}
+	if _, deleted, err := s.Store.DeletedOrgGitHub(ctx, installationID, in.AccountID); err != nil || deleted {
+		return err
 	}
 	org, err := s.githubInstallationOrg(ctx, in)
 	if err != nil {

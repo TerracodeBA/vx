@@ -158,7 +158,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
-	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "access", "people", "reviews"} {
+	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "org_deleted", "access", "people", "reviews"} {
 		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
@@ -194,6 +194,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	mux.HandleFunc("POST /ui/settings/scope", u.auth(u.scopePost))
 	u.mountAdmin(mux)
+	u.mountOrgDelete(mux)
 	if err := u.mountOps(mux, funcs); err != nil {
 		return err
 	}

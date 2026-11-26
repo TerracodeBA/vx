@@ -73,6 +73,10 @@ quotas:
 # How long the operation log is kept (VX_AUDIT_RETENTION), like 365d; empty: forever.
 auditRetention: ""
 
+# How long owners can restore a deleted organization before it is purged
+# (VX_ORG_DELETE_GRACE), like 30d; empty: 30 days.
+orgDeleteGrace: ""
+
 # More environment variables, like VX_GITLAB_URL.
 extraEnv: []
 #  - name: VX_GITLAB_URL

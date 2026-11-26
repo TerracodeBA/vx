@@ -135,6 +135,8 @@ var okMessages = map[string]string{
 	"sso":            "Single sign-on saved.",
 	"sso-removed":    "Single sign-on turned off.",
 	"agreement":      "Data processing agreement accepted. The acceptance is recorded below.",
+	"deleted":        "Organization deleted. It is hidden now; you can restore it until its purge.",
+	"restored":       "Organization restored.",
 	"merged":         "Accounts merged. The merged account is disabled; its tokens, agents and memberships now belong to the account you kept.",
 }
 
@@ -234,6 +236,7 @@ func (u *UI) renderOrgs(w http.ResponseWriter, r *http.Request, actor service.Ac
 		rows = append(rows, row)
 	}
 	data["Orgs"], data["Owned"], data["RepoTotal"] = rows, owned, repos
+	data["Deleted"] = u.deletedOrgRows(r, actor)
 	u.renderStatus(w, r, f.Status, "orgs", data)
 }
 
@@ -266,7 +269,9 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 	ctx := r.Context()
 	d, err := u.svc.GetOrg(ctx, actor, r.PathValue("org"))
 	if err != nil {
-		u.failPage(w, err)
+		if !isNotFound(err) || !u.renderDeletedOrg(w, r, actor, f) {
+			u.failPage(w, err)
+		}
 		return
 	}
 	members := make([]memberRow, 0, len(d.Members))
@@ -288,7 +293,7 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		"O": d.Org, "MyRole": d.MyRole, "Members": members, "Teams": d.Teams, "Repos": repos,
 		"Owners": owners, "Manage": manage, "IsOwner": d.MyRole == service.OrgOwner,
 		"IsHuman": actor.Kind == store.KindHuman, "OrgRoles": orgRoles, "DefaultRoles": defaultRoles,
-		"Quota": u.orgQuota(r, actor, d.Org.Handle),
+		"Quota": u.orgQuota(r, actor, d.Org.Handle), "GraceDays": u.graceDays(),
 	}
 	u.orgSSO(r, actor, d.MyRole, data)
 	u.orgAgreement(r, actor, d.Org.Handle, data)
