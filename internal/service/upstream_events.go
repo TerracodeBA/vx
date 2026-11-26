@@ -25,6 +25,9 @@ func (s *Service) applyUpstreamPush(ctx context.Context, repo store.Repo, branch
 			return nil // a branch vx does not follow
 		}
 	}
+	if !s.agreementOK(ctx, repo.OrgID) {
+		return nil // imported on the first sync after the agreement is accepted (dpa.go)
+	}
 	b, n, err := s.Upstream.SyncBranch(ctx, repo, branch)
 	if err != nil {
 		return errf(CodeUnavailable, "import the push to %s of %s: %v", branch, repo.Name, err)

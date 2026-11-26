@@ -43,6 +43,7 @@ type authzEnv struct {
 // and returns the pending review's id.
 func (e *authzEnv) pendingReview() string {
 	e.t.Helper()
+	defer e.ungated()()
 	eff, err := e.svc.Store.EffortByID(e.ctx, e.eff.ID)
 	if err != nil {
 		e.t.Fatal(err)
@@ -63,6 +64,14 @@ func (e *authzEnv) pendingReview() string {
 		e.t.Fatalf("pending review: %+v %v", res, err)
 	}
 	return res.Review.ID.String()
+}
+
+// ungated switches the data processing agreement step off until the
+// returned function runs, for setting up what an operation acts on.
+func (e *authzEnv) ungated() func() {
+	keep := e.svc.Agreement
+	e.svc.Agreement = service.AgreementSettings{}
+	return func() { e.svc.Agreement = keep }
 }
 
 // pastAccess turns the refusal of an agent's decision into success: the
@@ -236,7 +245,9 @@ var authzOps = []authzOp{
 	}},
 	{"CloseEffort", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
 		e.n++
+		restore := e.ungated()
 		eff, err := e.svc.CreateEffort(e.ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: fmt.Sprintf("To close %d", e.n)})
+		restore()
 		if err != nil {
 			return err
 		}
@@ -300,7 +311,7 @@ var authzOps = []authzOp{
 	}},
 	{"PlanShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.PlanShipment(e.ctx, a, "acme/shop", e.eff.Slug, "")
-		if isCode(err, service.CodeFailedPrecondition) {
+		if isCode(err, service.CodeFailedPrecondition) && !errors.Is(err, service.ErrAgreementRequired) {
 			return nil // past the access check: acme/shop has no git upstream to ship to
 		}
 		return err
@@ -323,21 +334,21 @@ var authzOps = []authzOp{
 	}},
 	{"PlanSplit", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.PlanSplit(e.ctx, a, service.SplitInput{Repo: "acme/shop", Effort: e.eff.Slug, Mode: service.SplitStacked})
-		if isCode(err, service.CodeFailedPrecondition) {
+		if isCode(err, service.CodeFailedPrecondition) && !errors.Is(err, service.ErrAgreementRequired) {
 			return nil // past the access check: acme/shop has no git upstream to ship to
 		}
 		return err
 	}},
 	{"OpenShipment split", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.OpenShipment(e.ctx, a, service.ShipInput{Repo: "acme/shop", Effort: e.eff.Slug, Split: service.SplitIndependent})
-		if isCode(err, service.CodeFailedPrecondition) {
+		if isCode(err, service.CodeFailedPrecondition) && !errors.Is(err, service.ErrAgreementRequired) {
 			return nil // past the access check: this server has no git bridge
 		}
 		return err
 	}},
 	{"OpenShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.OpenShipment(e.ctx, a, service.ShipInput{Repo: "acme/shop", Effort: e.eff.Slug})
-		if isCode(err, service.CodeFailedPrecondition) {
+		if isCode(err, service.CodeFailedPrecondition) && !errors.Is(err, service.ErrAgreementRequired) {
 			return nil // past the access check: this server has no git bridge
 		}
 		return err
@@ -383,6 +394,66 @@ func TestAuthzMatrix(t *testing.T) {
 		}
 	}
 	e.superadminRows(t, "")
+	e.agreementRows(t)
+}
+
+// agreementGated are the operations the data processing agreement gates
+// (#41, docs/organizations.md): work that brings code into vx or takes it
+// out. Everything else, reads above all, works without an agreement.
+var agreementGated = map[string]bool{
+	"SyncBranch": true, "CreateEffort": true, "OpenWorkspace": true, "Land": true, "ApproveReview": true,
+	"PlanShipment": true, "PlanSplit": true, "OpenShipment split": true, "OpenShipment": true,
+}
+
+// agreementRows is the matrix with the agreement step on and acme not
+// accepted: without access still "not found", with too little still a
+// permission error, with enough a refusal naming acme's owners for the
+// gated operations and success for the others; after alice accepts, all
+// pass.
+func (e *authzEnv) agreementRows(t *testing.T) {
+	t.Helper()
+	vs, err := service.LoadAgreementVersions(writeAgreements(t, fakeVersion{ID: "v1", Published: "2026-01-01", Effective: "2026-01-01"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.svc.Agreement = service.AgreementSettings{Required: true, Versions: vs}
+	defer func() { e.svc.Agreement = service.AgreementSettings{} }()
+	for _, role := range []service.RepoRole{service.RoleNone, service.RoleRead, service.RoleWrite, service.RoleAdmin} {
+		e.grant(role)
+		for _, actor := range []service.Actor{e.bob, e.bobAgent} {
+			for _, op := range authzOps {
+				err := op.run(e, actor)
+				switch {
+				case role == service.RoleNone:
+					if !isCode(err, service.CodeNotFound) {
+						t.Errorf("agreement: %s by %s without access: want not found, got %v", op.name, actor.Ref(), err)
+					}
+				case !role.Includes(op.need):
+					if !isCode(err, service.CodePermission) {
+						t.Errorf("agreement: %s by %s with %s: want a permission error, got %v", op.name, actor.Ref(), role, err)
+					}
+				case agreementGated[op.name] && !(op.name == "ApproveReview" && actor.Kind == store.KindAgent):
+					if !isAgreementRefusal(err, "acme") || !strings.Contains(err.Error(), "Owners: alice") {
+						t.Errorf("agreement: %s by %s with %s: want the agreement refusal, got %v", op.name, actor.Ref(), role, err)
+					}
+				default:
+					if err != nil {
+						t.Errorf("agreement: %s by %s with %s (not gated): %v", op.name, actor.Ref(), role, err)
+					}
+				}
+			}
+		}
+	}
+	if _, err := e.svc.AcceptAgreement(e.ctx, e.alice, "acme", vs[0].ID, vs[0].SHA256); err != nil {
+		t.Fatal(err)
+	}
+	for _, actor := range []service.Actor{e.alice, e.agent, e.bob, e.bobAgent} {
+		for _, op := range authzOps {
+			if err := op.run(e, actor); err != nil {
+				t.Errorf("agreement accepted: %s by %s: %v", op.name, actor.Ref(), err)
+			}
+		}
+	}
 }
 
 // superadminRows is the matrix for root, a superadmin outside both

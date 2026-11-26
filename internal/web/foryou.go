@@ -29,6 +29,8 @@ var forYouLabels = map[string][2]string{
 	service.ForYouComment:  {"PR review", ""},
 	service.ForYouOverlap:  {"Overlap", "warn"},
 	service.ForYouRebase:   {"Needs rebase", "bad"},
+	// An agreement item is "bad" when it blocks work, "warn" when announced.
+	service.ForYouAgreement: {"Agreement", "warn"},
 }
 
 func forYouRows(f service.ForYou, actor service.Actor) []forYouRow {
@@ -38,6 +40,12 @@ func forYouRows(f service.ForYou, actor service.Actor) []forYouRow {
 		l := forYouLabels[it.Kind]
 		r.Label, r.Tone = l[0], l[1]
 		switch {
+		case it.Agreement != nil:
+			r.Anchor = "a-" + it.Agreement.Org + "-" + it.Agreement.Version.ID
+			r.Link = "/ui/orgs/" + url.PathEscape(it.Agreement.Org) + "#agreement"
+			if it.Agreement.Blocking {
+				r.Tone = "bad"
+			}
 		case it.Review != nil:
 			r.Anchor = "r-" + it.Review.ID.String()
 			r.RepoName, r.Effort = it.Review.RepoName, it.Review.EffortSlug

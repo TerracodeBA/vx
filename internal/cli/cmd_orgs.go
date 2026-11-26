@@ -182,7 +182,7 @@ personal organization named like them.`,
 			return nil
 		},
 	}
-	cmd.AddCommand(create, list, show, setDefault, member, remove)
+	cmd.AddCommand(create, list, show, setDefault, member, remove, a.orgAgreementCmd())
 	return cmd
 }
 

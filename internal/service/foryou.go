@@ -25,14 +25,18 @@ const (
 	ForYouComment  = "comment"  // a review comment on a pull request from the git host
 	ForYouOverlap  = "overlap"  // the person's effort collides with another
 	ForYouRebase   = "rebase"   // the person's effort needs a rebase
+	// ForYouAgreement: an organization the person owns needs the data
+	// processing agreement accepted (dpa.go).
+	ForYouAgreement = "agreement"
 )
 
 // ForYouItem is one thing on the For you page: a note or a review.
 type ForYouItem struct {
-	Kind   string
-	At     time.Time
-	Note   *Note
-	Review *Review
+	Kind      string
+	At        time.Time
+	Note      *Note
+	Review    *Review
+	Agreement *AgreementNotice
 }
 
 // ForYou is what waits for a principal, newest first, with counts.
@@ -103,6 +107,13 @@ func (s *Service) ForYou(ctx context.Context, actor Actor) (ForYou, error) {
 	}
 	if err := s.forYouEffortNotes(ctx, actor, addNote); err != nil {
 		return ForYou{}, err
+	}
+	notices, err := s.AgreementNotices(ctx, actor)
+	if err != nil {
+		return ForYou{}, err
+	}
+	for i := range notices {
+		out.Items = append(out.Items, ForYouItem{Kind: ForYouAgreement, At: notices[i].At, Agreement: &notices[i]})
 	}
 	sort.SliceStable(out.Items, func(i, j int) bool { return out.Items[i].At.After(out.Items[j].At) })
 	if len(out.Items) > forYouMax {

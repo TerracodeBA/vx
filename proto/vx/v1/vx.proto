@@ -1170,6 +1170,54 @@ service OrgService {
   // People (superadmins): create people and list everyone on the server.
   rpc CreatePerson(CreatePersonRequest) returns (CreatePersonResponse) {}
   rpc ListPeople(ListPeopleRequest) returns (ListPeopleResponse) {}
+  // The data processing agreement (servers with VX_REQUIRE_DPA): an
+  // organization's status, every acceptance and, on request, a version's
+  // text (members and superadmins). Accepting is not in the API: an owner
+  // accepts in the web UI, as a deliberate act by a person.
+  rpc GetOrgAgreement(GetOrgAgreementRequest) returns (GetOrgAgreementResponse) {}
+}
+
+message AgreementVersion {
+  string id = 1;
+  string title = 2;
+  string published = 3; // RFC 3339
+  string effective = 4; // RFC 3339
+  string sha256 = 5; // of the Markdown text, hex
+}
+
+message AgreementAcceptance {
+  string id = 1;
+  string version = 2;
+  string sha256 = 3; // of the text as accepted
+  string accepted_by = 4; // ref of the person
+  string accepted_at = 5;
+  string ip = 6;
+  bool known = 7; // the server still publishes this version
+}
+
+message GetOrgAgreementRequest {
+  string org = 1;
+  // text: return the text of version (empty: the one in effect); with
+  // acceptance set, the text exactly as that acceptance accepted it.
+  bool text = 2;
+  string version = 3;
+  string acceptance = 4;
+}
+message GetOrgAgreementResponse {
+  bool required = 1; // false: this server does not ask for an agreement
+  AgreementVersion current = 2; // in effect now
+  AgreementAcceptance current_accepted = 3; // unset while it is missing
+  bool usable = 4; // the organization may be used for work
+  repeated AgreementVersion announced = 5; // published, not in effect yet
+  repeated string announced_accepted = 6; // ids of announced versions already accepted
+  AgreementVersion pending = 7; // what an owner accepts next
+  string missing = 8; // why work is refused, while it is
+  repeated AgreementAcceptance history = 9; // newest first
+  string owners = 10;
+  bool can_accept = 11; // the caller is a person who owns the organization
+  string accept_url = 12;
+  bytes text = 13; // with text set: the Markdown
+  AgreementVersion text_version = 14; // which version text is
 }
 
 message Org {

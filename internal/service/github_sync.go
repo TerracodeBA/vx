@@ -217,9 +217,10 @@ func (s *Service) syncGitHubRepo(ctx context.Context, org store.Org, installatio
 	}
 	r.GitHubRepoID, r.GitHubInstallationID = &gr.ID, &installationID
 	_ = s.Store.LogOp(ctx, &r.ID, nil, "github.repo.link", r.Name, nil, map[string]any{"github_repo_id": gr.ID, "full_name": gr.FullName, "installation": installationID})
-	if created && s.Upstream != nil {
+	if created && s.Upstream != nil && s.agreementOK(ctx, org.ID) {
 		// The first import; a failure leaves the repo, and the next push
-		// or `vx repo sync` imports it.
+		// or `vx repo sync` imports it. Not before the organization accepted
+		// the data processing agreement (dpa.go).
 		_, _, _ = s.Upstream.SyncBranch(ctx, r, branch)
 	}
 	return r, nil

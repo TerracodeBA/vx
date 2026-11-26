@@ -205,6 +205,9 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	if err := u.mountGitHubApp(mux); err != nil {
 		return err
 	}
+	if err := u.mountAgreement(mux, funcs); err != nil {
+		return err
+	}
 	return u.mountCLI(mux, funcs)
 }
 
@@ -252,6 +255,9 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 				data["DiskLow"] = d
 			}
 			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
+			if notices, err := u.svc.AgreementNotices(r.Context(), a); err == nil && len(notices) > 0 {
+				data["AgreementNotices"] = notices[:min(len(notices), 3)]
+			}
 		}
 		if _, ok := data["Section"]; !ok {
 			data["Section"] = ""

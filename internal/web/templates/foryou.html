@@ -24,9 +24,14 @@
   <li class="fy-item fy-{{.Kind}}" id="{{.Anchor}}">
     <div class="fy-head">
       <span class="pill {{.Tone}}">{{.Label}}</span>
-      <a class="fy-where" href="/ui/effort?repo={{.RepoName}}&amp;slug={{.Effort}}">{{.RepoName}} / {{.Effort}}</a>
+      {{if .Agreement}}<a class="fy-where" href="{{.Link}}">{{.Agreement.Org}}</a>{{else}}<a class="fy-where" href="/ui/effort?repo={{.RepoName}}&amp;slug={{.Effort}}">{{.RepoName}} / {{.Effort}}</a>{{end}}
       <span class="muted small nowrap">{{ago .At}}</span>
     </div>
+    {{with .Agreement}}
+    <a class="fy-title" href="{{$row.Link}}">{{.Version.Title}}</a>
+    <p class="fy-meta muted small">{{if .Blocking}}In effect since {{.Version.EffectiveDay}}. {{.Org}} cannot be used for work (new repositories, efforts, workspaces, landing, shipping) until an owner accepts it.{{else}}Published {{.Version.PublishedDay}}, takes effect {{.Version.EffectiveDay}}. The earlier acceptance counts until then; accept this version before it does.{{end}}</p>
+    <div class="fy-actions"><a class="btn primary" href="{{$row.Link}}">Read and accept</a></div>
+    {{end}}
     {{with .Review}}
     <a class="fy-title" href="{{$row.Link}}">{{first .Intent}}</a>
     <p class="fy-meta muted small">by {{principal .Author.Ref}}{{with .AuthorOwner}} for {{principal .Ref}}{{end}} · <span class="mono">{{range $i, $p := .Paths}}{{if $i}}, {{end}}{{$p}}{{end}}</span></p>

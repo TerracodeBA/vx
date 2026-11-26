@@ -93,6 +93,9 @@ func (s *Service) PutObjects(ctx context.Context, actor Actor, repo string, objs
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireAgreement(ctx, r, "uploading files"); err != nil {
+		return nil, err
+	}
 	var size int64
 	for _, o := range objs {
 		size += int64(len(o.Data))

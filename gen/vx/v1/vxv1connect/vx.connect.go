@@ -221,6 +221,9 @@ const (
 	OrgServiceCreatePersonProcedure = "/vx.v1.OrgService/CreatePerson"
 	// OrgServiceListPeopleProcedure is the fully-qualified name of the OrgService's ListPeople RPC.
 	OrgServiceListPeopleProcedure = "/vx.v1.OrgService/ListPeople"
+	// OrgServiceGetOrgAgreementProcedure is the fully-qualified name of the OrgService's
+	// GetOrgAgreement RPC.
+	OrgServiceGetOrgAgreementProcedure = "/vx.v1.OrgService/GetOrgAgreement"
 	// PublicServiceServerInfoProcedure is the fully-qualified name of the PublicService's ServerInfo
 	// RPC.
 	PublicServiceServerInfoProcedure = "/vx.v1.PublicService/ServerInfo"
@@ -2028,6 +2031,11 @@ type OrgServiceClient interface {
 	// People (superadmins): create people and list everyone on the server.
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+	// The data processing agreement (servers with VX_REQUIRE_DPA): an
+	// organization's status, every acceptance and, on request, a version's
+	// text (members and superadmins). Accepting is not in the API: an owner
+	// accepts in the web UI, as a deliberate act by a person.
+	GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error)
 }
 
 // NewOrgServiceClient constructs a client for the vx.v1.OrgService service. By default, it uses the
@@ -2149,6 +2157,12 @@ func NewOrgServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(orgServiceMethods.ByName("ListPeople")),
 			connect.WithClientOptions(opts...),
 		),
+		getOrgAgreement: connect.NewClient[v1.GetOrgAgreementRequest, v1.GetOrgAgreementResponse](
+			httpClient,
+			baseURL+OrgServiceGetOrgAgreementProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GetOrgAgreement")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -2172,6 +2186,7 @@ type orgServiceClient struct {
 	listSupport      *connect.Client[v1.ListSupportRequest, v1.ListSupportResponse]
 	createPerson     *connect.Client[v1.CreatePersonRequest, v1.CreatePersonResponse]
 	listPeople       *connect.Client[v1.ListPeopleRequest, v1.ListPeopleResponse]
+	getOrgAgreement  *connect.Client[v1.GetOrgAgreementRequest, v1.GetOrgAgreementResponse]
 }
 
 // CreateOrg calls vx.v1.OrgService.CreateOrg.
@@ -2264,6 +2279,11 @@ func (c *orgServiceClient) ListPeople(ctx context.Context, req *connect.Request[
 	return c.listPeople.CallUnary(ctx, req)
 }
 
+// GetOrgAgreement calls vx.v1.OrgService.GetOrgAgreement.
+func (c *orgServiceClient) GetOrgAgreement(ctx context.Context, req *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error) {
+	return c.getOrgAgreement.CallUnary(ctx, req)
+}
+
 // OrgServiceHandler is an implementation of the vx.v1.OrgService service.
 type OrgServiceHandler interface {
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
@@ -2288,6 +2308,11 @@ type OrgServiceHandler interface {
 	// People (superadmins): create people and list everyone on the server.
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+	// The data processing agreement (servers with VX_REQUIRE_DPA): an
+	// organization's status, every acceptance and, on request, a version's
+	// text (members and superadmins). Accepting is not in the API: an owner
+	// accepts in the web UI, as a deliberate act by a person.
+	GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error)
 }
 
 // NewOrgServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -2405,6 +2430,12 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(orgServiceMethods.ByName("ListPeople")),
 		connect.WithHandlerOptions(opts...),
 	)
+	orgServiceGetOrgAgreementHandler := connect.NewUnaryHandler(
+		OrgServiceGetOrgAgreementProcedure,
+		svc.GetOrgAgreement,
+		connect.WithSchema(orgServiceMethods.ByName("GetOrgAgreement")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.OrgService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrgServiceCreateOrgProcedure:
@@ -2443,6 +2474,8 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 			orgServiceCreatePersonHandler.ServeHTTP(w, r)
 		case OrgServiceListPeopleProcedure:
 			orgServiceListPeopleHandler.ServeHTTP(w, r)
+		case OrgServiceGetOrgAgreementProcedure:
+			orgServiceGetOrgAgreementHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2522,6 +2555,10 @@ func (UnimplementedOrgServiceHandler) CreatePerson(context.Context, *connect.Req
 
 func (UnimplementedOrgServiceHandler) ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.ListPeople is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GetOrgAgreement is not implemented"))
 }
 
 // PublicServiceClient is a client for the vx.v1.PublicService service.

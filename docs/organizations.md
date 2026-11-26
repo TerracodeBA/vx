@@ -116,7 +116,7 @@ vx repo access acme/api                         # direct grants and everyone's r
 vx repo support acme/api root --for 24h         # support access for a superadmin (repository admins)
 ```
 
-Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
+Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, `org.dpa_accept`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
 
 ## Web UI
 
@@ -126,7 +126,7 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 |---|---|---|
 | **Reviews** (`/ui/reviews`, in the sidebar for everyone) | Every signed-in person, for the repositories they can read | Changes waiting for a person under a human landing policy, with who landed them and the files under the policy, and the recently decided ones. Each links to its change page, where people who may decide it Approve (it lands) or Reject with a reason. |
 | **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Superadmins can switch to every organization on the server. |
-| **An organization** (`/ui/orgs/ORG`) | Its members, and superadmins (read-only, without the repositories they cannot read) | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role). Owners and admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
+| **An organization** (`/ui/orgs/ORG`) | Its members, and superadmins (read-only, without the repositories they cannot read) | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role); on servers that ask for it, the [data processing agreement](#data-processing-agreement) with Accept for owners and every acceptance. Owners and admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
 | **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Support access: the superadmins who have it, their role, until when, the reason and who granted it, with End now, and a form to give a superadmin read or write for 4 hours to 30 days. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, `operator (support access) until DATE`, ...). People who can read the repository get 403; everyone else gets 404. |
 | **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Superadmins | Everyone on the server: their agents, whether they are a superadmin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a superadmin. After an upgrade from a version with site admins, a review banner says that site admins no longer have access to repositories, until a superadmin clicks Mark as reviewed (see [deploy.md](deploy.md#upgrading-to-v05-superadmins)). With GitHub sign-in, "Invite by GitHub login" lets a GitHub user create their account by signing in, and the open invites are listed with a Withdraw button. To anyone else the page does not exist (404). |
 | **Admin, Audit** (`/ui/admin/audit`, linked from People and from organization pages) | Superadmins (the whole server, metadata of repository entries) and owners and admins of an organization (their organization) | The newest 200 entries of the operation log for the filters (organization, repository, actor, time), and downloads of every match as JSONL or CSV. Superadmins also see the data disk's free space here, and a warning on every page when it runs low. See [Audit log](#audit-log). |
@@ -187,6 +187,44 @@ vx-server quota acme --push default --open-efforts 0  # back to the default; 0 m
 ```
 
 Changes are in the audit log as `org.quota`. Stored data counts bytes as the object store holds them (compressed). New uploads are counted within seconds; repositories imported from a git host, and data from before v0.5, within about 10 minutes, so a big import can go over the stored data quota once before further uploads are refused.
+
+## Data processing agreement
+
+On a server that asks for it (vx Cloud; the operator turns it on, see [deploy.md](deploy.md#data-processing-agreement)), the data processing agreement is concluded when an owner of the organization accepts it in the web UI. Self-hosted servers have the step off and never show it.
+
+**What needs it.** An organization that has not accepted the version in effect cannot be used for work. Refused, with `FailedPrecondition`:
+
+- creating, connecting or importing repositories (`vx repo create`, also into the organization of a new GitHub App installation: its repositories are linked but not imported until the agreement is accepted, then `vx repo sync` or the next push imports them),
+- importing upstream commits (`vx repo sync`; pushes the git host reports are not imported meanwhile),
+- starting efforts (`vx effort new`), opening workspaces (`vx new`), uploading files and landing (`vx land`, and continuing a rebase with resolved files),
+- approving reviews (which lands the change),
+- shipping (`vx ship plan`, `vx ship open`, split or not).
+
+Everything else keeps working, so people can see what is there and what is missing: every read (efforts, the log, diffs, the board, reviews, the organization page), and also notes, questions, claims, tasks, closing efforts, abandoning workspaces and managing members and access. A caller without a role still gets "not found" first: the agreement is never mentioned to someone who cannot see the repository. The refusal says what is missing and who can fix it:
+
+```
+organization acme has not accepted the data processing agreement, so it cannot be used for work (starting efforts) yet.
+An owner of acme must accept the data processing agreement: Organization > Agreement, in the web UI (https://vx.example.com/ui/orgs/acme#agreement). Owners: alice, bob
+```
+
+**Personal organizations** count too, and are accepted for **on first use**: sign-up asks nothing, and the first repository in a personal organization is refused with that message until its person accepts. Until it has a repository, no banner or notification asks about it.
+
+**Who accepts.** Only a person who owns the organization, signed in to the web UI. Not agents (also not in the web UI with an agent's session), not admins or members, and not superadmins for a customer's organization: a superadmin who owns an organization accepts for it like any owner. Accepting is deliberately not in the CLI, the API or MCP: it is an act by a person who read the text, not something an agent or a script should do on their behalf.
+
+**Accepting.** The organization page (`/ui/orgs/ORG`) has an **Agreement** section with the version to accept, rendered from the operator's Markdown, its dates and SHA-256, and Download. An owner ticks "I have read version ... and accept it for ORG" and presses Accept (a form post, refused from other sites). vx records the organization, the version, the SHA-256 of the text shown, who accepted, when and from which address, and writes `org.dpa_accept` to the operation log. The form carries the hash of the text it showed, so a text that changed in the meantime is refused. Accepting the same version again changes nothing.
+
+**The record.** Every acceptance is kept for as long as the organization exists (the operation log's retention does not touch it), and listed in the Agreement section for members and superadmins: version, who, when, from where, hash. **View** shows the text exactly as it was accepted and **Download** saves it as a Markdown file; vx keeps every accepted text in its database, so it stays the same even if the operator's files change.
+
+```sh
+vx org agreement acme                         # in effect, accepted by whom and when, announced versions, every acceptance
+vx org agreement acme --text                  # the Markdown of the version in effect (--version ID for another)
+vx org agreement acme --download              # save it as dpa-acme-VERSION.md (-o FILE)
+vx org agreement acme --download --acceptance ID   # the text exactly as that acceptance accepted it
+```
+
+**New versions.** The operator publishes a new version at least 30 days before it takes effect. From its publication owners see a banner on every page, an item on For you and, if they turned notifications on, a push notification; the Agreement section shows it with Accept. Until the effective date the earlier acceptance still counts, so nothing stops. From the effective date the organization is refused work, as above, until an owner accepts the new version (owners can accept it any time before, and then nothing stops at all). When it takes effect unaccepted, owners get another notification.
+
+**Limits.** One agreement per server, the same for every organization. The text is shown in English as the operator wrote it; vx does not translate it. There is no countersignature or e-mail copy: the record in vx, the Download and the operation log are the proof.
 
 ## Audit log
 
@@ -348,6 +386,9 @@ A superadmin has none of the repository roles in this table from being one: ever
 | See an organization's quotas and usage (no repository role: members of the organization and superadmins) | the organization page, `vx-server quota ORG` | member or superadmin |
 | Change an organization's quotas (never an agent) | the organization page, `vx-server quota ORG --repos N ...` | superadmin |
 | Export an organization's audit log (with what changed for repositories you administer) | `vx admin audit --org ORG`, Admin > Audit | organization owner or admin |
+| See an organization's data processing agreement: status, acceptances, the texts (servers with `VX_REQUIRE_DPA`) | `vx org agreement ORG`, `GetOrgAgreement`, the organization page | member or superadmin |
+| Accept the data processing agreement (a person, in the web UI only; never an agent, never a superadmin who is not an owner) | Organization > Agreement | organization owner |
+| Work in an organization without the agreement in effect accepted: create, connect or import repositories, `vx repo sync`, `vx effort new`, `vx new`, uploads and `vx land`, approving reviews, `vx ship` | every such row above | the row's role, then refused until an owner accepts (`TestAuthzMatrix`, agreement rows) |
 | Export the whole server's audit log (metadata only for repository entries) | `vx admin audit`, Admin > Audit | superadmin |
 
 On GitHub-backed repositories the role in the last column is the one GitHub gives you (see [GitHub-backed repositories](#github-backed-repositories)).

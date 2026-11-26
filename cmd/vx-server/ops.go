@@ -52,7 +52,37 @@ func applyOps(cfg *server.Config, getenv func(string) string) error {
 		return fmt.Errorf("VX_AUDIT_RETENTION: %w", err)
 	}
 	cfg.Audit.Retention = ret
+	agreement, err := agreementSettings(getenv)
+	if err != nil {
+		return err
+	}
+	cfg.Agreement = agreement
 	return nil
+}
+
+// agreementSettings reads the data processing agreement step (#41):
+// VX_REQUIRE_DPA turns it on, VX_DPA_DIR holds the versions. Off, the
+// directory is not read at all.
+func agreementSettings(getenv func(string) string) (service.AgreementSettings, error) {
+	var a service.AgreementSettings
+	switch v := strings.ToLower(strings.TrimSpace(getenv("VX_REQUIRE_DPA"))); v {
+	case "", "0", "false", "no", "off":
+		return a, nil
+	case "1", "true", "yes", "on":
+		a.Required = true
+	default:
+		return a, fmt.Errorf("VX_REQUIRE_DPA=%q: use 1 to ask organizations to accept the data processing agreement, or leave it unset", v)
+	}
+	a.Dir = strings.TrimSpace(getenv("VX_DPA_DIR"))
+	if a.Dir == "" {
+		return a, fmt.Errorf("VX_REQUIRE_DPA is on but VX_DPA_DIR is not set: point it at the directory with %s and one Markdown file per version of the data processing agreement (see docs/deploy.md)", service.AgreementManifest)
+	}
+	versions, err := service.LoadAgreementVersions(a.Dir)
+	if err != nil {
+		return a, fmt.Errorf("VX_REQUIRE_DPA is on, and the data processing agreement in VX_DPA_DIR=%s cannot be used: %w", a.Dir, err)
+	}
+	a.Versions = versions
+	return a, nil
 }
 
 func quotaDefaults(getenv func(string) string) (service.Quota, error) {

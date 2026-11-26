@@ -126,6 +126,10 @@ type Service struct {
 	// Push configures Web Push notifications (push.go).
 	Push PushSettings
 
+	// Agreement configures the data processing agreement step (dpa.go);
+	// off by default.
+	Agreement AgreementSettings
+
 	gh        githubState // the GitHub App loaded from the database
 	forecasts forecaster  // background overlap forecasts
 	objects   objectIndex // repositories whose objects need no backfill
