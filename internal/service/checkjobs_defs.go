@@ -2,17 +2,6 @@ package service
 
 import "github.com/TerracodeBA/vx/internal/rules"
 
-// jobDefsOf turns a repository's check definitions into what the queue
-// needs: the [[check]] tables (the older [checks] required and [[policy]]
-// tables have no runner).
-func jobDefsOf(rs rules.Rules) []jobDef {
-	out := make([]jobDef, 0, len(rs.Checks))
-	for _, d := range rs.Checks {
-		out = append(out, jobDefOf(d))
-	}
-	return out
-}
-
 // jobDefOf is one check as the queue sees it.
 func jobDefOf(d rules.CheckDef) jobDef {
 	return jobDef{

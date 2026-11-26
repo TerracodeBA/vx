@@ -74,7 +74,7 @@ Mistakes are errors that name the line, like the rest of vx.toml: `vx.toml line 
 
 | `reporter` | Whose result counts |
 |---|---|
-| `self` | anyone with write on the repository, the change's author included |
+| `self` | anyone with write on the repository, the change's author included, and a CI token of the repository that may report the check |
 | `independent` | not the change's author, and not another agent of the same person (unless `allow_same_person = true`); people of other teams, their agents and CI count |
 | `ci` | a CI token of the repository ([runners.md](runners.md#ci-tokens)) |
 | `human` | a person, never an agent or a CI token, and not the person who made the change by hand |
@@ -127,6 +127,19 @@ Queued security-review for runner agent:security as job 7c1d2e3f (vx check jobs)
 - A gated land lands exactly the snapshot the results describe: when the effort moved meanwhile, the land is refused as moved instead of merged, and `vx land --run` syncs, runs the checks again and retries. Results on the old tree do not carry over; report again on the new one.
 
 **Ship.** `vx ship open` (and every part of `vx ship open --split`) is refused while a check that blocks ship, whose paths the shipment touches, has no passing result on the effort head's tree. Report it on the head (`vx check report NAME` in a working copy at the head, or `vx check report NAME --change HEAD-CHANGE`); a land after that moves the head, so the check needs a new result.
+
+## Jobs, runners and who may report
+
+A check with a `runner` (`agent:KIND`, `ci` or `human`) is not run by the landing agent: when it applies, vx puts a **job** for it in the repository's queue, and a runner takes it, runs it and reports the result, which finishes the job.
+
+- **When a job is made.** On land of a change that touches the check's `paths` (`when = "land"`), for the landed tree; at a land gate, for the snapshot the gate refused, so the next land finds the result; when someone asks to ship (`vx ship plan`, `vx ship open`) for `when = "ship"` checks the effort's changes touch, for the head tree; and on request, for any check with a runner: `vx check request NAME [--change ID] [--value preview_url=URL]`. Land and ship never make a second job for a tree that has one; a request always does. A new tree supersedes the pending jobs of the same check on older trees.
+- **Who takes it.** `agent:KIND` jobs go to agents whose person declared that kind (`vx agent runner NAME --kinds KIND`), `ci` jobs to CI tokens of the repository, `human` jobs to people with write (they show on the For you page). A runner is never given a job whose result would not count from it.
+- **Leases.** `vx check next [--runner KIND] [--wait]` takes the oldest job with a lease for the check's `timeout` (30 minutes without one); `vx check renew` extends it, `vx check release` gives the job back. A lease that expires puts the job back with the attempt counted; after 3 the job fails with the reason. `vx check jobs` lists the queue.
+- **What the runner gets.** The effort, the change, the changed files, the files to fetch through the object API, the diff (when the check takes `diff`) and named values such as `preview_url`, with the declared inputs that have no value yet.
+- **Who may report.** The [Reporters](#reporters) table above decides whose result counts, the same for results of jobs and results reported by hand. A runner reports with `vx check report NAME --change ID --tree TREE` for exactly the job's tree.
+- **CI tokens.** `vx repo ci-token create NAME --repo R [--checks unit,lint]` makes a service principal that may only report those checks on that repository and read its jobs and their files; everything else is "not found" to it.
+
+[runners.md](runners.md) has the details: the inputs, leases across several servers, CI tokens with a GitHub Actions example, and a browser runner with Claude in Chrome with its security rules.
 
 ## Compatibility
 
