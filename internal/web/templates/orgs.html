@@ -51,4 +51,24 @@
   <p class="panel-note muted small">Agents can look but not create organizations. Sign in as the person to do that.</p>
   {{end}}
 </section>
+
+{{if .Deleted}}
+<section class="panel" id="deleted">
+  <div class="panel-head"><h2>Deleted organizations</h2><span class="muted small">yours, until their purge</span></div>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Organization</th><th>Deleted by</th><th>Purge</th></tr></thead>
+    <tbody>
+    {{range .Deleted}}
+      <tr>
+        <td class="cell-main"><a class="row-link" href="/ui/orgs/{{.Org}}">{{.Org}}</a></td>
+        <td class="mono small">{{.RequestedBy}}</td>
+        <td class="small">{{if .Purging}}in progress{{else}}{{.PurgeOn}}{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}
 {{end}}

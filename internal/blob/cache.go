@@ -11,7 +11,10 @@ import (
 // Cached keeps recently used objects of a remote store in memory, bounded
 // by total size, least recently used first out. Objects are immutable, so a
 // cached object never goes stale; only presence is cached, never absence
-// (another server may store the object a moment later).
+// (another server may store the object a moment later). Objects are only
+// deleted by an organization purge, and only when no repository records
+// them, so a stale cached object is never served through a repository;
+// Put always goes to the store behind (see Put).
 type Cached struct {
 	inner Store
 	max   int64
@@ -98,12 +101,11 @@ func (c *Cached) add(h hash.Hash, kind hash.Kind, data []byte) {
 	}
 }
 
-// Put implements Store.
+// Put implements Store. It always asks the store behind the cache (which
+// skips objects it has with a HEAD request): an organization purge on
+// another server may have deleted an object this cache still holds, and a
+// Put must bring it back.
 func (c *Cached) Put(ctx context.Context, kind hash.Kind, data []byte) (hash.Hash, error) {
-	h := hash.Of(kind, data)
-	if _, ok := c.lookup(h); ok {
-		return h, nil
-	}
 	h, err := c.inner.Put(ctx, kind, data)
 	if err != nil {
 		return hash.Zero, err

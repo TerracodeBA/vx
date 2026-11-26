@@ -1,0 +1,31 @@
+{{define "crumbs"}}<a href="/ui/orgs">Organizations</a><span class="sep">/</span><span>{{.D.Org}}</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <div class="title-row"><h1>{{.D.Org}}</h1><span class="badge">deleted</span></div>
+    <p class="muted">{{if .Purging}}This organization is being purged: its data is deleted now and it can no longer be restored.{{else}}This organization is deleted and hidden: its repositories cannot be read or changed by anyone, and shipping and syncing stopped. You see this page because you are one of its owners.{{end}}</p>
+  </div>
+</div>
+{{template "admin-flash" .Flash}}
+
+<div class="admin">
+<section class="panel" id="deletion">
+  <div class="panel-head"><h2>Deletion</h2></div>
+  <dl class="kv">
+    <dt>Deleted on</dt><dd>{{.DeletedOn}}</dd>
+    <dt>Deleted by</dt><dd class="mono">{{.D.RequestedBy}}</dd>
+    <dt>Purge</dt><dd>{{if .Purging}}in progress{{else}}scheduled for {{.PurgeOn}}{{end}}</dd>
+  </dl>
+  <p class="panel-note muted small">After the purge every repository, effort, change, board note, shipment, team and membership of it, its git mirrors and the stored files no other repository uses are deleted for good. People keep their accounts. If it was linked to GitHub, the vx GitHub App stays installed on GitHub until you uninstall it there; that is your choice. The server's backups expire on their own schedule.</p>
+  <div class="admin-form">
+    <a class="btn ghost" href="/ui/orgs/{{.D.Org}}/deletion-record">Download deletion confirmation</a>
+  </div>
+  {{if .Restorable}}
+  <form method="post" action="/ui/orgs/{{.D.Org}}/restore" class="admin-form">
+    <button class="btn primary" type="submit">Restore organization</button>
+    <p class="field-hint">Brings it back unchanged: repositories, efforts, members, teams and settings as they were.</p>
+  </form>
+  {{end}}
+</section>
+</div>
+{{end}}

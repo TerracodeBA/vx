@@ -220,9 +220,21 @@ By default objects (file contents and trees) live on the data volume, in `/data/
 
 The second copy with vx stopped is what makes switching safe: no object can be written to the old store after it. Keep `/data/objects` until the server has run on the bucket for a while; `--verify-existing` reads back every object already in the bucket too. Moving back works the same way, with `--to file:///data/objects`.
 
-Objects in a bucket are immutable and never deleted by vx, so nightly backups skip them: protect the bucket at the provider (versioning, replication), or copy it to a second bucket now and then with `vx-server blobs copy --from s3://... --to s3://...`.
+Objects in a bucket are immutable, and vx deletes one only when it purges a deleted organization and no other repository uses the object (see [Deleting organizations](#deleting-organizations)). Nightly backups skip them: protect the bucket at the provider (versioning, replication), or copy it to a second bucket now and then with `vx-server blobs copy --from s3://... --to s3://...`. Versioning keeps purged objects as old versions until a lifecycle rule expires them: set one that matches what you promise customers about deleted data.
 
 Storage used per repository and organization (for quotas) is recorded in Postgres (`object_sizes`): new uploads and merges within seconds, imports and older objects by a background pass at start and every 10 minutes.
+
+## Deleting organizations
+
+Owners delete an organization with `vx org delete ORG --confirm ORG` or on its page (see [organizations.md](organizations.md#deleting-an-organization)). It is hidden at once and purged when the grace period ends: `VX_ORG_DELETE_GRACE`, 30 days by default. Until then its owners can restore it unchanged.
+
+- **The purger.** Every server checks every 10 minutes for organizations whose grace period ended; one at a time purges (a Postgres advisory lock held on a connection of its own, so a server that dies frees it and another takes over). It deletes in batches of 5,000 rows, each its own short transaction, so no table is locked for long, and records where it is: after a crash or deploy the next run continues there. The log says `purged organization org=acme counts=...`; `vx_queue_depth{queue="org_purge"}` and `vx_orgs_purged_total` are the metrics.
+- **Objects.** Files and trees are stored once per server and may be shared with other organizations' repositories. The purge deletes an object from the blob store (disk or bucket) only when no remaining repository records it, checked again under a lock on that object right before it goes; an upload of the same file at that moment notices and writes it again. While any other repository's objects are not indexed yet (the object backfill of an upgrade), object deletion waits, and the purge finishes after the backfill.
+- **Git mirrors.** The purging server deletes the organization's mirrors in `VX_DATA_DIR/git`; every other server deletes its own copies within 10 minutes, when it sees their repositories gone.
+- **Early, for a customer who asks.** After an owner deleted it: `vx-server org purge ORG --now` (with the server's `VX_DATABASE_URL`, `VX_BLOB_URL` and `VX_DATA_DIR`; on Docker: `docker compose exec vx vx-server org purge acme --now`). It prints the confirmation.
+- **Confirmation.** Owners download one before the purge (it says when the purge is scheduled). After the purge, `vx-server org deletion-record ORG` (`--json`) prints the record that is kept: organization id and handle, who deleted it, when, when it was purged and the counts of what was removed, without repository names or content. Send it to the customer.
+- **Operation log.** The organization's own entries (repository work, members, teams) are purged with it; `org.delete`, `org.restore` and `org.purge` stay, as the record of the deletion.
+- **Backups expire on their own schedule.** A purge does not reach into backups: database dumps and data archives keep the organization until they expire (`backup.sh` keeps 14 days locally and `VX_BACKUP_KEEP_DAYS` in the bucket), and bucket versioning keeps deleted objects as old versions until a lifecycle rule removes them. Promise customers the longest of these on top of the grace period. A restored backup older than a purge brings that organization back as it was then: if it was already deleted, the purger purges it again; otherwise compare with `vx-server org deletion-record ORG` and have it deleted and purged again.
 
 ## Several servers
 
@@ -303,7 +315,7 @@ What the values cover (see `values.yaml` for all of them):
 | `publicURL`, `signup` | `VX_PUBLIC_URL` and `VX_SIGNUP`. |
 | `blobStore.url`, `blobStore.existingSecret` | Object storage (`VX_BLOB_URL`) and a Secret whose keys become environment variables, such as `VX_BLOB_ACCESS_KEY_ID` and `VX_BLOB_SECRET_ACCESS_KEY` (see [Object storage](#object-storage)). Empty: objects stay on the data volume. |
 | `persistence.*` | The data volume (git mirrors; objects without object storage), 20 GiB by default. With a ReadWriteOnce volume the chart replaces the pod with `Recreate`. |
-| `rateLimits.*`, `quotas.*`, `auditRetention` | The `VX_RATE_*`, `VX_QUOTA_*` and `VX_AUDIT_RETENTION` settings below. |
+| `rateLimits.*`, `quotas.*`, `auditRetention`, `orgDeleteGrace` | The `VX_RATE_*`, `VX_QUOTA_*`, `VX_AUDIT_RETENTION` and `VX_ORG_DELETE_GRACE` settings below. |
 | `ingress.*` | Host, class, TLS and annotations. The CLI speaks HTTP/2 through the same host; lands upload up to 64 MiB per request, so raise body size limits (ingress-nginx: `nginx.ingress.kubernetes.io/proxy-body-size: "70m"`). |
 | `metrics.serviceMonitor.enabled` | A ServiceMonitor that scrapes `/metrics` with the metrics token. |
 | `resources`, `probes.*` | 250m CPU and 512 MiB requested, 2 GiB memory limit. The startup probe allows 10 minutes for migrations on an upgrade. |
@@ -442,6 +454,7 @@ Each acceptance is kept in the database for as long as the organization exists, 
 | `VX_DISK_WARN_PERCENT` | `10` | Warn superadmins below this share of free disk |
 | `VX_AUDIT_RETENTION` | forever | Delete operation log entries older than this, like `365d` (at least 7 days) |
 | `VX_REQUIRE_DPA`, `VX_DPA_DIR` | off | Ask organizations to accept the data processing agreement, with its versions in that directory (see [Data processing agreement](#data-processing-agreement)) |
+| `VX_ORG_DELETE_GRACE` | `30d` | How long owners can restore a deleted organization before it is purged (`30d`, `2w`, `72h`); `0`: purge at the purger's next run, within 10 minutes (see [Deleting organizations](#deleting-organizations)) |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 

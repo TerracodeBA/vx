@@ -1152,6 +1152,15 @@ service OrgService {
   rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse) {}
   rpc GetOrg(GetOrgRequest) returns (GetOrgResponse) {}
   rpc UpdateOrg(UpdateOrgRequest) returns (UpdateOrgResponse) {}
+  // Deleting an organization (owners, never agents; not personal ones): it
+  // is hidden at once (its repositories are not found, it leaves every
+  // list, its handle stays reserved), owners restore it until the grace
+  // period ends, then the server purges it. The deletion record names no
+  // repository: owners read it until the purge.
+  rpc DeleteOrg(DeleteOrgRequest) returns (DeleteOrgResponse) {}
+  rpc RestoreOrg(RestoreOrgRequest) returns (RestoreOrgResponse) {}
+  rpc GetOrgDeletion(GetOrgDeletionRequest) returns (GetOrgDeletionResponse) {}
+  rpc ListDeletedOrgs(ListDeletedOrgsRequest) returns (ListDeletedOrgsResponse) {}
   rpc SetMember(SetMemberRequest) returns (SetMemberResponse) {}
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {}
   rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse) {}
@@ -1278,6 +1287,34 @@ message UpdateOrgRequest {
   string default_repo_role = 3; // empty: unchanged
 }
 message UpdateOrgResponse { Org org = 1; }
+
+// OrgDeletion is the record of an organization's deletion.
+message OrgDeletion {
+  string org = 1; // handle
+  string org_id = 2;
+  string requested_by = 3; // principal ref
+  string deleted_at = 4;
+  string purge_after = 5; // when the grace period ends and the purge runs
+  string purge_started = 6; // empty until the purge began; no restore after
+  string purged_at = 7; // empty until purged
+  map<string, int64> counts = 8; // what the purge removed, by kind
+  string confirmation = 9; // the deletion confirmation as plain text
+}
+
+message DeleteOrgRequest {
+  string handle = 1;
+  string confirm = 2; // the handle again
+}
+message DeleteOrgResponse { OrgDeletion deletion = 1; }
+
+message RestoreOrgRequest { string handle = 1; }
+message RestoreOrgResponse { Org org = 1; }
+
+message GetOrgDeletionRequest { string handle = 1; }
+message GetOrgDeletionResponse { OrgDeletion deletion = 1; }
+
+message ListDeletedOrgsRequest {}
+message ListDeletedOrgsResponse { repeated OrgDeletion deletions = 1; } // deleted organizations you own, not purged yet
 
 message SetMemberRequest {
   string org = 1;

@@ -473,8 +473,16 @@ func (c *converter) flush(ctx context.Context) error {
 		for _, g := range c.pending[:n] {
 			hashes = append(hashes, g.VXHash)
 		}
-		if err := c.b.Store.AddRepoObjects(ctx, c.repoID, hashes); err != nil {
+		missing, err := c.b.Store.RecordRepoObjects(ctx, c.repoID, hashes, func(ctx context.Context, h hash.Hash) (bool, error) {
+			return blob.Fresh(c.b.Blobs).Has(ctx, h)
+		})
+		if err != nil {
 			return err
+		}
+		if len(missing) > 0 {
+			// A purge of another organization deleted objects this import
+			// wrote (they had the same files); the next sync writes them again.
+			return fmt.Errorf("%d imported objects were deleted by an organization purge meanwhile; sync again", len(missing))
 		}
 		if err := c.b.Store.SaveGitObjects(ctx, c.repoID, c.pending[:n]); err != nil {
 			return err

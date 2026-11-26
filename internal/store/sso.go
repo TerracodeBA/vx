@@ -78,7 +78,7 @@ func (q Q) ForgetOrgSSOProofs(ctx context.Context, org uuid.UUID) error {
 // domain, with their handles.
 func (q Q) OrgsBySSODomain(ctx context.Context, domain string) ([]Org, error) {
 	rows, err := q.db.Query(ctx, `select `+orgCols+` from orgs o join org_sso s on s.org_id = o.id
-		where $1 = any(s.allowed_domains) order by o.handle`, strings.ToLower(domain))
+		where $1 = any(s.allowed_domains) and o.deleted_at is null order by o.handle`, strings.ToLower(domain))
 	if err != nil {
 		return nil, err
 	}
@@ -352,9 +352,9 @@ func (q Q) MergePeople(ctx context.Context, keep, merged uuid.UUID) (MergeStats,
 	return st, nil
 }
 
-// OrgByID looks an organization up by id.
+// OrgByID looks an organization up by id; deleted ones are not found.
 func (q Q) OrgByID(ctx context.Context, id uuid.UUID) (Org, error) {
-	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.id = $1`, id))
+	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.id = $1 and o.deleted_at is null`, id))
 	return o, notFound(err, "organization")
 }
 

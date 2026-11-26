@@ -76,6 +76,26 @@ func storeSuite(t *testing.T, s blob.Store) {
 			t.Fatalf("List misses objects: %d listed", len(seen))
 		}
 	}
+	if d, ok := blob.AsDeleter(s); ok {
+		if err := d.Delete(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := s.Has(ctx, h); ok || err != nil {
+			t.Fatalf("Has after Delete = %v, %v", ok, err)
+		}
+		if _, _, err := s.Get(ctx, h); !errors.Is(err, blob.ErrNotFound) {
+			t.Fatalf("Get after Delete err = %v", err)
+		}
+		if err := d.Delete(ctx, h); err != nil {
+			t.Fatalf("deleting a missing object: %v", err)
+		}
+		if h2, err := s.Put(ctx, hash.KindBlob, data); err != nil || h2 != h {
+			t.Fatalf("Put after Delete = %v, %v", h2, err)
+		}
+		if _, got, err := s.Get(ctx, h); err != nil || !bytes.Equal(got, data) {
+			t.Fatalf("Get after putting back = %d bytes, %v", len(got), err)
+		}
+	}
 }
 
 func openFake(t *testing.T, f *s3test.Server, rawURL string, hc *http.Client) blob.Store {

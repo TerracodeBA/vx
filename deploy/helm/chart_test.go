@@ -50,14 +50,15 @@ func TestHelmTemplate(t *testing.T) {
 		"--set", "blobStore.existingSecret=vx-s3",
 		"--set", "rateLimits.signin=10/m",
 		"--set", "quotas.stored=20GB",
-		"--set", "auditRetention=365d")
+		"--set", "auditRetention=365d",
+		"--set", "orgDeleteGrace=14d")
 	if err != nil {
 		t.Fatalf("helm template: %v\n%s", err, out)
 	}
 	for _, want := range []string{
 		"kind: Deployment", "kind: Service", "kind: Ingress", "kind: PersistentVolumeClaim", "kind: ServiceMonitor",
 		"name: VX_DATABASE_URL", "name: vx-db", "name: VX_METRICS_TOKEN", "name: VX_BLOB_URL",
-		"name: VX_RATE_SIGNIN", `value: "10/m"`, "name: VX_QUOTA_STORED", "name: VX_AUDIT_RETENTION",
+		"name: VX_RATE_SIGNIN", `value: "10/m"`, "name: VX_QUOTA_STORED", "name: VX_AUDIT_RETENTION", "name: VX_ORG_DELETE_GRACE",
 		"path: /healthz", "startupProbe:", "readOnlyRootFilesystem: true", "type: Recreate",
 	} {
 		if !strings.Contains(out, want) {

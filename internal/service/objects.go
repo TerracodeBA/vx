@@ -124,8 +124,30 @@ func (s *Service) PutObjects(ctx context.Context, actor Actor, repo string, objs
 		}
 		out = append(out, h)
 	}
-	if err := s.Store.AddRepoObjects(ctx, r.ID, out); err != nil {
+	missing, err := s.Store.RecordRepoObjects(ctx, r.ID, out, s.blobPresent)
+	for try := 0; err == nil && len(missing) > 0 && try < 3; try++ {
+		// An organization purge deleted some of these objects between our
+		// put (which found them and skipped writing) and recording them:
+		// write them again (Put asks the store, not a cache) and record.
+		gone := make(map[hash.Hash]bool, len(missing))
+		for _, h := range missing {
+			gone[h] = true
+		}
+		for _, o := range objs {
+			if h := hash.Of(o.Kind, o.Data); gone[h] {
+				if _, err = s.Blobs.Put(ctx, o.Kind, o.Data); err != nil {
+					return nil, err
+				}
+				delete(gone, h)
+			}
+		}
+		missing, err = s.Store.RecordRepoObjects(ctx, r.ID, missing, s.blobPresent)
+	}
+	if err != nil {
 		return nil, err
+	}
+	if len(missing) > 0 {
+		return nil, errObjectsPurged(len(missing))
 	}
 	s.sizes.queue(out)
 	return out, nil
@@ -217,8 +239,12 @@ func (s *Service) recordTree(ctx context.Context, repoID uuid.UUID, from, tree h
 		return err
 	}
 	made := append(trees, blobs...)
-	if err := s.Store.AddRepoObjects(ctx, repoID, made); err != nil {
+	missing, err := s.Store.RecordRepoObjects(ctx, repoID, made, s.blobPresent)
+	if err != nil {
 		return err
+	}
+	if len(missing) > 0 {
+		return errObjectsPurged(len(missing))
 	}
 	s.sizes.queue(made)
 	return nil

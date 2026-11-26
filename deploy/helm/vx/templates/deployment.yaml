@@ -107,6 +107,10 @@ spec:
             - name: VX_AUDIT_RETENTION
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.orgDeleteGrace }}
+            - name: VX_ORG_DELETE_GRACE
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

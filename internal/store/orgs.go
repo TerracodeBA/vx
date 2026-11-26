@@ -56,16 +56,17 @@ func (q Q) CreateOrg(ctx context.Context, handle, displayName string, owner uuid
 	return o, err
 }
 
-// OrgByHandle looks an organization up by handle.
+// OrgByHandle looks an organization up by handle. Deleted organizations
+// are not found (DeletedOrgByHandle reads them).
 func (q Q) OrgByHandle(ctx context.Context, handle string) (Org, error) {
-	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.handle = $1`, handle))
+	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.handle = $1 and o.deleted_at is null`, handle))
 	return o, notFound(err, "organization "+handle)
 }
 
 // LockOrg looks an organization up and locks it until the transaction
 // ends, so membership checks such as "the last owner stays" cannot race.
 func (q Q) LockOrg(ctx context.Context, handle string) (Org, error) {
-	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.handle = $1 for update`, handle))
+	o, err := scanOrg(q.db.QueryRow(ctx, `select `+orgCols+` from orgs o where o.handle = $1 and o.deleted_at is null for update`, handle))
 	return o, notFound(err, "organization "+handle)
 }
 
@@ -77,14 +78,14 @@ type OrgWithRole struct {
 }
 
 // ListOrgs returns every organization (all) or those person is a member
-// of, with person's role, by handle.
+// of, with person's role, by handle. Deleted organizations are left out.
 func (q Q) ListOrgs(ctx context.Context, person uuid.UUID, all bool) ([]OrgWithRole, error) {
 	join := `join`
 	if all {
 		join = `left join`
 	}
 	rows, err := q.db.Query(ctx, `select `+orgCols+`, coalesce(m.role, '') from orgs o `+join+
-		` org_members m on m.org_id = o.id and m.person_id = $1 order by o.handle`, person)
+		` org_members m on m.org_id = o.id and m.person_id = $1 where o.deleted_at is null order by o.handle`, person)
 	if err != nil {
 		return nil, err
 	}
@@ -440,9 +441,10 @@ func (q Q) ReadableRepoIDs(ctx context.Context, principal uuid.UUID, directOnly 
 			where not $2 and tm.person_id = $1
 		union select r.id from repos r join org_members m on m.org_id = r.org_id join orgs o on o.id = r.org_id
 			where not $2 and m.person_id = $1 and (m.role in ('owner', 'admin') or o.default_repo_role <> 'none')
-		) x join repos r on r.id = x.repo_id
+		) x join repos r on r.id = x.repo_id join orgs xo on xo.id = r.org_id and xo.deleted_at is null
 		where $2 or r.github_repo_id is null
 		union select sg.repo_id from support_grants sg join principals sp on sp.id = sg.person_id
+			join repos sr on sr.id = sg.repo_id join orgs so on so.id = sr.org_id and so.deleted_at is null
 			where not $2 and sg.person_id = $1 and sg.expires_at > $3 and sp.site_admin and sp.kind = 'human'`,
 		principal, directOnly, at)
 	if err != nil {

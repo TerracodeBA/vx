@@ -42,6 +42,9 @@ var (
 
 	AuditPruned = Default.NewCounter("vx_audit_pruned_total",
 		"Operation log entries deleted because they were older than the retention.")
+
+	OrgsPurged = Default.NewCounter("vx_orgs_purged_total",
+		"Deleted organizations whose data was purged.")
 )
 
 // RecordOp counts one operation log entry; store.LogOp calls it.

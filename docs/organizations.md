@@ -114,9 +114,13 @@ vx repo grant acme/api team:acme/backend --role write
 vx repo revoke acme/api user:bob
 vx repo access acme/api                         # direct grants and everyone's role, with why (repository admins)
 vx repo support acme/api root --for 24h         # support access for a superadmin (repository admins)
+
+vx org delete acme --confirm acme               # owners: hidden now, purged after the grace period
+vx org deletion acme -o acme-deletion.txt       # the deletion confirmation (owners, until the purge)
+vx org restore acme                             # owners, during the grace period
 ```
 
-Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, `org.dpa_accept`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
+Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `org.delete`, `org.restore`, `org.purge`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, `org.dpa_accept`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
 
 ## Web UI
 
@@ -127,6 +131,7 @@ The same management is in the web UI (`vx ui` opens it signed in). Pages are ser
 | **Reviews** (`/ui/reviews`, in the sidebar for everyone) | Every signed-in person, for the repositories they can read | Changes waiting for a person under a human landing policy, with who landed them and the files under the policy, and the recently decided ones. Each links to its change page, where people who may decide it Approve (it lands) or Reject with a reason. |
 | **Organizations** (`/ui/orgs`, in the sidebar for everyone) | Every signed-in person | Your organizations with your role, members and repositories. "New organization" creates one with you as owner. Superadmins can switch to every organization on the server. |
 | **An organization** (`/ui/orgs/ORG`) | Its members, and superadmins (read-only, without the repositories they cannot read) | Members with their role and teams; teams with their members; the repositories you can read, with the default role and your role; settings (display name, default repository role); on servers that ask for it, the [data processing agreement](#data-processing-agreement) with Accept for owners and every acceptance. Owners and admins change roles, remove members, add people by handle, create and delete teams, and add or remove team members. Members see the same page read-only. To anyone else the organization does not exist (404). |
+| **A deleted organization** (`/ui/orgs/ORG` after deleting, and **Deleted organizations** on `/ui/orgs`) | Its owners, until the purge | When it was deleted and by whom, when the purge is scheduled, **Download deletion confirmation** and **Restore organization**. To anyone else it does not exist (404). The **Delete organization** section at the end of an organization's page (owners, not for personal organizations) asks for the handle to be typed again. See [Deleting an organization](#deleting-an-organization). |
 | **Repository access** (`/ui/repos/REPO/access`, the Access button on the repository page and the organization page) | Admins of that repository | Direct grants, a form to grant a person or a team read, write or admin (a team named without its organization, like `backend`, is the repository's organization's), and Revoke. Support access: the superadmins who have it, their role, until when, the reason and who granted it, with End now, and a form to give a superadmin read or write for 4 hours to 30 days. Below it, everyone's effective role and where it comes from (`org default`, `team:acme/backend`, `user:alice`, `operator (support access) until DATE`, ...). People who can read the repository get 403; everyone else gets 404. |
 | **Admin, People** (`/ui/admin/people`, "Admin" in the sidebar) | Superadmins | Everyone on the server: their agents, whether they are a superadmin, and their organizations with their role. "Add person" creates a person, optionally as a member of an organization and optionally as a superadmin. After an upgrade from a version with site admins, a review banner says that site admins no longer have access to repositories, until a superadmin clicks Mark as reviewed (see [deploy.md](deploy.md#upgrading-to-v05-superadmins)). With GitHub sign-in, "Invite by GitHub login" lets a GitHub user create their account by signing in, and the open invites are listed with a Withdraw button. To anyone else the page does not exist (404). |
 | **Admin, Audit** (`/ui/admin/audit`, linked from People and from organization pages) | Superadmins (the whole server, metadata of repository entries) and owners and admins of an organization (their organization) | The newest 200 entries of the operation log for the filters (organization, repository, actor, time), and downloads of every match as JSONL or CSV. Superadmins also see the data disk's free space here, and a warning on every page when it runs low. See [Audit log](#audit-log). |
@@ -163,6 +168,27 @@ v0.1 had no access control: everyone saw everything. The upgrade (migrations 009
 - every person gets a personal organization; an organization from the step above that is named like a person becomes theirs.
 
 Prune afterwards, as a superadmin: see [deploy.md](deploy.md#upgrading-to-v02).
+
+## Deleting an organization
+
+An organization's owners delete it with everything in it: its repositories with their files and history, efforts, workspaces, changes, shipments, board notes, claims, tasks, rebases, overlaps, reviews, reservations, grants, support grants, teams, memberships, quotas, single sign-on settings and data processing agreement acceptances, its git mirrors, and the stored objects no other repository uses. People stay, with their accounts, tokens, agents and personal organizations.
+
+```sh
+vx org delete acme --confirm acme          # or: the organization page, Delete organization, type the handle
+vx org deletion acme -o acme-deletion.txt  # keep the confirmation
+vx org restore acme                        # changed your mind: within the grace period
+```
+
+- **Who.** Owners only: not admins, not superadmins as such, never agents (people only, like every organization change). Personal organizations cannot be deleted this way; they go with their person.
+- **At once.** The organization is hidden from the moment it is deleted: every repository operation on it is "not found" in the CLI, the API, the web UI and MCP, for everyone including its owners, exactly like a repository that never existed; it leaves every list; shipping, syncing and webhooks for it stop. Its handle stays reserved, so nobody else can take it while it can still come back.
+- **Grace period.** Owners restore it unchanged (`vx org restore`, or Restore organization on its page) for 30 days, or what the server sets (`VX_ORG_DELETE_GRACE`, see [deploy.md](deploy.md#deleting-organizations)). After that, or when the server's operator purges it early for a customer who asks (`vx-server org purge ORG --now`), it can no longer be restored.
+- **Purge.** A background job on the server deletes the data for good, in small batches, one server at a time, and continues after a restart where it stopped. Objects (files and trees) are stored once per server and may be shared with other organizations' repositories: an object is deleted only when no remaining repository uses it. The handle is free again after the purge.
+- **Records.** `org.delete`, `org.restore` and `org.purge` are in the operation log. The organization's other entries in the log (what its people did) are purged with it; these three stay, with the deletion record: the organization's id and handle, who deleted it, when, when it was purged, and how many of each kind of record were removed. It names no repository and holds no content.
+- **Confirmation in writing.** Until the purge, owners download a deletion confirmation (`vx org deletion ORG`, Download deletion confirmation on its page) that says when the purge is scheduled. After the purge nobody is a member any more: the operator produces the final confirmation, with the counts, with `vx-server org deletion-record ORG`.
+- **GitHub-backed organizations.** Deleting stops syncing at once: installation and repository webhooks are ignored, nothing is imported or shipped. The purge drops the link to the installation. The vx GitHub App stays installed on the GitHub organization until you uninstall it there; that is your choice, and vx never does it for you.
+- **Backups** of the server expire on their own schedule (see [deploy.md](deploy.md#deleting-organizations)).
+
+Quotas and metrics leave deleted organizations out: their repositories and efforts count for nobody, and `vx_queue_depth{queue="org_purge"}` shows how many wait for their purge.
 
 ## Quotas
 
@@ -380,6 +406,9 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Run the server: people, invites and sign-up, the GitHub App, server settings, operation log metadata, the upgrade review | `vx-server`, Admin pages, `CreatePerson`, `ListPeople`, `vx org list --all` | superadmin (no repository role) |
 | Merge two accounts (never the superadmin's own) | Admin > People > Merge duplicate accounts, `MergePeople` | superadmin (no repository role) |
 | Set up, require or turn off an organization's single sign-on | the organization page, `SetOrgSSO`, `RemoveOrgSSO` | organization owner |
+| Delete an organization, restore it during the grace period, read its deletion confirmation (never a personal one; never an agent) | `vx org delete`, `vx org restore`, `vx org deletion`, the organization page, `DeleteOrg`, `RestoreOrg`, `GetOrgDeletion` | organization owner |
+| Any operation on a repository of a deleted organization | every row above | none: "not found" for everyone until it is restored (tested in `TestAuthzMatrix`) |
+| Purge a deleted organization early, produce the deletion record after the purge | `vx-server org purge ORG --now`, `vx-server org deletion-record ORG` | the server's operator (console) |
 | Reach a repository of an organization that requires single sign-on | every row above | the row's role, with a session or token that came through it (members and admins; owners exempt) |
 
 A superadmin has none of the repository roles in this table from being one: every repository operation reports "not found" to them until they have a role or support access (tested in `TestAuthzMatrix` and `TestAuthzMatrixGitHub`).

@@ -273,5 +273,17 @@
   {{end}}
 </section>
 {{end}}
+
+{{if and .IsOwner .IsHuman (not .O.Personal)}}
+<section class="panel" id="delete">
+  <div class="panel-head"><h2>Delete organization</h2></div>
+  <p class="panel-note">Deleting <span class="mono">{{$o.Handle}}</span> hides it at once: its repositories are not found for anyone, and shipping and syncing stop. Owners can restore it unchanged {{if .GraceDays}}for {{.GraceDays}} days{{else}}until the server purges it, which happens within minutes on this server{{end}}; then its repositories with their history, efforts, board notes, shipments, teams and memberships are purged for good. People keep their accounts. If it is linked to GitHub, the vx GitHub App stays installed there until you uninstall it on GitHub; that is your choice.</p>
+  <form method="post" action="/ui/orgs/{{$o.Handle}}/delete" class="admin-form">
+    <div class="field"><label for="delete-confirm">Type <span class="mono">{{$o.Handle}}</span> to confirm</label>
+      <input id="delete-confirm" name="confirm" type="text" required maxlength="39" autocomplete="off" spellcheck="false"></div>
+    <button class="btn danger" type="submit">Delete organization</button>
+  </form>
+</section>
+{{end}}
 </div>
 {{end}}

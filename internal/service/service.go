@@ -130,6 +130,12 @@ type Service struct {
 	// off by default.
 	Agreement AgreementSettings
 
+	// OrgDeletion configures deleting and purging organizations
+	// (org_delete.go, org_purge.go).
+	OrgDeletion OrgDeletionSettings
+	// purgeHook, for tests, runs before every batch of a purge.
+	purgeHook func(step string)
+
 	gh        githubState // the GitHub App loaded from the database
 	forecasts forecaster  // background overlap forecasts
 	objects   objectIndex // repositories whose objects need no backfill
