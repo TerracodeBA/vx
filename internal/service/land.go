@@ -63,6 +63,9 @@ type LandResult struct {
 	// The forecast for this land runs after it, in the background, so they
 	// may still describe the effort before this land.
 	Overlaps []Overlap
+	// CheckResults are the check results this land stored: its vx land
+	// --run results, on the snapshot they ran on.
+	CheckResults []store.CheckResult
 	// Review is set when a "human" landing policy of vx.toml applies: the
 	// change waits for a person as this pending review, Landed is false and
 	// the effort head did not move.
@@ -119,6 +122,15 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (res Land
 	if err != nil {
 		return LandResult{}, err
 	}
+	// The checks of vx.toml that block land ([[check]], organization
+	// rules) need a passing result on exactly this snapshot.
+	gated, err := s.landGate(ctx, actor, v, base, in)
+	if err != nil {
+		return LandResult{}, err
+	}
+	if gated {
+		in.RequireUpToDate = true
+	}
 	in.Evidence = s.withRequiredChecks(ctx, in.Tree, in.Evidence)
 	switch decision.Mode {
 	case rules.ModeHuman:
@@ -146,6 +158,7 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (res Land
 			}
 			s.scheduleForecast(v.Repo, v.Effort.ID)
 			s.jobsAfterLand(ctx, v.Repo, v.Effort.ID, res)
+			s.afterLandChecks(ctx, v.Repo, v.Effort, res)
 		}
 		return res, err
 	}
@@ -271,6 +284,11 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 			if err := tx.SetChangesetWarnings(ctx, v.Repo.ID, h, storeWarnings(res.Warnings)); err != nil {
 				return err
 			}
+		}
+		// vx land --run results are evidence of the change on the tree
+		// they ran on (the snapshot), for the checks that run them.
+		if res.CheckResults, err = s.recordLandChecks(ctx, tx, actor, v, in); err != nil {
+			return err
 		}
 		ok, err := tx.AdvanceEffort(ctx, eff.ID, eff.Version, h)
 		if err != nil {

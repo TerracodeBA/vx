@@ -34,6 +34,7 @@ type Client struct {
 	Rules      vxv1connect.RulesServiceClient
 	Reviews    vxv1connect.ReviewServiceClient
 	Queue      vxv1connect.CheckQueueServiceClient
+	Checks     vxv1connect.CheckServiceClient
 	Public     vxv1connect.PublicServiceClient // needs no token
 }
 
@@ -74,6 +75,7 @@ func New(baseURL, token string) *Client {
 		Rules:      vxv1connect.NewRulesServiceClient(httpClient, baseURL, opts...),
 		Reviews:    vxv1connect.NewReviewServiceClient(httpClient, baseURL, opts...),
 		Queue:      vxv1connect.NewCheckQueueServiceClient(httpClient, baseURL, opts...),
+		Checks:     vxv1connect.NewCheckServiceClient(httpClient, baseURL, opts...),
 		Public:     vxv1connect.NewPublicServiceClient(httpClient, baseURL, opts...),
 	}
 }

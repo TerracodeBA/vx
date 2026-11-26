@@ -29,6 +29,9 @@ every land, sync and ship:
   [[policy]]     how changes to some paths land: fast (default), gated
                  (required checks run by vx and passing) or human (a
                  person approves first; see vx review)
+  [[check]]      what must be proven before a change lands or ships:
+                 a command vx runs, or a check an agent, CI or a person
+                 reports (see vx check, docs/checks.md)
 
 Inside a working copy the rules come from the effort's head; outside one
 from the default branch (or --effort).`,
@@ -112,6 +115,33 @@ from the default branch (or --effort).`,
 						}
 					}
 				}
+				if len(r.Checks) > 0 {
+					a.printf("\nChecks (vx check status shows what a change still needs):\n")
+					w := 0
+					for _, c := range r.Checks {
+						if len(c.Name) > w {
+							w = len(c.Name)
+						}
+					}
+					for _, c := range r.Checks {
+						how := c.Run
+						if how == "" {
+							how = "runner " + c.Runner
+						} else {
+							how = "run `" + how + "`"
+						}
+						a.printf("  %-*s  when %-6s blocks %-7s reporter %-11s %s\n", w, c.Name, c.When, c.Blocks, c.Reporter, how)
+						if len(c.Paths) > 0 {
+							a.printf("  %-*s  paths: %s\n", w, "", strings.Join(c.Paths, ", "))
+						}
+						if len(c.After) > 0 {
+							a.printf("  %-*s  after: %s\n", w, "", strings.Join(c.After, ", "))
+						}
+						if len(c.OutputsRequired) > 0 || len(c.OutputsArtifacts) > 0 {
+							a.printf("  %-*s  outputs: required %s, artifacts %s\n", w, "", listOrNone(c.OutputsRequired), listOrNone(c.OutputsArtifacts))
+						}
+					}
+				}
 			}
 			if len(res.Msg.Reservations) > 0 {
 				a.printf("\nReservations:\n")
@@ -177,4 +207,11 @@ another open effort. vx rules lists the rules and reservations.`,
 	cmd.Flags().StringVar(&repoFlag, "repo", "", "repository (default: VX_REPO or the current working copy's)")
 	cmd.Flags().StringVar(&effortFlag, "effort", "", "effort slug (default: the current working copy's)")
 	return cmd
+}
+
+func listOrNone(xs []string) string {
+	if len(xs) == 0 {
+		return "none"
+	}
+	return strings.Join(xs, ", ")
 }

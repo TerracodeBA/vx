@@ -17,27 +17,6 @@ import (
 
 // checkCmd is vx check: company-defined checks (#47). The queue's
 // subcommands are below; results and status are added next to them.
-func (a *App) checkCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Company-defined checks: the job queue, runners and results",
-		Long: `Checks are defined in vx.toml ([[check]]). Checks whose runner is an agent
-kind, ci or a person become jobs when they apply; runners take them with a
-lease and report the result.
-
-  vx check next --runner browser --wait   take a job (agents of that kind)
-  vx check renew JOB                       keep the lease while you work
-  vx check release JOB --reason TEXT       give it back
-  vx check jobs                            the effort's queue
-  vx check job JOB                         one job with its inputs
-  vx check request NAME --value k=v        ask for a check to run
-
-docs/runners.md describes runners, leases, CI tokens and a browser runner.`,
-	}
-	cmd.AddCommand(a.checkQueueCmds()...)
-	return cmd
-}
-
 // checkQueueCmds are the queue's subcommands of vx check (#47).
 func (a *App) checkQueueCmds() []*cobra.Command {
 	return []*cobra.Command{a.checkNextCmd(), a.checkRenewCmd(), a.checkReleaseCmd(), a.checkJobsCmd(), a.checkJobCmd(), a.checkRequestCmd()}

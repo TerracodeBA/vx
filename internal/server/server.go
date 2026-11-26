@@ -53,6 +53,9 @@ type Config struct {
 	// Quotas are the organization quotas' defaults (VX_QUOTA_*); the data
 	// directory's disk is watched either way.
 	Quotas service.QuotaSettings
+	// Checks bound the reports of company-defined checks
+	// (VX_CHECK_ARTIFACT_MAX, VX_CHECK_REPORT_MAX).
+	Checks service.CheckSettings
 	// Audit configures the operation log (VX_AUDIT_RETENTION).
 	Audit service.AuditSettings
 	// Agreement is the data processing agreement step (VX_REQUIRE_DPA,
@@ -111,6 +114,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		svc.Limits = ratelimit.New(cfg.Limits)
 	}
 	svc.Quotas, svc.Audit, svc.Agreement, svc.OrgDeletion = cfg.Quotas, cfg.Audit, cfg.Agreement, cfg.OrgDeletion
+	svc.Checks = cfg.Checks
 	if err := svc.CheckAgreements(ctx); err != nil {
 		st.Close()
 		return nil, err

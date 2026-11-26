@@ -12,6 +12,9 @@
 //	                person approves first)
 //	[files]         large = the size above which vx status and vx land warn
 //	                about a new file (default 1 MiB)
+//	[[check]]       what must be proven before a change lands or ships:
+//	                a command vx runs, or a check an agent, CI or a person
+//	                reports (see checks.go)
 //
 // The package is pure: it reads trees and blobs through a blob.Store, so
 // the server (land, ship, rebase) and the CLI (vx sync, vx land) apply the
@@ -72,7 +75,10 @@ type Rules struct {
 	// its base branch moves. Empty means RebaseAuto.
 	Rebase   string
 	Policies []Policy
-	Source   string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
+	// Checks are the [[check]] tables, in vx.toml order (Effective adds
+	// the older [checks] required and [[policy]] tables as checks).
+	Checks []CheckDef
+	Source string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
 	// LargeFile is [files] large in bytes: vx status and vx land warn
 	// about new files above it. 0 means DefaultLargeFile.
 	LargeFile int64
@@ -111,7 +117,7 @@ func (r Rules) LargeFileLimit() int64 {
 
 // IsEmpty reports whether there are no rules.
 func (r Rules) IsEmpty() bool {
-	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && r.Rebase == "" && len(r.Policies) == 0 && r.LargeFile == 0
+	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && r.Rebase == "" && len(r.Policies) == 0 && len(r.Checks) == 0 && r.LargeFile == 0
 }
 
 // UniqueRule returns the [[unique]] rule called name.
@@ -189,19 +195,21 @@ type tomlFile struct {
 	Automation tomlAutomation  `toml:"automation"`
 	Policy     []tomlPolicy    `toml:"policy"`
 	Files      tomlFiles       `toml:"files"`
+	Check      []tomlCheck     `toml:"check"`
 }
 
 var known = map[string][]string{
-	"":           {"[[unique]]", "[[generated]]", "[checks]", "[automation]", "[[policy]]", "[files]"},
+	"":           {"[[unique]]", "[[generated]]", "[checks]", "[automation]", "[[policy]]", "[[check]]", "[files]"},
 	"unique":     {"name", "glob", "key", "content", "scope"},
 	"generated":  {"glob", "command"},
 	"checks":     {"required"},
 	"automation": {"rebase"},
 	"policy":     {"paths", "mode", "require", "approvers"},
 	"files":      {"large"},
+	"check":      checkKeys,
 }
 
-var arrayTables = map[string]bool{"unique": true, "generated": true, "policy": true}
+var arrayTables = map[string]bool{"unique": true, "generated": true, "policy": true, "check": true}
 
 var ruleName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
@@ -275,6 +283,10 @@ func Parse(data []byte) (Rules, error) {
 			label = fmt.Sprintf("[[policy]] %q", f.Policy[p.idx].Paths[0])
 		case p.table == "generated" && p.idx < len(f.Generated) && f.Generated[p.idx].Glob != "":
 			label = fmt.Sprintf("[[generated]] %q", f.Generated[p.idx].Glob)
+		case p.table == "check":
+			if l, ok := checkLabel(f.Check, p.idx); ok {
+				label = l
+			}
 		}
 		ignored = append(ignored, Problem{Line: loc.at(p.table, p.idx, p.key),
 			Msg: fmt.Sprintf("rule %s uses key %q, which this vx does not know; the rule is ignored: update vx (known: %s)", label, p.key, strings.Join(known[p.table], ", "))})
@@ -373,6 +385,9 @@ func Parse(data []byte) (Rules, error) {
 	var pprobs []Problem
 	r.Policies, pprobs = parsePolicies(f.Policy, r.RequiredChecks, loc, skip["policy"])
 	probs = append(probs, pprobs...)
+	var cprobs []Problem
+	r.Checks, cprobs = parseChecks(f.Check, loc, skip["check"])
+	probs = append(probs, cprobs...)
 	if len(probs) > 0 {
 		sort.SliceStable(probs, func(i, j int) bool { return probs[i].Line < probs[j].Line })
 		return Rules{}, &Error{Problems: probs}

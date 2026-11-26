@@ -548,6 +548,9 @@ func (s *Service) ApproveReview(ctx context.Context, actor Actor, id string) (Re
 		if !ok {
 			return errf(CodeFailedPrecondition, "review %s was decided meanwhile", shortID(r.ID))
 		}
+		if err := s.recordReviewCheck(ctx, tx, actor, r); err != nil {
+			return err
+		}
 		return tx.LogOp(ctx, &repo.ID, &actor.ID, "review.approve", r.ID.String(), nil, map[string]any{"landed": landed.String()})
 	}}
 	attempts := s.MaxLandAttempts
@@ -589,6 +592,7 @@ func (s *Service) ApproveReview(ctx context.Context, actor Actor, id string) (Re
 	}
 	s.scheduleForecast(repo, eff.ID)
 	s.jobsAfterLand(ctx, repo, eff.ID, res)
+	s.afterLandChecks(ctx, repo, eff, res)
 	s.noteAuthor(ctx, repo, eff, r, fmt.Sprintf("%s approved your change %s (%q); it landed as %s. Run vx sync to bring it in.",
 		actor.Ref(), r.ChangeID, reviewTitle(r.Intent), res.Changeset.Hash.Short()), r.Paths)
 	r.State, r.DecidedBy, r.DecidedAt, r.Landed = store.ReviewApproved, &actor.ID, &now, res.Changeset.Hash

@@ -394,6 +394,8 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Open, rebase, land or abandon a workspace | `vx new`, `vx sync`, `vx land`, `vx abandon` | write |
 | List and show changes waiting for a person (landing policies) | `vx review list`, `vx review show`, `vx status`, Reviews and the effort page | read |
 | Approve or reject a pending review (a person, not the change's author, in the policy's approvers when it names them; never an agent) | `vx review approve`, `vx review reject`, Approve and Reject on the change page | write |
+| See what a change still needs, check results, their logs and artifacts (company-defined checks, [checks.md](checks.md)) | `vx check status`, `vx check show`, `vx_check_status`, `vx_check_show` | read |
+| Report a check result with its log, artifacts and data (whether it counts for the check is the check's reporter rule) | `vx check report`, `vx check run`, `vx_check_report` | write |
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | List check jobs and see one with its inputs (a CI token: its repository's) | `vx check jobs`, `vx check job`, `vx_check_jobs`, `vx_check_job`, `ListCheckJobs`, `GetCheckJob` | read |

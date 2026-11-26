@@ -56,8 +56,9 @@ func TestLandReusesPassingChecksOnSameFiles(t *testing.T) {
 	if out, code := b.run("land", "--run", counted, "--run", gate); code == 0 || !strings.Contains(out, "checks failed") {
 		t.Fatalf("the gate should fail: %d\n%s", code, out)
 	}
-	// --no-reuse runs the passing check again on the same files.
-	if out, code := b.run("land", "--no-reuse"); code == 0 || strings.Contains(out, "reused") {
+	// --no-reuse runs the passing check again on the same files
+	// (--keep-going: the failing gate may now run first, as the cheapest).
+	if out, code := b.run("land", "--no-reuse", "--keep-going"); code == 0 || strings.Contains(out, "reused") {
 		t.Fatalf("--no-reuse should run everything again: %d\n%s", code, out)
 	}
 	if n := lineCount(t, count); n != 2 {

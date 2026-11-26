@@ -807,6 +807,12 @@ func (s *Service) openSplit(ctx context.Context, actor Actor, in ShipInput) (Shi
 	if len(plan.Problems) > 0 {
 		return res, errf(CodeFailedPrecondition, "this split cannot ship: %s", strings.Join(plan.Problems, "; "))
 	}
+	for i, g := range plan.Groups {
+		what := fmt.Sprintf("part %d of %d", i+1, len(plan.Groups))
+		if err := s.shipGate(ctx, plan.Repo, plan.Effort, g.Files, what); err != nil {
+			return res, err
+		}
+	}
 	// Push every branch first: a stacked pull request needs its base.
 	heads := make([]string, len(plan.Groups))
 	bases := make([]string, len(plan.Groups))

@@ -294,6 +294,13 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	if len(steps) == 0 {
 		return ShipResult{Plan: plan}, errf(CodeFailedPrecondition, "nothing to ship: %s already has every change", plan.Target)
 	}
+	paths, err := s.changedPaths(ctx, plan.TargetHead.Tree, steps[len(steps)-1].Tree)
+	if err != nil {
+		return ShipResult{Plan: plan}, err
+	}
+	if err := s.shipGate(ctx, plan.Repo, plan.Effort, paths, "the effort"); err != nil {
+		return ShipResult{Plan: plan}, err
+	}
 	if in.Title != "" {
 		plan.Title = in.Title
 	}

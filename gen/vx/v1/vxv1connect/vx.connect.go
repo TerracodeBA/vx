@@ -45,6 +45,8 @@ const (
 	RulesServiceName = "vx.v1.RulesService"
 	// ReviewServiceName is the fully-qualified name of the ReviewService service.
 	ReviewServiceName = "vx.v1.ReviewService"
+	// CheckServiceName is the fully-qualified name of the CheckService service.
+	CheckServiceName = "vx.v1.CheckService"
 	// CheckQueueServiceName is the fully-qualified name of the CheckQueueService service.
 	CheckQueueServiceName = "vx.v1.CheckQueueService"
 )
@@ -263,6 +265,18 @@ const (
 	// ReviewServiceRejectReviewProcedure is the fully-qualified name of the ReviewService's
 	// RejectReview RPC.
 	ReviewServiceRejectReviewProcedure = "/vx.v1.ReviewService/RejectReview"
+	// CheckServiceReportCheckProcedure is the fully-qualified name of the CheckService's ReportCheck
+	// RPC.
+	CheckServiceReportCheckProcedure = "/vx.v1.CheckService/ReportCheck"
+	// CheckServiceCheckStatusProcedure is the fully-qualified name of the CheckService's CheckStatus
+	// RPC.
+	CheckServiceCheckStatusProcedure = "/vx.v1.CheckService/CheckStatus"
+	// CheckServiceGetCheckResultProcedure is the fully-qualified name of the CheckService's
+	// GetCheckResult RPC.
+	CheckServiceGetCheckResultProcedure = "/vx.v1.CheckService/GetCheckResult"
+	// CheckServiceGetCheckArtifactProcedure is the fully-qualified name of the CheckService's
+	// GetCheckArtifact RPC.
+	CheckServiceGetCheckArtifactProcedure = "/vx.v1.CheckService/GetCheckArtifact"
 	// CheckQueueServiceRequestCheckProcedure is the fully-qualified name of the CheckQueueService's
 	// RequestCheck RPC.
 	CheckQueueServiceRequestCheckProcedure = "/vx.v1.CheckQueueService/RequestCheck"
@@ -3130,6 +3144,158 @@ func (UnimplementedReviewServiceHandler) ApproveReview(context.Context, *connect
 
 func (UnimplementedReviewServiceHandler) RejectReview(context.Context, *connect.Request[v1.RejectReviewRequest]) (*connect.Response[v1.RejectReviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.ReviewService.RejectReview is not implemented"))
+}
+
+// CheckServiceClient is a client for the vx.v1.CheckService service.
+type CheckServiceClient interface {
+	ReportCheck(context.Context, *connect.Request[v1.ReportCheckRequest]) (*connect.Response[v1.ReportCheckResponse], error)
+	// What a change still needs: every check with its state on the tree.
+	CheckStatus(context.Context, *connect.Request[v1.CheckStatusRequest]) (*connect.Response[v1.CheckStatusResponse], error)
+	GetCheckResult(context.Context, *connect.Request[v1.GetCheckResultRequest]) (*connect.Response[v1.GetCheckResultResponse], error)
+	// One artifact of a result, or its log.
+	GetCheckArtifact(context.Context, *connect.Request[v1.GetCheckArtifactRequest]) (*connect.Response[v1.GetCheckArtifactResponse], error)
+}
+
+// NewCheckServiceClient constructs a client for the vx.v1.CheckService service. By default, it uses
+// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewCheckServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CheckServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	checkServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CheckService").Methods()
+	return &checkServiceClient{
+		reportCheck: connect.NewClient[v1.ReportCheckRequest, v1.ReportCheckResponse](
+			httpClient,
+			baseURL+CheckServiceReportCheckProcedure,
+			connect.WithSchema(checkServiceMethods.ByName("ReportCheck")),
+			connect.WithClientOptions(opts...),
+		),
+		checkStatus: connect.NewClient[v1.CheckStatusRequest, v1.CheckStatusResponse](
+			httpClient,
+			baseURL+CheckServiceCheckStatusProcedure,
+			connect.WithSchema(checkServiceMethods.ByName("CheckStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		getCheckResult: connect.NewClient[v1.GetCheckResultRequest, v1.GetCheckResultResponse](
+			httpClient,
+			baseURL+CheckServiceGetCheckResultProcedure,
+			connect.WithSchema(checkServiceMethods.ByName("GetCheckResult")),
+			connect.WithClientOptions(opts...),
+		),
+		getCheckArtifact: connect.NewClient[v1.GetCheckArtifactRequest, v1.GetCheckArtifactResponse](
+			httpClient,
+			baseURL+CheckServiceGetCheckArtifactProcedure,
+			connect.WithSchema(checkServiceMethods.ByName("GetCheckArtifact")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// checkServiceClient implements CheckServiceClient.
+type checkServiceClient struct {
+	reportCheck      *connect.Client[v1.ReportCheckRequest, v1.ReportCheckResponse]
+	checkStatus      *connect.Client[v1.CheckStatusRequest, v1.CheckStatusResponse]
+	getCheckResult   *connect.Client[v1.GetCheckResultRequest, v1.GetCheckResultResponse]
+	getCheckArtifact *connect.Client[v1.GetCheckArtifactRequest, v1.GetCheckArtifactResponse]
+}
+
+// ReportCheck calls vx.v1.CheckService.ReportCheck.
+func (c *checkServiceClient) ReportCheck(ctx context.Context, req *connect.Request[v1.ReportCheckRequest]) (*connect.Response[v1.ReportCheckResponse], error) {
+	return c.reportCheck.CallUnary(ctx, req)
+}
+
+// CheckStatus calls vx.v1.CheckService.CheckStatus.
+func (c *checkServiceClient) CheckStatus(ctx context.Context, req *connect.Request[v1.CheckStatusRequest]) (*connect.Response[v1.CheckStatusResponse], error) {
+	return c.checkStatus.CallUnary(ctx, req)
+}
+
+// GetCheckResult calls vx.v1.CheckService.GetCheckResult.
+func (c *checkServiceClient) GetCheckResult(ctx context.Context, req *connect.Request[v1.GetCheckResultRequest]) (*connect.Response[v1.GetCheckResultResponse], error) {
+	return c.getCheckResult.CallUnary(ctx, req)
+}
+
+// GetCheckArtifact calls vx.v1.CheckService.GetCheckArtifact.
+func (c *checkServiceClient) GetCheckArtifact(ctx context.Context, req *connect.Request[v1.GetCheckArtifactRequest]) (*connect.Response[v1.GetCheckArtifactResponse], error) {
+	return c.getCheckArtifact.CallUnary(ctx, req)
+}
+
+// CheckServiceHandler is an implementation of the vx.v1.CheckService service.
+type CheckServiceHandler interface {
+	ReportCheck(context.Context, *connect.Request[v1.ReportCheckRequest]) (*connect.Response[v1.ReportCheckResponse], error)
+	// What a change still needs: every check with its state on the tree.
+	CheckStatus(context.Context, *connect.Request[v1.CheckStatusRequest]) (*connect.Response[v1.CheckStatusResponse], error)
+	GetCheckResult(context.Context, *connect.Request[v1.GetCheckResultRequest]) (*connect.Response[v1.GetCheckResultResponse], error)
+	// One artifact of a result, or its log.
+	GetCheckArtifact(context.Context, *connect.Request[v1.GetCheckArtifactRequest]) (*connect.Response[v1.GetCheckArtifactResponse], error)
+}
+
+// NewCheckServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewCheckServiceHandler(svc CheckServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	checkServiceMethods := v1.File_vx_v1_vx_proto.Services().ByName("CheckService").Methods()
+	checkServiceReportCheckHandler := connect.NewUnaryHandler(
+		CheckServiceReportCheckProcedure,
+		svc.ReportCheck,
+		connect.WithSchema(checkServiceMethods.ByName("ReportCheck")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkServiceCheckStatusHandler := connect.NewUnaryHandler(
+		CheckServiceCheckStatusProcedure,
+		svc.CheckStatus,
+		connect.WithSchema(checkServiceMethods.ByName("CheckStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkServiceGetCheckResultHandler := connect.NewUnaryHandler(
+		CheckServiceGetCheckResultProcedure,
+		svc.GetCheckResult,
+		connect.WithSchema(checkServiceMethods.ByName("GetCheckResult")),
+		connect.WithHandlerOptions(opts...),
+	)
+	checkServiceGetCheckArtifactHandler := connect.NewUnaryHandler(
+		CheckServiceGetCheckArtifactProcedure,
+		svc.GetCheckArtifact,
+		connect.WithSchema(checkServiceMethods.ByName("GetCheckArtifact")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/vx.v1.CheckService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case CheckServiceReportCheckProcedure:
+			checkServiceReportCheckHandler.ServeHTTP(w, r)
+		case CheckServiceCheckStatusProcedure:
+			checkServiceCheckStatusHandler.ServeHTTP(w, r)
+		case CheckServiceGetCheckResultProcedure:
+			checkServiceGetCheckResultHandler.ServeHTTP(w, r)
+		case CheckServiceGetCheckArtifactProcedure:
+			checkServiceGetCheckArtifactHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedCheckServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedCheckServiceHandler struct{}
+
+func (UnimplementedCheckServiceHandler) ReportCheck(context.Context, *connect.Request[v1.ReportCheckRequest]) (*connect.Response[v1.ReportCheckResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckService.ReportCheck is not implemented"))
+}
+
+func (UnimplementedCheckServiceHandler) CheckStatus(context.Context, *connect.Request[v1.CheckStatusRequest]) (*connect.Response[v1.CheckStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckService.CheckStatus is not implemented"))
+}
+
+func (UnimplementedCheckServiceHandler) GetCheckResult(context.Context, *connect.Request[v1.GetCheckResultRequest]) (*connect.Response[v1.GetCheckResultResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckService.GetCheckResult is not implemented"))
+}
+
+func (UnimplementedCheckServiceHandler) GetCheckArtifact(context.Context, *connect.Request[v1.GetCheckArtifactRequest]) (*connect.Response[v1.GetCheckArtifactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.CheckService.GetCheckArtifact is not implemented"))
 }
 
 // CheckQueueServiceClient is a client for the vx.v1.CheckQueueService service.

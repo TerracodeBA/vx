@@ -132,6 +132,9 @@ type Service struct {
 	// off by default.
 	Agreement AgreementSettings
 
+	// Checks bound the reports of company-defined checks (checks.go).
+	Checks CheckSettings
+
 	// OrgDeletion configures deleting and purging organizations
 	// (org_delete.go, org_purge.go).
 	OrgDeletion OrgDeletionSettings

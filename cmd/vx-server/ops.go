@@ -58,6 +58,18 @@ func applyOps(cfg *server.Config, getenv func(string) string) error {
 		return err
 	}
 	cfg.Agreement = agreement
+	for _, c := range []struct {
+		env string
+		dst *int64
+	}{{"VX_CHECK_ARTIFACT_MAX", &cfg.Checks.MaxArtifactBytes}, {"VX_CHECK_REPORT_MAX", &cfg.Checks.MaxReportBytes}} {
+		if v := strings.TrimSpace(getenv(c.env)); v != "" {
+			n, err := service.ParseBytes(v)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("%s=%q: give a size such as 20MiB", c.env, v)
+			}
+			*c.dst = n
+		}
+	}
 	if v := strings.TrimSpace(getenv("VX_ORG_DELETE_GRACE")); v != "" {
 		g, err := parseGrace(v)
 		if err != nil {

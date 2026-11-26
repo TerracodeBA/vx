@@ -455,6 +455,8 @@ Each acceptance is kept in the database for as long as the organization exists, 
 | `VX_AUDIT_RETENTION` | forever | Delete operation log entries older than this, like `365d` (at least 7 days) |
 | `VX_REQUIRE_DPA`, `VX_DPA_DIR` | off | Ask organizations to accept the data processing agreement, with its versions in that directory (see [Data processing agreement](#data-processing-agreement)) |
 | `VX_ORG_DELETE_GRACE` | `30d` | How long owners can restore a deleted organization before it is purged (`30d`, `2w`, `72h`); `0`: purge at the purger's next run, within 10 minutes (see [Deleting organizations](#deleting-organizations)) |
+| `VX_CHECK_ARTIFACT_MAX` | `20MiB` | Largest artifact, log or data file one check result may carry (see [checks.md](checks.md)); they count toward the organization's stored data |
+| `VX_CHECK_REPORT_MAX` | `48MiB` | Largest check report in all (log, artifacts and data together); keep it below the API's 64 MiB message size |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 

@@ -1527,6 +1527,8 @@ message RepoRules {
   // What of vx.toml this server does not know (keys or tables of a newer
   // vx), left out: a rule with an unknown key is ignored as a whole.
   repeated string ignored = 6;
+  // The [[check]] tables (company-defined checks, docs/checks.md).
+  repeated CheckDef checks = 7;
 }
 
 // LandingPolicy is a [[policy]] of vx.toml: how changes to its paths land.
@@ -1670,6 +1672,144 @@ message RejectReviewRequest {
 
 message RejectReviewResponse {
   Review review = 1;
+}
+
+// ---------- Checks (#47) ----------
+
+// CheckService stores and reads the results of company-defined checks
+// ([[check]] in vx.toml, organization rules): evidence bound to a change
+// and the exact tree it describes. Reporting needs write on the
+// repository, reading needs read.
+service CheckService {
+  rpc ReportCheck(ReportCheckRequest) returns (ReportCheckResponse) {}
+  // What a change still needs: every check with its state on the tree.
+  rpc CheckStatus(CheckStatusRequest) returns (CheckStatusResponse) {}
+  rpc GetCheckResult(GetCheckResultRequest) returns (GetCheckResultResponse) {}
+  // One artifact of a result, or its log.
+  rpc GetCheckArtifact(GetCheckArtifactRequest) returns (GetCheckArtifactResponse) {}
+}
+
+// CheckDef is one check as vx.toml or an organization defines it.
+message CheckDef {
+  string name = 1;
+  string when = 2; // land, ship or manual
+  repeated string paths = 3; // globs; empty: every change
+  string runner = 4; // agent:KIND, ci or human; empty for run checks
+  string reporter = 5; // self, independent, ci or human
+  repeated string inputs = 6;
+  repeated string outputs_required = 7;
+  repeated string outputs_artifacts = 8;
+  repeated string after = 9;
+  string blocks = 10; // land, ship or nothing
+  string timeout = 11; // e.g. 30m; empty: none
+  string run = 12; // the command of a run check
+  string origin = 13; // check ([[check]]), required ([checks] required), policy ([[policy]]) or org
+  int32 line = 14; // line in vx.toml; 0: not known
+  string describe = 15; // for people: check "unit" (vx.toml line 12)
+}
+
+message CheckArtifact {
+  string name = 1;
+  string content_type = 2;
+  string hash = 3; // a blob of the repository
+  int64 size = 4;
+  bytes data = 5; // only in ReportCheckRequest
+}
+
+message CheckResult {
+  string id = 1;
+  string repo = 2;
+  string effort = 3;
+  string change_id = 4;
+  string tree = 5;
+  string check = 6; // empty: a vx land --run command no check names
+  string status = 7; // pass, fail, neutral or pending
+  string summary = 8;
+  string log_hash = 9;
+  int64 log_size = 10;
+  string data_json = 11; // structured data, JSON
+  string data_name = 12;
+  string reporter = 13; // principal, e.g. agent:alice/claude-review
+  string on_behalf_of = 14;
+  string model = 15;
+  string ci_token_id = 16;
+  string how = 17; // the command of a run check
+  string source = 18; // report, land or review
+  string started_at = 19; // RFC 3339; empty: not given
+  string finished_at = 20;
+  string created_at = 21;
+  repeated CheckArtifact artifacts = 22;
+  // Read for a check of a change: whether it counts for the check (its
+  // reporter is one the check allows) and why not.
+  bool counts = 23;
+  string why = 24;
+}
+
+message ReportCheckRequest {
+  string repo = 1;
+  string effort = 2;
+  string change_id = 3; // empty: the effort head
+  string tree = 4; // empty: the change's newest tree; an open workspace needs its snapshot
+  string check = 5;
+  string status = 6; // pass, fail, neutral or pending
+  string summary = 7;
+  bytes log = 8;
+  repeated CheckArtifact artifacts = 9; // name, content_type (optional), data
+  bytes data = 10; // JSON
+  string data_name = 11;
+  string how = 12; // the command, when vx ran a run check
+  string model = 13;
+  string started_at = 14; // RFC 3339
+  string finished_at = 15;
+}
+
+message ReportCheckResponse {
+  CheckResult result = 1;
+}
+
+message CheckStatusRequest {
+  string repo = 1;
+  string effort = 2;
+  string change_id = 3; // empty: the effort head
+  string tree = 4; // empty: the change's newest tree
+}
+
+message CheckState {
+  CheckDef def = 1;
+  bool applies = 2; // the change touches the check's paths
+  string state = 3; // missing, pending, passed, failed, neutral, or "not needed" when it does not apply
+  CheckResult latest = 4; // the newest result that counts
+  repeated CheckResult results = 5; // newest first, each with counts and why
+  string how = 6; // how to provide a result
+}
+
+message CheckStatusResponse {
+  string change_id = 1;
+  string tree = 2;
+  bool head = 3; // the effort head
+  bool landed = 4;
+  repeated CheckState checks = 5;
+  repeated CheckResult other = 6; // results on this tree for no check of vx.toml
+  string rules = 7; // where the checks came from
+  string problem = 8; // vx.toml does not parse
+  repeated string warnings = 9; // checks left out, e.g. a vx.toml check an organization check of the same name replaces
+}
+
+message GetCheckResultRequest {
+  string id = 1; // id or a prefix of at least 8 characters
+}
+
+message GetCheckResultResponse {
+  CheckResult result = 1;
+}
+
+message GetCheckArtifactRequest {
+  string id = 1; // the result
+  string name = 2; // empty: the log
+}
+
+message GetCheckArtifactResponse {
+  CheckArtifact artifact = 1; // with data
 }
 
 // ---------- Check queue: jobs, runners, CI tokens (#47) ----------

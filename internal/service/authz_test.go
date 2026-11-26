@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/TerracodeBA/vx/internal/github/githubtest"
+	"github.com/TerracodeBA/vx/internal/hash"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -38,6 +39,30 @@ type authzEnv struct {
 	rules         bool                // acme/shop has a vx.toml with a human policy on db/**
 	linkRoot      func(service.Actor) // links the superadmin to GitHub, for the GitHub matrix
 	frozenReview  string              // when set, pendingReview returns it (acme is deleted: no new reviews)
+	checkID       string              // a check result in acme/shop (checkResult)
+}
+
+// checkResult stores a check result with an artifact in acme/shop once
+// (as a land's --run result would be stored) and returns its id.
+func (e *authzEnv) checkResult() string {
+	e.t.Helper()
+	if e.checkID != "" {
+		return e.checkID
+	}
+	hs, err := e.svc.PutObjects(e.ctx, e.alice, "acme/shop", []service.Object{{Kind: hash.KindBlob, Data: []byte("png")}})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	eff, _ := e.svc.Store.EffortByID(e.ctx, e.eff.ID)
+	head, _ := e.svc.Store.GetChangeset(e.ctx, e.repo.ID, eff.Head)
+	r, err := e.svc.Store.InsertCheckResult(e.ctx, store.CheckResult{RepoID: e.repo.ID, EffortID: &eff.ID, ChangeID: head.ChangeID, Tree: head.Tree,
+		CheckName: "e2e", Status: store.CheckPass, Reporter: e.agent.Ref(), Source: store.CheckSourceReport,
+		Artifacts: []store.CheckArtifact{{Name: "shot.png", ContentType: "image/png", Hash: hs[0], Size: 3}}})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	e.checkID = r.ID.String()
+	return e.checkID
 }
 
 // pendingReview lands a file under a human landing policy as alice's agent
@@ -311,6 +336,29 @@ var authzOps = []authzOp{
 		if isCode(err, service.CodeFailedPrecondition) {
 			return nil // past the access check: acme/shop has no vx.toml
 		}
+		return err
+	}},
+	{"ReportCheck", service.RoleWrite, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.ReportCheck(e.ctx, a, service.ReportInput{Repo: "acme/shop", Effort: e.eff.Slug, Name: "unit", Status: "pass"})
+		if isCode(err, service.CodeNotFound) && strings.Contains(err.Error(), `no check "unit" in vx.toml`) {
+			return nil // past the access check: acme/shop defines no such check
+		}
+		return err
+	}},
+	{"CheckStatus", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.CheckStatus(e.ctx, a, service.CheckStatusInput{Repo: "acme/shop", Effort: e.eff.Slug})
+		return err
+	}},
+	{"CheckResults", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.CheckResults(e.ctx, a, "acme/shop", e.eff.Slug, "", hash.Zero)
+		return err
+	}},
+	{"GetCheckResult", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.GetCheckResult(e.ctx, a, e.checkResult())
+		return err
+	}},
+	{"CheckArtifact", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, _, err := e.svc.CheckArtifact(e.ctx, a, e.checkResult(), "shot.png")
 		return err
 	}},
 	{"PlanShipment", service.RoleAdmin, func(e *authzEnv, a service.Actor) error {

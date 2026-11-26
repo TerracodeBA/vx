@@ -28,6 +28,10 @@ type PassedCheck struct {
 
 type passedChecks struct {
 	Passed []PassedCheck `json:"passed"`
+	// Durations are how long each command took when it last ran here,
+	// passed or failed, in milliseconds: vx land --run runs the cheapest
+	// first.
+	Durations map[string]int64 `json:"durations,omitempty"`
 }
 
 func (wc *WorkingCopy) loadPassedChecks() passedChecks {
@@ -68,11 +72,41 @@ func (wc *WorkingCopy) RecordPassedCheck(c PassedCheck) error {
 	if len(kept) > maxPassedChecks {
 		kept = kept[len(kept)-maxPassedChecks:]
 	}
-	data, err := json.MarshalIndent(passedChecks{Passed: kept}, "", "  ")
+	p.Passed = kept
+	return wc.savePassedChecks(p)
+}
+
+func (wc *WorkingCopy) savePassedChecks(p passedChecks) error {
+	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}
 	return writeFileAtomic(filepath.Join(wc.Root, Dir, checksFile), append(data, '\n'), 0o644)
+}
+
+// CheckDuration is how long command took when it last ran here.
+func (wc *WorkingCopy) CheckDuration(command string) (int64, bool) {
+	ms, ok := wc.loadPassedChecks().Durations[strings.TrimSpace(command)]
+	return ms, ok
+}
+
+// RecordCheckDuration remembers how long command took, passed or failed.
+func (wc *WorkingCopy) RecordCheckDuration(command string, ms int64) error {
+	p := wc.loadPassedChecks()
+	if p.Durations == nil {
+		p.Durations = map[string]int64{}
+	}
+	p.Durations[strings.TrimSpace(command)] = ms
+	if len(p.Durations) > maxPassedChecks {
+		// Forget an arbitrary one; a command missing here only runs later.
+		for k := range p.Durations {
+			if k != strings.TrimSpace(command) {
+				delete(p.Durations, k)
+				break
+			}
+		}
+	}
+	return wc.savePassedChecks(p)
 }
 
 // CheckLogPath is where vx land --run keeps the full output of its nth
