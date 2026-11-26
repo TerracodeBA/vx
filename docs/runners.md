@@ -163,7 +163,7 @@ A company can let an agent test changes in a real browser: Claude Code with Clau
 4. **The loop.** [examples/browser-runner.sh](examples/browser-runner.sh) does, forever:
    - `vx check next --runner browser --wait --json`, which leases one job;
    - renews the lease every few minutes while Claude works;
-   - runs `claude --chrome -p` (Claude Code non-interactively, with Claude in Chrome; try the combination once on the runner, Claude Code's docs list the two flags separately), with a prompt that gives the job as data: open `values.preview_url`, test the flows the changed files touch, record the session as a GIF, write the steps as `steps.json`;
+   - runs `claude --chrome -p` with `CLAUDE_ARGS` (Claude Code non-interactively, with Claude in Chrome; see [What Claude Code documents](#what-claude-code-documents-and-what-to-try-first) before relying on it), with a prompt that gives the job as data: open `values.preview_url`, test the flows the changed files touch, record the session as a GIF, write the steps as `steps.json`;
    - Claude reports with `vx check report browser-e2e --change ID --tree TREE --status pass|fail --summary "..." --artifact flow.gif --data steps.json`, which finishes the job; if Claude fails, the script releases the job with the reason.
 
    ```sh
@@ -172,6 +172,19 @@ A company can let an agent test changes in a real browser: Claude Code with Clau
    ```
 
    `steps.json` is a list of what was done and seen, for example `[{"step": "add a pen to the cart", "expected": "cart shows 1", "seen": "cart shows 1", "ok": true}]`. The GIF and the steps show on the change and effort pages next to the result.
+
+### What Claude Code documents, and what to try first
+
+vx only hands out the job and stores the result; the browser part is Claude Code's, and its [Chrome documentation](https://code.claude.com/docs/en/chrome) and [headless documentation](https://code.claude.com/docs/en/headless) are the source of truth. As of this writing:
+
+- **Unattended use is not documented.** The docs describe `--chrome` and `-p` separately and never say they work together. Try `claude --chrome -p "open https://example.com and tell me its title"` on the runner before relying on the loop.
+- **Sign-in.** Chrome integration needs Claude Code signed in with `/login` on a Pro, Max, Team or Enterprise plan; with an API key or a `claude setup-token` token it stays off, and it is not available through Bedrock or Vertex. The extension must be signed in to the same organization (`/status` shows it).
+- **A visible browser.** Actions run in a real Chrome window. At a login page or a CAPTCHA, Claude pauses for a person; unattended, that run stalls until the lease expires and the job goes back to the queue. Previews should not need a login, or use a test account Claude can type.
+- **Per-site approvals.** The extension asks before acting on a new site. Approve the preview domains once, in an interactive session on the runner, before going unattended.
+- **Tool permissions.** In `-p` mode, a tool call that needs approval is denied. Allow the browser tools and the report command up front with `--allowedTools` (list the Claude in Chrome tool names with `/mcp` in an interactive session), and keep the runner's permission mode narrow (never `bypassPermissions` outside a throwaway VM). The example script takes them from `CLAUDE_ARGS`.
+- **GIFs.** Claude can record a GIF when asked, but no save location is documented. The prompt names the path, and the script checks that the files exist afterwards and releases the job if they do not.
+
+The check itself does not depend on Claude in Chrome: a `browser` runner can be any tool the company trusts (its own browser automation, a test suite with screenshots), as long as it reports with `vx check report` and the artifacts the check requires.
 
 vx's own tests never drive a browser: the loop is a script around `vx check next` and `vx check report`, tested like any other runner.
 
