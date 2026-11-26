@@ -65,7 +65,7 @@ func (h *Handlers) Ask(ctx context.Context, req *connect.Request[vxv1.AskRequest
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &vxv1.AskResponse{Question: notePB(actor, n), Notice: service.AwayNotice(n, h.svc.Now())}
+	out := &vxv1.AskResponse{Question: notePB(actor, n), Notice: service.AwayNotice(n, h.svc.Clock())}
 	if n.ToAway != nil && n.ToAway.LastSeen != nil {
 		out.ToLastSeen = ts(*n.ToAway.LastSeen)
 	}

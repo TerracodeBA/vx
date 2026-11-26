@@ -71,7 +71,7 @@ func (s *Service) HandleGitHubWebhook(ctx context.Context, event, deliveryID, si
 		return errf(CodeInvalid, "a delivery needs X-GitHub-Event and X-GitHub-Delivery")
 	}
 	if at, ok := deliveryTime(deliveryID); ok {
-		if age := s.Now().Sub(at); age > githubDeliveryMaxAge {
+		if age := s.Clock().Sub(at); age > githubDeliveryMaxAge {
 			return errf(CodeInvalid, "stale delivery from %s: vx applies deliveries of the last three days", at.UTC().Format(time.RFC3339))
 		}
 	}

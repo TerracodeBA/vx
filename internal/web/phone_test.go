@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/TerracodeBA/vx/internal/blob"
+	"github.com/TerracodeBA/vx/internal/github/githubtest"
 	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
@@ -34,7 +36,22 @@ type phoneEnv struct {
 	bobAg   service.Actor
 	aliceAg service.Actor
 	shift   time.Duration // how far the server's clock runs ahead
+	// more are pages seen by others than alice: a newcomer whose account
+	// reads nothing, and a browser asked to confirm a new account (#44).
+	more []phoneSession
 }
+
+// phoneSession is a browser with its own cookies and the pages it shows.
+type phoneSession struct {
+	name    string
+	cookies []phoneCookie
+	pages   []string
+	bare    bool // pages without the signed-in layout and menu
+	gitHub  string
+}
+
+// phoneCookie is a cookie and the address it was set for.
+type phoneCookie struct{ Name, Value, URL string }
 
 func newPhoneEnv(t *testing.T) *phoneEnv {
 	t.Helper()
@@ -116,6 +133,8 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 	svc.WaitForecasts()
 	svc.OpenWorkspace(ctx, e.aliceAg, "acme/shop", eff.Slug, "Wire limiter into signup")
 
+	e.addNewcomers()
+
 	// The question's deadline passes.
 	e.shift = 2 * time.Minute
 	svc.Now = func() time.Time { return time.Now().Add(e.shift) }
@@ -139,6 +158,75 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 		t.Fatal("effort page links no change")
 	}
 	return e
+}
+
+// addNewcomers signs up, with GitHub, a newcomer who reads no
+// repositories (their empty pages explain why), and starts a second
+// sign-up that waits on "create a new account?".
+func (e *phoneEnv) addNewcomers() {
+	t := e.t
+	t.Helper()
+	gh := githubtest.New(t)
+	e.svc.GitHub.PublicURL, e.svc.GitHub.Signup = e.srv.URL, service.SignupOpen
+	gh.Configure(t, e.svc)
+	start := func(login string) (*http.Client, *cookiejar.Jar) {
+		gh.AddUser(login)
+		gh.SignIn(login)
+		jar, _ := cookiejar.New(nil)
+		c := &http.Client{Jar: jar}
+		resp, err := c.Get(e.srv.URL + "/ui/login/github")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.Request.URL.Path != "/auth/github/signup" || !strings.Contains(string(b), "You are about to create a new vx account for GitHub") {
+			t.Fatalf("sign-up of %s did not ask first: %s\n%s", login, resp.Request.URL, b)
+		}
+		return c, jar
+	}
+	const login = "newcomer-with-a-rather-long-github-login"
+	c, jar := start(login)
+	req, _ := http.NewRequest("POST", e.srv.URL+"/auth/github/signup", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", e.srv.URL)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	u, _ := url.Parse(e.srv.URL + "/ui")
+	var newcomer phoneSession
+	newcomer.name, newcomer.gitHub = "newcomer", login
+	for _, ck := range jar.Cookies(u) {
+		newcomer.cookies = append(newcomer.cookies, phoneCookie{ck.Name, ck.Value, e.srv.URL + "/ui"})
+	}
+	if len(newcomer.cookies) == 0 {
+		t.Fatal("newcomer has no session")
+	}
+	newcomer.pages = []string{"/ui", "/ui/repos", "/ui/for-you"}
+
+	_, jar = start("second-account")
+	su, _ := url.Parse(e.srv.URL + "/auth/github/signup")
+	asking := phoneSession{name: "signup", pages: []string{"/auth/github/signup"}, bare: true}
+	for _, ck := range jar.Cookies(su) {
+		asking.cookies = append(asking.cookies, phoneCookie{ck.Name, ck.Value, e.srv.URL + "/auth/github/signup"})
+	}
+	e.more = append(e.more, newcomer, asking)
+}
+
+// client is a browser with s's cookies.
+func (e *phoneEnv) client(s phoneSession) *http.Client {
+	jar, _ := cookiejar.New(nil)
+	for _, ck := range s.cookies {
+		u, _ := url.Parse(ck.URL)
+		path := u.Path
+		if i := strings.LastIndex(path, "/"); i > 0 {
+			path = path[:i]
+		}
+		jar.SetCookies(u, []*http.Cookie{{Name: ck.Name, Value: ck.Value, Path: path}})
+	}
+	return &http.Client{Jar: jar}
 }
 
 func (e *phoneEnv) get(path string) (int, string) {
@@ -192,6 +280,45 @@ func TestPhonePagesMarkup(t *testing.T) {
 		}
 		if strings.Contains(body, "<b>here</b>") {
 			t.Errorf("%s: unescaped note text", path)
+		}
+		if strings.Contains(body, `id="no-access"`) {
+			t.Errorf("%s: alice reads repositories, yet the page says she reads none", path)
+		}
+	}
+	// The newcomer's empty pages say who is signed in and why they are
+	// empty; the sign-up page asks before creating an account. Both have
+	// the phone hooks and no inline styles or scripts.
+	for _, s := range e.more {
+		c := e.client(s)
+		for _, path := range s.pages {
+			resp, err := c.Get(e.srv.URL + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			body := string(b)
+			if resp.StatusCode != 200 {
+				t.Errorf("%s %s: status %d\n%s", s.name, path, resp.StatusCode, body)
+				continue
+			}
+			want := []string{`name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"`, `href="/ui/static/phone.css"`}
+			if s.bare {
+				want = append(want, "You are about to create a new vx account for GitHub", "Not you? Switch GitHub account")
+			} else {
+				want = append(want, `class="menu-btn"`, `id="no-access"`, "You are signed in as", "(GitHub: <strong class=\"mono\">"+s.gitHub+"</strong>)",
+					"This account cannot read any repositories.", "GitHub: <span class=\"mono\">"+s.gitHub+"</span>")
+			}
+			for _, w := range want {
+				if !strings.Contains(body, w) {
+					t.Errorf("%s %s: missing %q", s.name, path, w)
+				}
+			}
+			for _, re := range []*regexp.Regexp{inlineStyle, inlineScript, handler} {
+				if m := re.FindString(body); m != "" {
+					t.Errorf("%s %s: inline %q", s.name, path, m)
+				}
+			}
 		}
 	}
 	// The phone stylesheet has the breakpoints and hooks the pages rely on.

@@ -32,7 +32,7 @@ func (s *Service) CreateLoginCode(ctx context.Context, actor Actor) (string, tim
 		return "", time.Time{}, err
 	}
 	code := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw[:]))
-	now := s.Now()
+	now := s.Clock()
 	expires := now.Add(LoginCodeTTL)
 	if err := s.Store.CreateLoginCode(ctx, hashCode(code), actor.ID, expires, now); err != nil {
 		return "", time.Time{}, err
@@ -51,7 +51,7 @@ func errLoginCode() error {
 
 // PeekLoginCode tells who a code would sign in, without using it up.
 func (s *Service) PeekLoginCode(ctx context.Context, code string) (store.Principal, error) {
-	id, err := s.Store.PeekLoginCode(ctx, hashCode(code), s.Now())
+	id, err := s.Store.PeekLoginCode(ctx, hashCode(code), s.Clock())
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Principal{}, errLoginCode()
 	}
@@ -68,7 +68,7 @@ func (s *Service) RedeemLoginCode(ctx context.Context, code string) (store.Princ
 	if err != nil {
 		return store.Principal{}, "", err
 	}
-	id, err := s.Store.UseLoginCode(ctx, hashCode(code), s.Now())
+	id, err := s.Store.UseLoginCode(ctx, hashCode(code), s.Clock())
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Principal{}, "", errLoginCode()
 	}

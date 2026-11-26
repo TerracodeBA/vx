@@ -76,7 +76,7 @@ func repoNotFound(name string) error {
 // to GitHub) for GitHub-backed repositories.
 func (s *Service) Authorize(ctx context.Context, actor Actor, repo string, need RepoRole) (store.Repo, RepoRole, error) {
 	subject, direct := roleSubject(actor)
-	r, facts, err := s.Store.RepoRoleFacts(ctx, repo, subject, direct, s.now())
+	r, facts, err := s.Store.RepoRoleFacts(ctx, repo, subject, direct, s.Clock())
 	if err != nil {
 		return store.Repo{}, RoleNone, classify(err)
 	}
@@ -100,7 +100,7 @@ func (s *Service) Authorize(ctx context.Context, actor Actor, repo string, need 
 // other records that carry a repo id).
 func (s *Service) AuthorizeID(ctx context.Context, actor Actor, repoID uuid.UUID, need RepoRole) (RepoRole, error) {
 	subject, direct := roleSubject(actor)
-	r, facts, err := s.Store.RepoRoleFactsByID(ctx, repoID, subject, direct, s.now())
+	r, facts, err := s.Store.RepoRoleFactsByID(ctx, repoID, subject, direct, s.Clock())
 	if err != nil {
 		return RoleNone, classify(err)
 	}
@@ -124,7 +124,7 @@ func (s *Service) AuthorizeID(ctx context.Context, actor Actor, repoID uuid.UUID
 // filling my_role in responses. It is RoleNone when the actor cannot read r.
 func (s *Service) RepoRoleOf(ctx context.Context, actor Actor, r store.Repo) RepoRole {
 	subject, direct := roleSubject(actor)
-	repo, facts, err := s.Store.RepoRoleFactsByID(ctx, r.ID, subject, direct, s.now())
+	repo, facts, err := s.Store.RepoRoleFactsByID(ctx, r.ID, subject, direct, s.Clock())
 	if err != nil {
 		return RoleNone
 	}
@@ -158,7 +158,7 @@ func (s *Service) roleFrom(ctx context.Context, actor Actor, r store.Repo, facts
 // repositories; nil lists them all.
 func (s *Service) ReadableRepos(ctx context.Context, actor Actor, org *uuid.UUID) ([]store.Repo, []RepoRole, error) {
 	subject, direct := roleSubject(actor)
-	repos, facts, err := s.Store.ListRepoRoleFacts(ctx, subject, direct, org, s.now())
+	repos, facts, err := s.Store.ListRepoRoleFacts(ctx, subject, direct, org, s.Clock())
 	if err != nil {
 		return nil, nil, classify(err)
 	}
@@ -201,7 +201,7 @@ func (s *Service) ReadableRepos(ctx context.Context, actor Actor, org *uuid.UUID
 // callers keep handling it.
 func (s *Service) ReadableRepoIDs(ctx context.Context, actor Actor) (ids []uuid.UUID, all bool, err error) {
 	subject, direct := roleSubject(actor)
-	ids, err = s.Store.ReadableRepoIDs(ctx, subject, direct, s.now())
+	ids, err = s.Store.ReadableRepoIDs(ctx, subject, direct, s.Clock())
 	if err != nil || direct {
 		return ids, false, classify(err)
 	}

@@ -138,7 +138,7 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 			Origin:    object.OriginUpstream,
 			Author:    object.Author{Principal: actor.Ref(), Name: actor.DisplayName, Email: actor.Email},
 			Intent:    "Empty repository",
-			CreatedAt: s.Now(),
+			CreatedAt: s.Clock(),
 		}
 		h, err := tx.InsertChangeset(ctx, created.ID, nil, root, nil)
 		if err != nil {

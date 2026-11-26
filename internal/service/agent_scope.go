@@ -130,7 +130,7 @@ func (s *Service) agentView(ctx context.Context, agent store.Principal) (AgentVi
 	if sc.UpdatedBy != nil {
 		v.UpdatedBy = s.principalRef(ctx, *sc.UpdatedBy)
 	}
-	v.DayStart, v.ResetsAt = dayBounds(s.Now())
+	v.DayStart, v.ResetsAt = dayBounds(s.Clock())
 	if v.LandsToday, err = s.Store.CountLands(ctx, agent.Ref(), v.DayStart, v.ResetsAt); err != nil {
 		return AgentView{}, err
 	}
@@ -200,7 +200,7 @@ func (s *Service) SetAgentScope(ctx context.Context, actor Actor, agent string, 
 		}
 		*b.dst = *b.v
 	}
-	cur.AgentID, cur.UpdatedBy, cur.UpdatedAt = target.ID, &actor.ID, s.Now()
+	cur.AgentID, cur.UpdatedBy, cur.UpdatedAt = target.ID, &actor.ID, s.Clock()
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		if err := tx.SetAgentScope(ctx, cur); err != nil {
 			return err
@@ -444,7 +444,7 @@ func (s *Service) checkLandsToday(ctx context.Context, q store.Q, actor Actor, s
 	if sc.MaxLandsPerDay == 0 {
 		return nil
 	}
-	now := s.Now()
+	now := s.Clock()
 	start, end := dayBounds(now)
 	n, err := q.CountLands(ctx, actor.Ref(), start, end)
 	if err != nil {

@@ -5,8 +5,12 @@ export PATH := $(HOME)/.local/go/bin:$(HOME)/go/bin:$(PATH)
 
 all: build test
 
+# COMMIT names what a dev build was built from: the git commit, else the
+# change a vx working copy is synced to. vx version prints it.
+COMMIT ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || sed -n 's/.*"base": *"b3:\([0-9a-f]\{12\}\).*/vx-\1/p' .vx/config.json 2>/dev/null)
+
 build:
-	$(GO) build -o bin/ ./cmd/...
+	$(GO) build -ldflags "-X github.com/TerracodeBA/vx/internal/version.Commit=$(COMMIT)" -o bin/ ./cmd/...
 
 # Full test suite against the docker-compose database.
 test: db

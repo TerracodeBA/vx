@@ -404,3 +404,38 @@ func TestTrustOfSystemNoteIsVx(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardNotFoundHidesRepo checks that board tools answer a repository
+// the caller cannot read exactly like one that does not exist, and name
+// the repository only for a missing effort in a readable one.
+func TestBoardNotFoundHidesRepo(t *testing.T) {
+	b := newBoardEnv(t)
+	carol, err := b.svc.Store.CreatePrincipal(b.ctx, store.Principal{Kind: store.KindHuman, Handle: "carol"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsider, err := b.svc.ResolveActor(b.ctx, carol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(a service.Actor, repo, effort string) error {
+		_, err := b.svc.PostNote(b.ctx, a, service.PostNoteInput{Repo: repo, Effort: effort, Kind: service.NotePlan, Body: "x"})
+		return err
+	}
+	ctxErr := func(a service.Actor, repo, effort string) error {
+		_, err := b.svc.Context(b.ctx, a, repo, effort, nil)
+		return err
+	}
+	for _, call := range []func(service.Actor, string, string) error{post, ctxErr} {
+		hidden, missing := call(outsider, "shop-api", b.effort.Slug), call(outsider, "no-such-repo", b.effort.Slug)
+		wantCode(t, hidden, service.CodeNotFound, "")
+		wantCode(t, missing, service.CodeNotFound, "")
+		if strings.ReplaceAll(hidden.Error(), "shop-api", "R") != strings.ReplaceAll(missing.Error(), "no-such-repo", "R") {
+			t.Fatalf("hidden repo %q reads differently from a missing one %q", hidden, missing)
+		}
+		if strings.Contains(hidden.Error(), "no effort") || strings.Contains(hidden.Error(), "in repo") {
+			t.Fatalf("hidden repo error suggests the repository exists: %v", hidden)
+		}
+		wantCode(t, call(b.alice, "shop-api", "nope"), service.CodeNotFound, "no effort nope in repo shop-api")
+	}
+}

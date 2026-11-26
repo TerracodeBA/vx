@@ -494,12 +494,19 @@ func (a *App) abandonCmd() *cobra.Command {
 func (a *App) logCmd() *cobra.Command {
 	var limit int
 	var files bool
-	var repoFlag string
+	var repoFlag, effortFlag string
 	cmd := &cobra.Command{
-		Use:   "log [EFFORT]",
-		Short: "List changes landed in the effort, newest first",
-		Args:  cobra.MaximumNArgs(1),
+		Use:     "log [EFFORT]",
+		Short:   "List changes landed in the effort, newest first",
+		Example: "  vx log\n  vx log --effort rate-limiting --files",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if effortFlag != "" {
+				if len(args) > 0 && args[0] != effortFlag {
+					return fmt.Errorf("two efforts given (%s and --effort %s): pass one", args[0], effortFlag)
+				}
+				args = []string{effortFlag}
+			}
 			c, err := a.client()
 			if err != nil {
 				return err
@@ -536,7 +543,7 @@ func (a *App) logCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVarP(&limit, "limit", "n", 50, "number of changes")
 	cmd.Flags().BoolVar(&files, "files", false, "list changed files")
-	cmd.Flags().StringVar(&repoFlag, "repo", "", "repository")
+	boardScopeFlags(cmd, &repoFlag, &effortFlag)
 	return cmd
 }
 

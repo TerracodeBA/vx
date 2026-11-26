@@ -245,7 +245,7 @@ func (s *Service) addReviewTask(ctx context.Context, vx store.Principal, eff sto
 	}
 	id := owner.ID
 	return classify(s.Store.InTx(ctx, func(tx *store.Tx) error {
-		row, err := tx.InsertTask(ctx, store.Task{EffortID: eff.ID, Title: title, Body: body, State: TaskTaken, OwnerID: &id, CreatedBy: vx.ID, CreatedAt: s.Now()})
+		row, err := tx.InsertTask(ctx, store.Task{EffortID: eff.ID, Title: title, Body: body, State: TaskTaken, OwnerID: &id, CreatedBy: vx.ID, CreatedAt: s.Clock()})
 		if err != nil {
 			return err
 		}
@@ -606,7 +606,7 @@ func (s *Service) postSystemNote(ctx context.Context, vx store.Principal, eff st
 		}
 		row := store.Note{
 			EffortID: eff.ID, Kind: string(n.Kind), Targets: n.Targets, AuthorID: vx.ID, Body: n.Body,
-			State: NoteOpen, CreatedAt: s.Now(), System: true,
+			State: NoteOpen, CreatedAt: s.Clock(), System: true,
 		}
 		if n.To != nil {
 			row.ToID = &n.To.ID

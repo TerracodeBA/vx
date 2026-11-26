@@ -48,7 +48,7 @@ func (h *memHost) SyncBranch(ctx context.Context, repo store.Repo, branch string
 	tree := h.e.treeOf(nil, map[string]*string{"README.md": s("# shop\n"), "limit.go": s("package shop\n")})
 	cs := &object.Changeset{
 		Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Tree: tree, Origin: object.OriginUpstream,
-		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: "Initial", CreatedAt: h.e.svc.Now(), GitSHA: gitSHA("initial"),
+		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: "Initial", CreatedAt: h.e.svc.Clock(), GitSHA: gitSHA("initial"),
 	}
 	hsh, err := h.e.svc.Store.InsertChangeset(ctx, repo.ID, nil, cs, nil)
 	if err != nil {
@@ -456,7 +456,7 @@ func (e *feedbackEnv) commitMain(intent string, files map[string]*string) store.
 	cs := &object.Changeset{
 		Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Parents: []hash.Hash{b.Head},
 		Tree: e.snapshot(e.repo, b.Head, files), Origin: object.OriginUpstream,
-		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: intent, CreatedAt: e.svc.Now(), GitSHA: gitSHA(intent),
+		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: intent, CreatedAt: e.svc.Clock(), GitSHA: gitSHA(intent),
 	}
 	h, err := e.svc.Store.InsertChangeset(e.ctx, e.repo.ID, nil, cs, nil)
 	if err != nil {

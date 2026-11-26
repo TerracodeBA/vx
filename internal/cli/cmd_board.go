@@ -87,7 +87,17 @@ those of your person's other agents.`,
 		Example: `  vx post plan "Moving clientIP into internal/httpx" --on internal/httpx/ --on internal/api/limit.go
   vx post interface "func Allow(key string) (bool, time.Duration)" --on limit.Allow
   vx post decision "Limits are per user id, not per IP" --on limit.Allow --supersedes 1a2b3c4d`,
-		Args: cobra.ExactArgs(2),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 2 {
+				// vx post plan "TEXT" --on a.go b.go: the extra targets land
+				// as arguments.
+				return fmt.Errorf("vx post takes a kind and one TEXT, got %d arguments: quote the text, and give several targets as --on a.go,b.go or --on a.go --on b.go", len(args))
+			}
+			if len(args) < 2 {
+				return fmt.Errorf("vx post needs a kind and a TEXT: vx post plan \"TEXT\" --on PATH")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kind := strings.ToLower(args[0])
 			if kind == "question" {
@@ -619,7 +629,7 @@ until they are answered.`,
 func (a *App) contextCmd() *cobra.Command {
 	var repoFlag, effortFlag string
 	cmd := &cobra.Command{
-		Use:   "context TARGET...",
+		Use:   "context [TARGET...]",
 		Short: "What to know before touching some paths or symbols: notes, claims, who is working, recent changes, other efforts",
 		Long: `Read this before editing shared code. For each path ("internal/http/",
 "internal/http/limit.go") or symbol ("auth.Login"), vx context lists the
@@ -627,9 +637,14 @@ board's notes on it, the active claims on it, the open workspaces in the
 effort and the changes that landed on it recently. "Other efforts on these
 paths" lists the other open efforts of the repository that changed or
 claimed the targets, or posted an interface or decision on them: they ship
-separately, so their changes do not show up in vx sync.`,
-		Example: `  vx context internal/web/web.go auth.Login`,
-		Args:    cobra.MinimumNArgs(1),
+separately, so their changes do not show up in vx sync.
+
+Without targets, vx context covers the whole effort: every current note,
+every active claim, everyone working, the latest changes, and the other
+open efforts that changed the files this effort changed.`,
+		Example: `  vx context internal/web/web.go auth.Login
+  vx context`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
 			if err != nil {
@@ -645,9 +660,17 @@ separately, so their changes do not show up in vx sync.`,
 				return a.boardErr(err)
 			}
 			m := resp.Msg
-			a.printf("Context for %s in %s\n", strings.Join(args, ", "), slug)
+			if len(args) == 0 {
+				a.printf("Context for the whole effort %s\n", slug)
+			} else {
+				a.printf("Context for %s in %s\n", strings.Join(args, ", "), slug)
+			}
 			if len(m.Notes) == 0 {
-				a.printf("\nNo notes on these. If you are about to change shared code, say so: vx post plan \"TEXT\" --on %s\n", args[0])
+				on := "PATH"
+				if len(args) > 0 {
+					on = args[0]
+				}
+				a.printf("\nNo notes on these. If you are about to change shared code, say so: vx post plan \"TEXT\" --on %s\n", on)
 			} else {
 				a.printf("\nNotes (%d). %s\n", len(m.Notes), boardFraming)
 				me := a.me(ctx, c)
@@ -669,11 +692,18 @@ separately, so their changes do not show up in vx sync.`,
 					a.printClaim(cl, "  ")
 				}
 			}
-			a.printWorking(m.Working)
-			if len(m.RecentChanges) == 0 {
+			a.printWorking(m.Working, len(args) == 0)
+			switch {
+			case len(m.RecentChanges) == 0 && len(args) == 0:
+				a.printf("\nNothing landed in %s yet.\n", slug)
+			case len(m.RecentChanges) == 0:
 				a.printf("\nNo recent changes touched these.\n")
-			} else {
-				a.printf("\nRecent changes touching these (%d):\n", len(m.RecentChanges))
+			default:
+				if len(args) == 0 {
+					a.printf("\nRecent changes (%d):\n", len(m.RecentChanges))
+				} else {
+					a.printf("\nRecent changes touching these (%d):\n", len(m.RecentChanges))
+				}
 				for _, cs := range m.RecentChanges {
 					a.printf("  %s %s  %-44s %s, %s\n", short(cs.Hash), cs.ChangeId, firstLine(cs.Intent), cs.Author.GetPrincipal(), agoRFC(cs.CreatedAt))
 					for _, f := range touching(cs.Files, args, 5) {
@@ -766,8 +796,9 @@ func otherEffortLine(o *vxv1.OtherEffort) string {
 // printWorking prints the Working now section of vx context: first the
 // workspaces whose changed files (or claims) match the targets, then,
 // separately, the rest of the effort: those that reported other files, and
-// those whose files are unknown.
-func (a *App) printWorking(ws []*vxv1.ContextWorkspace) {
+// those whose files are unknown. For the whole effort (no targets) it is
+// one list.
+func (a *App) printWorking(ws []*vxv1.ContextWorkspace, whole bool) {
 	var on, elsewhere, unknown []*vxv1.ContextWorkspace
 	for _, w := range ws {
 		switch {
@@ -792,7 +823,11 @@ func (a *App) printWorking(ws []*vxv1.ContextWorkspace) {
 	if len(elsewhere)+len(unknown) == 0 {
 		return
 	}
-	a.printf("\nOthers working in this effort, not known to touch these (%d):\n", len(elsewhere)+len(unknown))
+	if whole {
+		a.printf("\nWorking in this effort now (%d):\n", len(elsewhere)+len(unknown))
+	} else {
+		a.printf("\nOthers working in this effort, not known to touch these (%d):\n", len(elsewhere)+len(unknown))
+	}
 	for _, w := range elsewhere {
 		line(w)
 	}

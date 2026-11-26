@@ -91,6 +91,17 @@ func (e *ghWeb) signIn(c *http.Client, login, next string) (int, string) {
 	return e.get(c, path)
 }
 
+// signUp signs a GitHub user without a vx account in (signIn), checks
+// that vx asks before creating one, and chooses Continue.
+func (e *ghWeb) signUp(c *http.Client, login, next string) (int, string) {
+	e.t.Helper()
+	code, page := e.signIn(c, login, next)
+	if code != 200 || !strings.Contains(page, "You are about to create a new vx account for GitHub <strong class=\"mono\">"+login+"</strong>") {
+		e.t.Fatalf("sign-up of %s did not ask first = %d\n%s", login, code, page)
+	}
+	return e.post(c, "/auth/github/signup", url.Values{}, e.srv.URL)
+}
+
 // dest is where the continue page sends the browser.
 func dest(t *testing.T, page string) string {
 	t.Helper()
@@ -114,7 +125,7 @@ func TestGitHubWebSignInAndWelcome(t *testing.T) {
 		t.Fatalf("login page:\n%s", login)
 	}
 
-	code, page := e.signIn(c, "Octocat", "")
+	code, page := e.signUp(c, "Octocat", "")
 	if code != 200 || dest(t, page) != "/ui/welcome" {
 		t.Fatalf("first sign-in = %d\n%s", code, page)
 	}
@@ -156,7 +167,7 @@ func TestGitHubWebSignInAndWelcome(t *testing.T) {
 	if code, _ := e.post(c, "/ui/welcome", url.Values{}, e.srv.URL); code != 200 {
 		t.Fatalf("dismiss = %d", code)
 	}
-	if _, home := e.get(c, "/ui"); strings.Contains(home, `href="/ui/welcome"`) {
+	if _, home := e.get(c, "/ui"); strings.Contains(home, `class="side-link" href="/ui/welcome"`) {
 		t.Fatal("welcome still in the menu after dismissing")
 	}
 	if _, welcome := e.get(c, "/ui/welcome"); !strings.Contains(welcome, "Show it again") {
@@ -176,13 +187,17 @@ func TestGitHubWebSignInAndWelcome(t *testing.T) {
 func TestGitHubWebSignInNext(t *testing.T) {
 	e := newGHWeb(t, service.SignupOpen)
 	e.gh.AddUser("nina")
-	for _, c := range []struct{ next, want string }{
+	for i, c := range []struct{ next, want string }{
 		{"/ui/cli/approve?code=WDJB-MJHT", "/ui/cli/approve?code=WDJB-MJHT"}, // first sign-in keeps an explicit next
 		{"//evil.example/ui", "/ui"},
 		{"https://evil.example/ui", "/ui"},
 		{"/ui/settings", "/ui/settings"},
 	} {
-		_, page := e.signIn(e.browser(), "nina", c.next)
+		signIn := e.signIn
+		if i == 0 {
+			signIn = e.signUp // through "create a new account?", next kept
+		}
+		_, page := signIn(e.browser(), "nina", c.next)
 		if got := dest(t, page); got != c.want {
 			t.Errorf("next %q: went to %q, want %q", c.next, got, c.want)
 		}

@@ -159,10 +159,60 @@ func (s *Service) gitHubUser(ctx context.Context, code, verifier string) (GitHub
 // GitHubSignInFinish completes a web sign-in: it links or creates the
 // person (per the signup mode), syncs their organizations, and returns the
 // person and a new web-session token. isNew is true on first sign-in.
+// The web UI asks before creating an account (GitHubSignInUser,
+// GitHubSignupNeedsConfirm, GitHubSignInAs); this does all in one step.
 func (s *Service) GitHubSignInFinish(ctx context.Context, code, verifier string) (p store.Principal, token string, isNew bool, err error) {
 	u, err := s.gitHubUser(ctx, code, verifier)
 	if err != nil {
 		return store.Principal{}, "", false, err
+	}
+	return s.GitHubSignInAs(ctx, u)
+}
+
+// GitHubSignInUser exchanges a web sign-in code and returns the GitHub
+// user it is for, without signing anyone in.
+func (s *Service) GitHubSignInUser(ctx context.Context, code, verifier string) (GitHubUser, error) {
+	return s.gitHubUser(ctx, code, verifier)
+}
+
+// GitHubSignupNeedsConfirm reports whether signing in as u would create a
+// new vx account nobody arranged: u has no vx person yet, the signup mode
+// lets them create one, and no invite names them. The web UI then asks
+// "create a new account for GitHub LOGIN?" first, because a browser
+// logged in to a second GitHub account would otherwise get a second,
+// empty vx account. A sign-up that would be refused returns that error
+// now, so the person is not asked about an account they cannot get. It
+// takes nothing from the sign-up rate limit; creating the account does.
+func (s *Service) GitHubSignupNeedsConfirm(ctx context.Context, u GitHubUser) (bool, error) {
+	if _, err := s.Store.PrincipalByGitHubID(ctx, u.ID); err == nil {
+		return false, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return false, err
+	}
+	mode := s.SignupModeOrDefault()
+	if mode == SignupClosed {
+		return false, &GitHubSignupRefused{Login: u.Login, Mode: mode}
+	}
+	_, invited, err := s.Store.OpenInvite(ctx, strings.ToLower(u.Login))
+	if err != nil {
+		return false, err
+	}
+	if !invited && mode == SignupInvite {
+		return false, &GitHubSignupRefused{Login: u.Login, Mode: mode}
+	}
+	if err := s.gitHubDuplicate(ctx, u); err != nil {
+		return false, err
+	}
+	return !invited, nil
+}
+
+// GitHubSignInAs finishes a web sign-in for a GitHub user read from a
+// sign-in code (GitHubSignInUser), as GitHubSignInFinish does. The caller
+// vouches that u came from GitHub: the web UI keeps it, between asking
+// and Continue, in a cookie signed with the server key.
+func (s *Service) GitHubSignInAs(ctx context.Context, u GitHubUser) (p store.Principal, token string, isNew bool, err error) {
+	if u.ID == 0 || u.Login == "" {
+		return store.Principal{}, "", false, errf(CodeInvalid, "no GitHub account to sign in as; start the sign-in again")
 	}
 	p, isNew, renamedFrom, err := s.gitHubPerson(ctx, u)
 	if err != nil {

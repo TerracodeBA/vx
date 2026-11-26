@@ -28,7 +28,7 @@
     {{if .NavAdmin}}<a class="side-link{{if eq .Section "admin"}} on{{end}}" href="/ui/admin/people"><span class="ico ico-admin" aria-hidden="true"></span>Admin</a>{{end}}
   </nav>
   <div class="side-foot">
-    <div class="side-user"><span class="avatar" aria-hidden="true">{{slice (principal .Actor.Ref) 0 1}}</span><span class="side-text mono">{{principal .Actor.Ref}}</span></div>
+    <div class="side-user" title="Signed in as {{principal .Actor.Ref}}{{with .NavGitHub}} (GitHub: {{.}}){{end}}"><span class="avatar" aria-hidden="true">{{slice (principal .Actor.Ref) 0 1}}</span><span class="side-who"><span class="side-text mono">{{principal .Actor.Ref}}</span><span class="side-gh small">{{with .NavGitHub}}GitHub: <span class="mono">{{.}}</span>{{else}}GitHub: not connected{{end}}</span></span></div>
     <div class="side-actions">
       <a class="side-settings{{if eq .Path "/ui/settings"}} on{{end}}" href="/ui/settings">Settings</a>
       <form method="post" action="/ui/logout"><button class="side-signout" type="submit">Sign out</button></form>

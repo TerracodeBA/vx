@@ -119,7 +119,7 @@ func (s *Service) otherEffort(ctx context.Context, repoID uuid.UUID, e store.Eff
 	if err != nil {
 		return act, false, err
 	}
-	notes, err := c.notes(ctx, rows, s.Now())
+	notes, err := c.notes(ctx, rows, s.Clock())
 	if err != nil {
 		return act, false, err
 	}

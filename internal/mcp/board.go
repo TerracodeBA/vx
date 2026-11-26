@@ -291,7 +291,7 @@ func (t *tools) ask(ctx context.Context, req *sdk.CallToolRequest, in askInput) 
 	if err != nil {
 		return nil, askOutput{}, t.userError("vx_ask", err)
 	}
-	return nil, askOutput{Note: note(a, n), Notice: service.AwayNotice(n, t.svc.Now())}, nil
+	return nil, askOutput{Note: note(a, n), Notice: service.AwayNotice(n, t.svc.Clock())}, nil
 }
 
 func (t *tools) answer(ctx context.Context, req *sdk.CallToolRequest, in answerInput) (*sdk.CallToolResult, answerOutput, error) {

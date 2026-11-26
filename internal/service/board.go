@@ -201,7 +201,7 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 	}
 	row := store.Note{
 		EffortID: v.Effort.ID, Kind: string(in.Kind), Targets: targets, AuthorID: actor.ID, Body: body,
-		State: NoteOpen, CreatedAt: s.Now(),
+		State: NoteOpen, CreatedAt: s.Clock(),
 	}
 	var extra map[string]string
 	if strings.TrimSpace(in.Supersedes) != "" {
@@ -215,7 +215,7 @@ func (s *Service) PostNote(ctx context.Context, actor Actor, in PostNoteInput) (
 	if row, err = s.insertNote(ctx, actor, "note.post", row, extra); err != nil {
 		return Note{}, err
 	}
-	return s.notesFor(actor).note(ctx, row, s.Now())
+	return s.notesFor(actor).note(ctx, row, s.Clock())
 }
 
 // Ask posts a question, optionally to one principal, that escalates after
@@ -262,7 +262,7 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 			}
 		}
 	}
-	now := s.Now()
+	now := s.Clock()
 	answerBy := now.Add(within)
 	row := store.Note{
 		EffortID: v.Effort.ID, Kind: string(NoteQuestion), Targets: targets, AuthorID: actor.ID, Body: body,
@@ -299,7 +299,7 @@ func (s *Service) AnswerNote(ctx context.Context, actor Actor, questionID string
 	if err := s.noteFor(ctx, actor, found, RoleWrite); err != nil {
 		return Note{}, Note{}, err
 	}
-	now := s.Now()
+	now := s.Clock()
 	var answer, question store.Note
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		q, err := tx.NoteForUpdate(ctx, found.ID)
@@ -368,7 +368,7 @@ func (s *Service) ListNotes(ctx context.Context, actor Actor, in ListNotesInput)
 	if err != nil {
 		return nil, err
 	}
-	return s.notesFor(actor).notes(ctx, rows, s.Now())
+	return s.notesFor(actor).notes(ctx, rows, s.Clock())
 }
 
 // GetInbox returns what needs the caller's attention across efforts, in
@@ -389,7 +389,7 @@ func (s *Service) GetInbox(ctx context.Context, actor Actor) (Inbox, error) {
 			ids = append(ids, a.ID)
 		}
 	}
-	now := s.Now()
+	now := s.Clock()
 	c := s.notesFor(actor)
 	var in Inbox
 	rows, err := s.Store.OpenQuestionsTo(ctx, ids, maxInboxNotes)
@@ -459,7 +459,7 @@ func (s *Service) Context(ctx context.Context, actor Actor, repo, effort string,
 	if err != nil {
 		return NoteContext{}, err
 	}
-	now := s.Now()
+	now := s.Clock()
 	c := s.notesFor(actor)
 	var out NoteContext
 	rows, err := s.listNotes(ctx, store.NoteFilter{EffortID: v.Effort.ID, Current: true}, targets, contextNotes)
@@ -513,7 +513,7 @@ func (s *Service) GetNote(ctx context.Context, actor Actor, id string) (Note, er
 	if err := s.noteFor(ctx, actor, row, RoleRead); err != nil {
 		return Note{}, err
 	}
-	return s.notesFor(actor).note(ctx, row, s.Now())
+	return s.notesFor(actor).note(ctx, row, s.Clock())
 }
 
 // TrustOf says how actor relates to the author of n: TrustSelf,

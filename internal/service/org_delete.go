@@ -168,7 +168,7 @@ func (s *Service) DeleteOrg(ctx context.Context, actor Actor, handle, confirm st
 		if err != nil {
 			return err
 		}
-		now := s.now()
+		now := s.Clock()
 		d, err := tx.MarkOrgDeleted(ctx, a.org, actor.Principal, now, now.Add(s.OrgDeletion.grace()))
 		if err != nil {
 			return classify(err)
@@ -226,7 +226,7 @@ func (s *Service) RestoreOrg(ctx context.Context, actor Actor, handle string) (O
 		if err != nil {
 			return classify(err)
 		}
-		if !s.now().Before(d.PurgeAfter) {
+		if !s.Clock().Before(d.PurgeAfter) {
 			return errf(CodeFailedPrecondition, "the grace period of %s ended on %s and it is being purged; it can no longer be restored",
 				o.Handle, d.PurgeAfter.UTC().Format(time.RFC3339))
 		}

@@ -22,13 +22,7 @@ func String() string {
 		v = info.Main.Version // go install module@version
 	}
 	if c == "" {
-		if info, ok := debug.ReadBuildInfo(); ok {
-			for _, s := range info.Settings {
-				if s.Key == "vcs.revision" && len(s.Value) >= 12 {
-					c = s.Value[:12]
-				}
-			}
-		}
+		c = vcsCommit()
 	}
 	out := v
 	if c != "" {
@@ -38,4 +32,30 @@ func String() string {
 		out += " built " + Date
 	}
 	return fmt.Sprintf("%s %s/%s", out, runtime.GOOS, runtime.GOARCH)
+}
+
+// vcsCommit is the git commit go build recorded (a build inside a git
+// checkout), with "-modified" when the files differed from it; "" when
+// none was recorded, as in a vx working copy built without make build.
+func vcsCommit() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	var rev, modified string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			modified = s.Value
+		}
+	}
+	if len(rev) > 12 {
+		rev = rev[:12]
+	}
+	if rev != "" && modified == "true" {
+		rev += "-modified"
+	}
+	return rev
 }

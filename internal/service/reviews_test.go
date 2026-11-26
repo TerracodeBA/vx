@@ -3,6 +3,7 @@ package service_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -506,5 +507,24 @@ func TestPolicyApproversOnGitHub(t *testing.T) {
 	dec, err := e.svc.ApproveReview(e.ctx, e.bob, rv.ID.String())
 	if err != nil || dec.Landed == nil || dec.Landed.Changeset.Evidence.Approvals[0].By != "user:bob" {
 		t.Fatalf("bob approves with write on GitHub: %+v %v", dec, err)
+	}
+}
+
+// TestClockWithoutNow lands under a human policy, approves and lists with
+// Service.Now unset: every service reads the time through Clock, which
+// falls back to the wall clock instead of calling a nil func.
+func TestClockWithoutNow(t *testing.T) {
+	e := newPolicyEnv(t, policyRules)
+	e.svc.Now = nil
+	before := time.Now()
+	if c := e.svc.Clock(); c.Before(before) {
+		t.Fatalf("Clock without Now: %v before %v", c, before)
+	}
+	_, rv := e.pending(e.agent, "002_users.sql")
+	if _, err := e.svc.ApproveReview(e.ctx, e.alice, rv.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ListNotes(e.ctx, e.agent, service.ListNotesInput{Repo: e.repo.Name, Effort: e.eff.Slug}); err != nil {
+		t.Fatal(err)
 	}
 }

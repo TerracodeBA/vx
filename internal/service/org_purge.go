@@ -113,7 +113,7 @@ func (s *Service) PurgeDueOrgs(ctx context.Context, log *slog.Logger) ([]OrgDele
 		return nil, ErrPurgeBusy
 	}
 	defer unlock()
-	due, err := s.Store.OrgsDueForPurge(ctx, s.now())
+	due, err := s.Store.OrgsDueForPurge(ctx, s.Clock())
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) ConsolePurgeOrg(ctx context.Context, handle string) (OrgDeleti
 // purgeOrg runs (or continues) the purge of one deleted organization. The
 // caller holds the purge lock.
 func (s *Service) purgeOrg(ctx context.Context, alive func(context.Context) bool, orgID uuid.UUID, by string) (OrgDeletion, error) {
-	t, err := s.Store.PurgeTarget(ctx, orgID, by, s.now())
+	t, err := s.Store.PurgeTarget(ctx, orgID, by, s.Clock())
 	if err != nil {
 		return OrgDeletion{}, err
 	}
@@ -231,7 +231,7 @@ func (s *Service) purgeOrg(ctx context.Context, alive func(context.Context) bool
 	if err := batch("organization"); err != nil {
 		return OrgDeletion{}, err
 	}
-	d, err := s.Store.PurgeOrgRows(ctx, orgID, t.Deletion.Handle, s.now())
+	d, err := s.Store.PurgeOrgRows(ctx, orgID, t.Deletion.Handle, s.Clock())
 	if err != nil {
 		return OrgDeletion{}, err
 	}

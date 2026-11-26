@@ -36,3 +36,20 @@
   {{if .IsHuman}}<form method="post" action="/ui/admin/review" class="inline-form"><button class="btn ghost small-btn" type="submit">Mark as reviewed</button></form>{{end}}
 </section>{{end}}
 {{define "admin-flash"}}{{with .OK}}<p class="note ok" role="status">{{.}}</p>{{end}}{{with .Err}}<p class="note bad" role="alert">{{.}}</p>{{end}}{{end}}
+{{define "noaccess"}}{{with .Access}}<div class="panel empty noaccess" id="no-access" role="status">
+  <h2>This account cannot read any repositories</h2>
+  <p class="noaccess-who">You are signed in as <strong class="mono">{{.Person.Handle}}</strong> ({{if .GitHubLogin}}GitHub: <strong class="mono">{{.GitHubLogin}}</strong>{{else}}not connected to GitHub{{end}}). This account cannot read any repositories.{{if .Agent}} You signed in with a token of one of its agents, which reads what {{.Person.Handle}} reads.{{end}}</p>
+  <h3>Why</h3>
+  <ul class="noaccess-list">
+    {{if .NewAccount}}<li>This account was created {{ago .Created}}. If you have used vx before, you probably signed in with another GitHub account than last time, and vx made a new, empty account for it. Your work is still there, in your other account.</li>{{end}}
+    {{if .Orgs}}<li>It belongs to {{range $i, $o := .Orgs}}{{if $i}}, {{end}}<a class="mono" href="/ui/orgs/{{$o}}">{{$o}}</a>{{end}}, where it has no repository it can read yet.</li>{{else}}<li>It belongs to no organization in vx besides its own personal one.</li>{{end}}
+    {{if .GitHubLogin}}{{if and .GitHubSignIn (not .Installations)}}<li>The vx GitHub App is not installed on any GitHub organization {{.GitHubLogin}} belongs to, nor on {{.GitHubLogin}} itself, so no repositories come in from GitHub.</li>{{end}}{{else}}<li>It is not connected to GitHub, so repositories from GitHub do not show up. Connect it in <a href="/ui/settings">Settings</a>.</li>{{end}}
+  </ul>
+  <h3>What to do</h3>
+  <ul class="noaccess-list">
+    <li><strong>Signed in with the wrong account?</strong> Sign out, then sign in with GitHub again and choose your other account. GitHub keeps its own session, separate from vx: switch accounts on GitHub first (or <a href="{{.GitHubURL}}/logout" rel="noreferrer">sign out of GitHub</a>), or GitHub signs you in as {{if .GitHubLogin}}{{.GitHubLogin}}{{else}}the same account{{end}} again.
+      <form method="post" action="/ui/logout" class="inline-form"><button class="btn ghost small-btn" type="submit">Sign out of vx</button></form></li>
+    <li><strong>Need access to your team's work?</strong> Ask an owner of the organization to add you: <code>vx org member ORG {{.Person.Handle}} --role member</code>, or to one repository: <code>vx repo grant REPO user:{{.Person.Handle}} --role read</code>.{{if .GitHubLogin}} For repositories from GitHub, they add {{.GitHubLogin}} to the organization or repository on GitHub.{{end}}</li>
+    {{if .InstallURL}}<li><strong>Bringing your organization's repositories?</strong> <a href="{{.InstallURL}}" rel="noreferrer">Install the vx GitHub App</a> on your GitHub organization or account; its repositories then show up here. <a href="/ui/welcome">Set up vx</a> walks through it.</li>{{end}}
+  </ul>
+</div>{{end}}{{end}}
