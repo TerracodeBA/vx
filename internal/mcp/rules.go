@@ -16,6 +16,19 @@ type Rules struct {
 	RequiredChecks []string        `json:"required_checks" jsonschema:"commands to run with vx land --run; others are recorded as not verified"`
 	Policies       []LandingPolicy `json:"policies" jsonschema:"how changes to some paths land; the strictest matching policy applies, fast for paths no policy covers"`
 	Reservations   []Reservation   `json:"reservations" jsonschema:"keys handed out by vx_reserve, newest first"`
+	Checks         []RuleCheck     `json:"checks" jsonschema:"[[check]] tables: what must be proven before a change lands or ships; vx_check_status shows a change's state"`
+}
+
+// RuleCheck is a [[check]] of vx.toml.
+type RuleCheck struct {
+	Name     string   `json:"name"`
+	When     string   `json:"when" jsonschema:"land, ship or manual"`
+	Blocks   string   `json:"blocks" jsonschema:"land, ship or nothing"`
+	Paths    []string `json:"paths,omitempty"`
+	Run      string   `json:"run,omitempty" jsonschema:"a run check's command: vx land --run it"`
+	Runner   string   `json:"runner,omitempty" jsonschema:"agent:KIND, ci or human"`
+	Reporter string   `json:"reporter" jsonschema:"whose results count: self, independent, ci or human"`
+	After    []string `json:"after,omitempty"`
 }
 
 // LandingPolicy is a [[policy]] of vx.toml.
@@ -69,7 +82,7 @@ func (t *tools) registerRules(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name: "vx_rules",
 		Description: "Show the repository's vx.toml rules: [[unique]] keys files may not share (e.g. migration numbers), " +
-			"[[generated]] files vx never text-merges, required checks for vx land --run, and the keys reserved so far.",
+			"[[generated]] files vx never text-merges, required checks for vx land --run, [[check]] tables, and the keys reserved so far.",
 		Annotations: readOnly("Repository rules"),
 	}, t.rules)
 	sdk.AddTool(srv, &sdk.Tool{
@@ -100,7 +113,10 @@ func (t *tools) rules(ctx context.Context, req *sdk.CallToolRequest, in rulesInp
 }
 
 func rulesOf(r service.Rules, res []service.Reservation) Rules {
-	out := Rules{Source: r.Source, Unique: []UniqueRule{}, Generated: []GeneratedRule{}, RequiredChecks: r.RequiredChecks, Policies: []LandingPolicy{}, Reservations: []Reservation{}}
+	out := Rules{Source: r.Source, Unique: []UniqueRule{}, Generated: []GeneratedRule{}, RequiredChecks: r.RequiredChecks, Policies: []LandingPolicy{}, Reservations: []Reservation{}, Checks: []RuleCheck{}}
+	for _, c := range r.Checks {
+		out.Checks = append(out.Checks, RuleCheck{Name: c.Name, When: string(c.When), Blocks: string(c.Blocks), Paths: c.Paths, Run: c.Run, Runner: c.Runner, Reporter: string(c.Reporter), After: c.After})
+	}
 	if out.RequiredChecks == nil {
 		out.RequiredChecks = []string{}
 	}
