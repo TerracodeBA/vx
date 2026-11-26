@@ -588,6 +588,7 @@ func (s *Service) ApproveReview(ctx context.Context, actor Actor, id string) (Re
 		res.Overlaps = nil
 	}
 	s.scheduleForecast(repo, eff.ID)
+	s.jobsAfterLand(ctx, repo, eff.ID, res)
 	s.noteAuthor(ctx, repo, eff, r, fmt.Sprintf("%s approved your change %s (%q); it landed as %s. Run vx sync to bring it in.",
 		actor.Ref(), r.ChangeID, reviewTitle(r.Intent), res.Changeset.Hash.Short()), r.Paths)
 	r.State, r.DecidedBy, r.DecidedAt, r.Landed = store.ReviewApproved, &actor.ID, &now, res.Changeset.Hash

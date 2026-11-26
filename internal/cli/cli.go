@@ -129,7 +129,7 @@ Start here:
 		a.abandonCmd(), a.logCmd(), a.showCmd(), a.shipCmd(), a.waitCmd(), a.mcpCmd(),
 		a.postCmd(), a.askCmd(), a.answerCmd(), a.boardCmd(), a.inboxCmd(), a.contextCmd(),
 		a.claimCmd(), a.releaseCmd(), a.claimsCmd(), a.overlapsCmd(),
-		a.taskCmd(), a.tasksCmd(), a.rulesCmd(), a.reserveCmd(), a.reviewCmd(), a.selfUpdateCmd(),
+		a.taskCmd(), a.tasksCmd(), a.rulesCmd(), a.reserveCmd(), a.reviewCmd(), a.selfUpdateCmd(), a.checkCmd(),
 		a.adminCmd(),
 		&cobra.Command{
 			Use:   "version",

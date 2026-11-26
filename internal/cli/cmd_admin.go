@@ -93,7 +93,7 @@ path. An agent then only needs:
 	}
 	add.Flags().StringVar(&display, "display-name", "", "name shown in logs and PRs")
 	add.Flags().StringVar(&envFile, "env-file", "", "write the agent's environment (server, token) to this file instead of printing the token")
-	cmd.AddCommand(add, a.agentListCmd(), a.agentShowCmd(), a.agentScopeCmd())
+	cmd.AddCommand(add, a.agentListCmd(), a.agentShowCmd(), a.agentScopeCmd(), a.agentRunnerCmd())
 	return cmd
 }
 
@@ -247,6 +247,7 @@ Roles on these repositories are vx's own: grant them with vx repo grant.`,
 
 	cmd.AddCommand(create, list, sync, a.repoHostCmd())
 	cmd.AddCommand(a.repoAccessCmds()...)
+	cmd.AddCommand(a.repoCITokenCmd())
 	return cmd
 }
 

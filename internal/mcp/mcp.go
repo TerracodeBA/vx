@@ -65,6 +65,7 @@ func NewServer(svc *service.Service, log *slog.Logger) *sdk.Server {
 	t.registerTasks(srv)
 	t.registerOverlaps(srv)
 	t.registerRules(srv)
+	t.registerCheckJobs(srv)
 	return srv
 }
 

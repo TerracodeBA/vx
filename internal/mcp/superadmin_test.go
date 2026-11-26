@@ -56,6 +56,8 @@ func TestMCPSuperadminNotFound(t *testing.T) {
 		{"vx_tasks", at},
 		{"vx_overlaps", at},
 		{"vx_rules", at},
+		{"vx_check_jobs", at},
+		{"vx_check_request", with("check", "e2e")},
 		{"vx_post_note", with("kind", "plan", "targets", []string{"a.go"}, "body", "I am the operator")},
 		{"vx_claim", with("targets", []string{"a.go"})},
 	}
