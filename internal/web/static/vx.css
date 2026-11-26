@@ -468,6 +468,29 @@ input[type=password], input:not([type]), input[type=text] { font: 14px var(--mon
 .tk-waits { color: var(--warn); display: flex; flex-wrap: wrap; gap: 4px; }
 .tk-waits a { color: inherit; }
 
+/* ---------- Checks (#47): pipelines, results, organization checks ---------- */
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.check-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.check-depth-1 { margin-left: 20px; } .check-depth-2 { margin-left: 40px; } .check-depth-3 { margin-left: 60px; }
+.check-depth-4 { margin-left: 80px; } .check-depth-5 { margin-left: 100px; } .check-depth-6 { margin-left: 120px; }
+.check-depth-1, .check-depth-2, .check-depth-3, .check-depth-4, .check-depth-5, .check-depth-6 { border-left: 3px solid var(--line); }
+.check-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.check-name { font-weight: 600; overflow-wrap: anywhere; }
+.check-meta, .check-reason, .check-summary { overflow-wrap: anywhere; }
+.check-reason, .check-summary { margin: 6px 0 0; }
+.check-result { margin-top: 6px; }
+.check-result p { margin: 4px 0; }
+.check-data { margin: 6px 0; font-size: 12px; }
+.check-artifacts { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.check-artifacts li { display: grid; gap: 4px; max-width: 100%; }
+.check-shot { display: block; max-width: 320px; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--canvas); }
+.check-note { margin: 0 0 10px; }
+.org-checks-form textarea { font: 12px/1.5 var(--mono); padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--canvas); color: var(--fg); width: 100%; resize: vertical; min-height: 160px; }
+.org-checks-src { margin: 0 16px 12px; overflow-x: auto; }
+.org-check-history { padding: 0 16px 12px; }
+.org-check-names { padding: 0 16px; }
+.fy-sec { display: flex; align-items: center; gap: 6px; }
+
 /* ---------- admin: organizations, access, people ---------- */
 .ico-org { border: 1.5px solid var(--muted); border-radius: 50%; width: 16px; height: 16px; }
 .ico-org::after { content: ""; position: absolute; left: 4px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }

@@ -357,6 +357,7 @@ func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (
 	})
 	if err == nil && pr.Number > 0 {
 		s.postEvidenceCheck(ctx, plan, sh.HeadGitSHA, pr.URL)
+		s.publishCheckRuns(ctx, plan.Repo, plan.Effort)
 	}
 	return res, err
 }

@@ -132,6 +132,7 @@ var okMessages = map[string]string{
 	"support-ended":  "Support access ended.",
 	"reviewed":       "Marked as reviewed.",
 	"quota":          "Quotas saved.",
+	"checks":         "Organization checks saved as a new version. They apply to every repository of the organization from its next land.",
 	"sso":            "Single sign-on saved.",
 	"sso-removed":    "Single sign-on turned off.",
 	"agreement":      "Data processing agreement accepted. The acceptance is recorded below.",
@@ -297,6 +298,7 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 	}
 	u.orgSSO(r, actor, d.MyRole, data)
 	u.orgAgreement(r, actor, d.Org.Handle, data)
+	u.orgChecks(r, actor, d.Org.Handle, data)
 	u.renderStatus(w, r, f.Status, "org", data)
 }
 

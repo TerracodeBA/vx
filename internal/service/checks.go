@@ -288,7 +288,14 @@ func (s *Service) checkDefs(ctx context.Context, repo store.Repo, trees ...hash.
 // [[policy]] as checks). Organization rules (#47 part 3) join here; the
 // warnings say what was dropped.
 func (s *Service) repoCheckDefs(ctx context.Context, repo store.Repo, r rules.Rules) ([]rules.CheckDef, []string) {
-	return r.Effective(), nil
+	org, err := s.orgChecksOf(ctx, repo)
+	if err != nil {
+		slog.Default().Warn("organization checks", "repo", repo.Name, "err", err)
+	}
+	if org.Version == 0 {
+		return r.Effective(), nil
+	}
+	return MergeOrgChecks(org, r.Effective())
 }
 
 // ReportCheck stores one result of a check (write): bound to the change

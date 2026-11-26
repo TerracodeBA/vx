@@ -1194,6 +1194,40 @@ service OrgService {
   // text (members and superadmins). Accepting is not in the API: an owner
   // accepts in the web UI, as a deliberate act by a person.
   rpc GetOrgAgreement(GetOrgAgreementRequest) returns (GetOrgAgreementResponse) {}
+  // Organization checks (#47): [[check]] tables, as in vx.toml, for every
+  // repository of the organization. Members and superadmins read them;
+  // owners and admins (people, never agents) save a new version. Every
+  // version is kept and every save is in the operation log (org.checks).
+  rpc GetOrgChecks(GetOrgChecksRequest) returns (GetOrgChecksResponse) {}
+  rpc SetOrgChecks(SetOrgChecksRequest) returns (SetOrgChecksResponse) {}
+}
+
+// OrgChecksVersion is one saved version of an organization's checks.
+message OrgChecksVersion {
+  string org = 1;
+  int32 version = 2; // 0: the organization never defined checks
+  string source = 3; // the [[check]] tables as written
+  repeated string checks = 4; // check names, in the order written
+  string by = 5; // principal ref
+  string at = 6; // RFC 3339
+}
+
+message GetOrgChecksRequest {
+  string org = 1;
+  bool history = 2; // also every earlier version, newest first
+}
+message GetOrgChecksResponse {
+  OrgChecksVersion current = 1;
+  repeated OrgChecksVersion history = 2;
+}
+
+message SetOrgChecksRequest {
+  string org = 1;
+  string source = 2; // [[check]] tables; empty removes every organization check
+}
+message SetOrgChecksResponse {
+  OrgChecksVersion checks = 1;
+  bool changed = 2; // false: the source was already in force
 }
 
 message AgreementVersion {
@@ -1529,6 +1563,12 @@ message RepoRules {
   repeated string ignored = 6;
   // The [[check]] tables (company-defined checks, docs/checks.md).
   repeated CheckDef checks = 7;
+  // The organization's checks (#47 part 3), which apply on top of these;
+  // org_checks_from says whose ("organization acme (version 3)"), and
+  // check_warnings what of vx.toml they override.
+  repeated CheckDef org_checks = 8;
+  string org_checks_from = 9;
+  repeated string check_warnings = 10;
 }
 
 // LandingPolicy is a [[policy]] of vx.toml: how changes to its paths land.
@@ -1781,6 +1821,13 @@ message CheckState {
   CheckResult latest = 4; // the newest result that counts
   repeated CheckResult results = 5; // newest first, each with counts and why
   string how = 6; // how to provide a result
+  // The pipeline (#47 part 3): checks come in dependency order, each
+  // indented (depth) under the check it runs after (parent).
+  int32 depth = 7;
+  string parent = 8;
+  string origin = 9; // "organization acme (version 3)", "vx.toml line 12", ...
+  string pipeline_state = 10; // passed, failed, neutral, ready, waiting, skipped, not needed
+  string reason = 11; // "waits for unit", "skipped: unit failed"
 }
 
 message CheckStatusResponse {
@@ -1793,6 +1840,7 @@ message CheckStatusResponse {
   string rules = 7; // where the checks came from
   string problem = 8; // vx.toml does not parse
   repeated string warnings = 9; // checks left out, e.g. a vx.toml check an organization check of the same name replaces
+  bool edits_rules = 10; // the change edits vx.toml: the checks of the effort's base apply until it lands
 }
 
 message GetCheckResultRequest {

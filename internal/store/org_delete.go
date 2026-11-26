@@ -526,6 +526,8 @@ var orgPurgeSteps = []struct {
 	// Acceptances of the data processing agreement (#41); the accepted texts
 	// (dpa_texts) are the operator's and shared, they stay.
 	{"dpa_acceptances", `delete from org_dpa_acceptances where org_id = $1`, false},
+	// Organization checks (#47) and their history.
+	{"check_versions", `delete from org_check_versions where org_id = $1`, false},
 	// The organization's own entries in the operation log describe what its
 	// people did; the lifecycle entries (org.delete, org.restore, org.purge)
 	// stay with the deletion record.

@@ -22,6 +22,28 @@ import (
 	"github.com/TerracodeBA/vx/internal/web"
 )
 
+// phoneChecks is the pipeline on the phone pages: unit, then a browser
+// run after it, then a deploy after that.
+const phoneChecks = `
+[[check]]
+name   = "unit"
+runner = "agent:test"
+blocks = "nothing"
+
+[[check]]
+name   = "browser-e2e"
+runner = "agent:browser"
+after  = ["unit"]
+inputs = ["unit.preview_url"]
+blocks = "nothing"
+
+[[check]]
+name   = "deploy-preview"
+runner = "human"
+after  = ["browser-e2e"]
+blocks = "nothing"
+`
+
 // phoneEnv is a server with something on every page: efforts with lands
 // and long paths, an escalated question, a pending review, an overlap,
 // tasks, an organization, and a site admin signed in.
@@ -89,7 +111,7 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 	}
 	e.aliceAg, _ = svc.ResolveActor(ctx, agP)
 	long := "internal/httpx/middleware/ratelimit/token_bucket_with_a_rather_long_file_name.go"
-	e.landFiles(e.aliceAg, eff.Slug, "Rules", map[string]string{"vx.toml": "[[policy]]\npaths = [\"db/**\"]\nmode = \"human\"\n"}, nil)
+	e.landFiles(e.aliceAg, eff.Slug, "Rules", map[string]string{"vx.toml": "[[policy]]\npaths = [\"db/**\"]\nmode = \"human\"\n" + phoneChecks}, nil)
 	e.landFiles(e.aliceAg, eff.Slug, "Add a token bucket limiter in front of login, with a long intent that wraps on a phone", map[string]string{
 		long:          "package ratelimit\n\n// Allow reports whether the caller identified by key may make one more request right now, given the configured rate and burst; it never blocks.\nfunc Allow(key string) bool { return true }\n",
 		"x/shared.go": "package x // one\n",
@@ -131,6 +153,19 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 	two, _ := svc.CreateEffort(ctx, e.bob, service.CreateEffortInput{Repo: "acme/shop", Name: "Shared helpers"})
 	e.landFiles(e.bob, two.Slug, "Touch shared", map[string]string{"x/shared.go": "package x // two\n"}, nil)
 	svc.WaitForecasts()
+	// Check results on the effort head: a pass with a screenshot and data,
+	// a failure that skips the check after it.
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7\x35\x81\x84\x00\x00\x00\x00IEND\xaeB`\x82")
+	for _, in := range []service.ReportInput{
+		{Name: "unit", Status: "pass", Summary: "212 tests passed in internal/httpx/middleware/ratelimit and everywhere else", Data: []byte(`{"coverage": 81.5, "preview_url": "https://pr-12.preview.example.com/a/rather/long/path/that/wraps"}`), DataName: "unit.json",
+			Artifacts: []service.ArtifactInput{{Name: "login-flow-with-a-long-file-name.png", Data: png}, {Name: "report.html", Data: []byte("<p>ok</p>")}}, Log: []byte("ok\n")},
+		{Name: "browser-e2e", Status: "fail", Summary: "Signup form: the submit button stays disabled"},
+	} {
+		in.Repo, in.Effort = "acme/shop", eff.Slug
+		if _, err := svc.ReportCheck(ctx, e.bobAg, in); err != nil {
+			t.Fatalf("report %s: %v", in.Name, err)
+		}
+	}
 	svc.OpenWorkspace(ctx, e.aliceAg, "acme/shop", eff.Slug, "Wire limiter into signup")
 
 	e.addNewcomers()
@@ -145,7 +180,7 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 	ef := "/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug
 	e.pages = []string{
 		"/ui", "/ui/for-you", "/ui/repos", "/ui/repo?name=acme%2Fshop", "/ui/repos/acme/shop/access",
-		ef, ef + "&view=board", ef + "&view=tasks", ef + "&view=changes",
+		ef, ef + "&view=board", ef + "&view=tasks", ef + "&view=changes", ef + "&view=checks",
 		"/ui/change?repo=acme%2Fshop&review=" + e.review,
 		"/ui/reviews", "/ui/ship?repo=acme%2Fshop&slug=" + eff.Slug, "/ui/settings",
 		"/ui/orgs", "/ui/orgs/acme", "/ui/admin/people", "/ui/admin/github", "/ui/admin/audit",

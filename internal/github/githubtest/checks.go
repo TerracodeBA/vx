@@ -9,6 +9,7 @@ package githubtest
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type CheckRun struct {
 	DetailsURL string
 	ExternalID string
 	At         time.Time
+	Updates    int // PATCHes since it was created
 }
 
 // appPermissionsLocked returns the App's permissions.
@@ -84,6 +86,18 @@ func (s *Server) SetAppEvents(events ...string) {
 	s.appEvents = append([]string{}, events...)
 }
 
+// CheckRun returns the check run with this id as it is now.
+func (s *Server) CheckRun(id int64) (CheckRun, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.checkRuns {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return CheckRun{}, false
+}
+
 // CheckRuns returns the check runs posted on fullName, oldest first.
 func (s *Server) CheckRuns(fullName string) []CheckRun {
 	s.mu.Lock()
@@ -136,4 +150,65 @@ func (s *Server) createCheckRun(w http.ResponseWriter, r *http.Request, owner, n
 	}
 	s.checkRuns = append(s.checkRuns, c)
 	writeJSON(w, http.StatusCreated, map[string]any{"id": c.ID, "name": c.Name, "head_sha": c.HeadSHA, "status": c.Status, "conclusion": c.Conclusion})
+}
+
+// updateCheckRun is PATCH /repos/{owner}/{repo}/check-runs/{id}: fields
+// sent replace the run's; a completed run keeps its conclusion unless a
+// new one is sent.
+func (s *Server) updateCheckRun(w http.ResponseWriter, r *http.Request, owner, name, idStr string) {
+	in, ok := s.installationFor(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Name       *string `json:"name"`
+		Status     *string `json:"status"`
+		Conclusion *string `json:"conclusion"`
+		DetailsURL *string `json:"details_url"`
+		ExternalID *string `json:"external_id"`
+		Output     *struct {
+			Title   string `json:"title"`
+			Summary string `json:"summary"`
+			Text    string `json:"text"`
+		} `json:"output"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeMsg(w, http.StatusUnprocessableEntity, "Invalid request")
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rp := s.repoInInstallation(in, owner, name)
+	if rp == nil {
+		writeMsg(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	if s.appPermissionsLocked()["checks"] != "write" {
+		writeMsg(w, http.StatusForbidden, "Resource not accessible by integration")
+		return
+	}
+	for i := range s.checkRuns {
+		c := &s.checkRuns[i]
+		if strconv.FormatInt(c.ID, 10) != idStr || !strings.EqualFold(c.Repo, rp.FullName()) {
+			continue
+		}
+		set := func(dst *string, v *string) {
+			if v != nil {
+				*dst = *v
+			}
+		}
+		set(&c.Name, body.Name)
+		set(&c.Status, body.Status)
+		set(&c.Conclusion, body.Conclusion)
+		set(&c.DetailsURL, body.DetailsURL)
+		set(&c.ExternalID, body.ExternalID)
+		if body.Output != nil {
+			c.Title, c.Summary, c.Text = body.Output.Title, body.Output.Summary, body.Output.Text
+		}
+		c.Updates++
+		c.At = s.Now()
+		writeJSON(w, http.StatusOK, map[string]any{"id": c.ID, "name": c.Name, "head_sha": c.HeadSHA, "status": c.Status, "conclusion": c.Conclusion})
+		return
+	}
+	writeMsg(w, http.StatusNotFound, "Not Found")
 }

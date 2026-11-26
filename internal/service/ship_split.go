@@ -931,6 +931,7 @@ func (s *Service) openSplit(ctx context.Context, actor Actor, in ShipInput) (Shi
 			s.postEvidenceCheck(ctx, ShipPlan{Repo: plan.Repo, Effort: plan.Effort, Steps: p.Group.Steps, Warnings: p.Group.Warnings}, p.Shipment.HeadGitSHA, p.PR.URL)
 		}
 	}
+	s.publishCheckRuns(ctx, plan.Repo, plan.Effort)
 	return res, nil
 }
 

@@ -103,6 +103,8 @@
 
 @media (max-width: 520px) {
   .content { gap: 16px; }
+  .check-depth-1, .check-depth-2, .check-depth-3, .check-depth-4, .check-depth-5, .check-depth-6 { margin-left: 10px; }
+  .check-shot { max-width: 100%; }
   .kpi { padding: 12px 14px; }
   .kpi-value { font-size: 20px; }
   .panel-head { flex-wrap: wrap; gap: 8px; }

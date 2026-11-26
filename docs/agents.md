@@ -341,6 +341,7 @@ When people review a vx pull request on GitHub, GitLab (a merge request), Gitea,
 - An edited comment replaces its note. A CI result replaces the previous one for that pull request; a rerun with the same outcome posts nothing.
 - `vx ship list`, `vx status` (Shipped) and the web ship page show `CI: passed`, `CI: pending (N running)` or `CI: failed (name, link; ...)`.
 - vx also posts a `vx evidence` check run on the pull request's head: the checks vx ran, those an agent reported, those from before a merge or rebase, required checks nobody verified, and warnings. It is vx's record, not CI, and never counts as a CI result.
+- Each [check](checks.md) of the effort (vx.toml `[[check]]` and organization checks) is a check run of its own, `vx: NAME`, updated as results arrive (needs the App's Checks permission; see docs/deploy.md). These are vx's too, never CI results.
 - Today this comes from GitHub. GitLab, Gitea, Forgejo and Bitbucket can feed the same notes (`service.ApplyReview`, `service.ApplyCI`); see docs/deploy.md for what each host sends.
 
 ### Other efforts

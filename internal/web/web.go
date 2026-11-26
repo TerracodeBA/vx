@@ -153,13 +153,16 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 			return m
 		},
 	}
+	for k, f := range checkFuncs() {
+		funcs[k] = f
+	}
 	frag, err := template.New("partials.html").Funcs(funcs).ParseFS(assets, "templates/partials.html")
 	if err != nil {
 		return fmt.Errorf("template partials: %w", err)
 	}
 	u.pages["partials"] = frag
 	for _, page := range []string{"login", "code", "home", "repos", "repo", "effort", "change", "ship", "settings", "revoke", "token", "orgs", "org", "org_deleted", "access", "people", "reviews"} {
-		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
+		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/checks.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
 		}
@@ -194,6 +197,7 @@ func Mount(mux *http.ServeMux, svc *service.Service, log *slog.Logger) error {
 	mux.HandleFunc("POST /ui/settings/token", u.auth(u.createTokenPost))
 	mux.HandleFunc("POST /ui/settings/scope", u.auth(u.scopePost))
 	u.mountAdmin(mux)
+	u.mountChecks(mux)
 	u.mountOrgDelete(mux)
 	if err := u.mountOps(mux, funcs); err != nil {
 		return err
@@ -607,6 +611,11 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	board := u.board(r, actor, repoName, slug, boardView)
 	tasksView := param(r, "view") == "tasks"
 	tasks := u.tasks(r, actor, repoName, slug)
+	checksView := param(r, "view") == "checks"
+	var pipeline *service.PipelineView
+	if checksView {
+		pipeline = u.pipeline(r, actor, service.CheckStatusInput{Repo: repoName, Effort: slug})
+	}
 	var allFiles []changedFile
 	if changesView {
 		if allFiles, err = u.allChanges(r, actor, v.Repo, v.Effort, entries, color); err != nil {
@@ -616,7 +625,7 @@ func (u *UI) effort(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	}
 	u.render(w, r, "effort", map[string]any{
 		"ChangesView": changesView, "AllFiles": allFiles, "BoardView": boardView, "Board": board,
-		"TasksView": tasksView, "Tasks": tasks,
+		"TasksView": tasksView, "Tasks": tasks, "ChecksView": checksView, "Pipeline": pipeline,
 		"Actor": actor, "Repo": v.Repo, "Effort": v.Effort, "Owner": u.ref(r, v.Effort.OwnerID),
 		"Working": working, "WorkColor": workColor, "Lands": lands, "Agents": agents, "Shipments": shipments,
 		"Added": totalAdded, "Deleted": totalDeleted, "Merged": merged, "Verified": verified,
@@ -1102,9 +1111,13 @@ func (u *UI) change(w http.ResponseWriter, r *http.Request, actor service.Actor)
 		deleted += f.Deleted
 		diffs = append(diffs, fd)
 	}
+	var pipeline *service.PipelineView
+	if effort != nil {
+		pipeline = u.pipeline(r, actor, service.CheckStatusInput{Repo: repo.Name, Effort: effort.Slug, ChangeID: e.ChangeID, Tree: e.Tree})
+	}
 	u.render(w, r, "change", map[string]any{
 		"Actor": actor, "Repo": repo, "C": e, "Effort": effort, "Diffs": diffs,
-		"Added": added, "Deleted": deleted, "Title": e.Title(),
+		"Added": added, "Deleted": deleted, "Title": e.Title(), "Pipeline": pipeline,
 	})
 }
 

@@ -238,6 +238,10 @@ const (
 	// OrgServiceGetOrgAgreementProcedure is the fully-qualified name of the OrgService's
 	// GetOrgAgreement RPC.
 	OrgServiceGetOrgAgreementProcedure = "/vx.v1.OrgService/GetOrgAgreement"
+	// OrgServiceGetOrgChecksProcedure is the fully-qualified name of the OrgService's GetOrgChecks RPC.
+	OrgServiceGetOrgChecksProcedure = "/vx.v1.OrgService/GetOrgChecks"
+	// OrgServiceSetOrgChecksProcedure is the fully-qualified name of the OrgService's SetOrgChecks RPC.
+	OrgServiceSetOrgChecksProcedure = "/vx.v1.OrgService/SetOrgChecks"
 	// PublicServiceServerInfoProcedure is the fully-qualified name of the PublicService's ServerInfo
 	// RPC.
 	PublicServiceServerInfoProcedure = "/vx.v1.PublicService/ServerInfo"
@@ -2104,6 +2108,12 @@ type OrgServiceClient interface {
 	// text (members and superadmins). Accepting is not in the API: an owner
 	// accepts in the web UI, as a deliberate act by a person.
 	GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error)
+	// Organization checks (#47): [[check]] tables, as in vx.toml, for every
+	// repository of the organization. Members and superadmins read them;
+	// owners and admins (people, never agents) save a new version. Every
+	// version is kept and every save is in the operation log (org.checks).
+	GetOrgChecks(context.Context, *connect.Request[v1.GetOrgChecksRequest]) (*connect.Response[v1.GetOrgChecksResponse], error)
+	SetOrgChecks(context.Context, *connect.Request[v1.SetOrgChecksRequest]) (*connect.Response[v1.SetOrgChecksResponse], error)
 }
 
 // NewOrgServiceClient constructs a client for the vx.v1.OrgService service. By default, it uses the
@@ -2255,6 +2265,18 @@ func NewOrgServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(orgServiceMethods.ByName("GetOrgAgreement")),
 			connect.WithClientOptions(opts...),
 		),
+		getOrgChecks: connect.NewClient[v1.GetOrgChecksRequest, v1.GetOrgChecksResponse](
+			httpClient,
+			baseURL+OrgServiceGetOrgChecksProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("GetOrgChecks")),
+			connect.WithClientOptions(opts...),
+		),
+		setOrgChecks: connect.NewClient[v1.SetOrgChecksRequest, v1.SetOrgChecksResponse](
+			httpClient,
+			baseURL+OrgServiceSetOrgChecksProcedure,
+			connect.WithSchema(orgServiceMethods.ByName("SetOrgChecks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -2283,6 +2305,8 @@ type orgServiceClient struct {
 	createPerson     *connect.Client[v1.CreatePersonRequest, v1.CreatePersonResponse]
 	listPeople       *connect.Client[v1.ListPeopleRequest, v1.ListPeopleResponse]
 	getOrgAgreement  *connect.Client[v1.GetOrgAgreementRequest, v1.GetOrgAgreementResponse]
+	getOrgChecks     *connect.Client[v1.GetOrgChecksRequest, v1.GetOrgChecksResponse]
+	setOrgChecks     *connect.Client[v1.SetOrgChecksRequest, v1.SetOrgChecksResponse]
 }
 
 // CreateOrg calls vx.v1.OrgService.CreateOrg.
@@ -2400,6 +2424,16 @@ func (c *orgServiceClient) GetOrgAgreement(ctx context.Context, req *connect.Req
 	return c.getOrgAgreement.CallUnary(ctx, req)
 }
 
+// GetOrgChecks calls vx.v1.OrgService.GetOrgChecks.
+func (c *orgServiceClient) GetOrgChecks(ctx context.Context, req *connect.Request[v1.GetOrgChecksRequest]) (*connect.Response[v1.GetOrgChecksResponse], error) {
+	return c.getOrgChecks.CallUnary(ctx, req)
+}
+
+// SetOrgChecks calls vx.v1.OrgService.SetOrgChecks.
+func (c *orgServiceClient) SetOrgChecks(ctx context.Context, req *connect.Request[v1.SetOrgChecksRequest]) (*connect.Response[v1.SetOrgChecksResponse], error) {
+	return c.setOrgChecks.CallUnary(ctx, req)
+}
+
 // OrgServiceHandler is an implementation of the vx.v1.OrgService service.
 type OrgServiceHandler interface {
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
@@ -2438,6 +2472,12 @@ type OrgServiceHandler interface {
 	// text (members and superadmins). Accepting is not in the API: an owner
 	// accepts in the web UI, as a deliberate act by a person.
 	GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error)
+	// Organization checks (#47): [[check]] tables, as in vx.toml, for every
+	// repository of the organization. Members and superadmins read them;
+	// owners and admins (people, never agents) save a new version. Every
+	// version is kept and every save is in the operation log (org.checks).
+	GetOrgChecks(context.Context, *connect.Request[v1.GetOrgChecksRequest]) (*connect.Response[v1.GetOrgChecksResponse], error)
+	SetOrgChecks(context.Context, *connect.Request[v1.SetOrgChecksRequest]) (*connect.Response[v1.SetOrgChecksResponse], error)
 }
 
 // NewOrgServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -2585,6 +2625,18 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(orgServiceMethods.ByName("GetOrgAgreement")),
 		connect.WithHandlerOptions(opts...),
 	)
+	orgServiceGetOrgChecksHandler := connect.NewUnaryHandler(
+		OrgServiceGetOrgChecksProcedure,
+		svc.GetOrgChecks,
+		connect.WithSchema(orgServiceMethods.ByName("GetOrgChecks")),
+		connect.WithHandlerOptions(opts...),
+	)
+	orgServiceSetOrgChecksHandler := connect.NewUnaryHandler(
+		OrgServiceSetOrgChecksProcedure,
+		svc.SetOrgChecks,
+		connect.WithSchema(orgServiceMethods.ByName("SetOrgChecks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/vx.v1.OrgService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrgServiceCreateOrgProcedure:
@@ -2633,6 +2685,10 @@ func NewOrgServiceHandler(svc OrgServiceHandler, opts ...connect.HandlerOption) 
 			orgServiceListPeopleHandler.ServeHTTP(w, r)
 		case OrgServiceGetOrgAgreementProcedure:
 			orgServiceGetOrgAgreementHandler.ServeHTTP(w, r)
+		case OrgServiceGetOrgChecksProcedure:
+			orgServiceGetOrgChecksHandler.ServeHTTP(w, r)
+		case OrgServiceSetOrgChecksProcedure:
+			orgServiceSetOrgChecksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2732,6 +2788,14 @@ func (UnimplementedOrgServiceHandler) ListPeople(context.Context, *connect.Reque
 
 func (UnimplementedOrgServiceHandler) GetOrgAgreement(context.Context, *connect.Request[v1.GetOrgAgreementRequest]) (*connect.Response[v1.GetOrgAgreementResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GetOrgAgreement is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) GetOrgChecks(context.Context, *connect.Request[v1.GetOrgChecksRequest]) (*connect.Response[v1.GetOrgChecksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.GetOrgChecks is not implemented"))
+}
+
+func (UnimplementedOrgServiceHandler) SetOrgChecks(context.Context, *connect.Request[v1.SetOrgChecksRequest]) (*connect.Response[v1.SetOrgChecksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("vx.v1.OrgService.SetOrgChecks is not implemented"))
 }
 
 // PublicServiceClient is a client for the vx.v1.PublicService service.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/TerracodeBA/vx/internal/github"
 	"github.com/TerracodeBA/vx/internal/github/githubtest"
+	"github.com/TerracodeBA/vx/internal/service"
 )
 
 func TestGitHubClientManifestConversion(t *testing.T) {
@@ -278,4 +279,45 @@ func newServer(t *testing.T, h http.Handler) string {
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
 	return ts.URL
+}
+
+// A check run vx opens stays queued until it is updated with a result;
+// without the checks: write permission GitHub refuses both calls with the
+// error the service recognizes.
+func TestGitHubClientCheckRunsStartAndUpdate(t *testing.T) {
+	gh := githubtest.New(t)
+	ctx := context.Background()
+	gh.AddOrg("acme")
+	gh.AddRepo("acme/shop", true)
+	id := gh.Install("acme", "acme/shop")
+	c := gh.Client(t)
+
+	runID, err := c.StartCheckRun(ctx, id, "acme", "shop", service.GitHubCheckRun{
+		Name: "vx: e2e", HeadSHA: "abc123", Status: "queued", Title: "Waiting for unit", Summary: "waits for unit", DetailsURL: "https://vx.example/ui/x",
+	})
+	if err != nil || runID == 0 {
+		t.Fatalf("StartCheckRun = %d, %v", runID, err)
+	}
+	run, ok := gh.CheckRun(runID)
+	if !ok || run.Status != "queued" || run.Conclusion != "" || run.HeadSHA != "abc123" || run.DetailsURL != "https://vx.example/ui/x" {
+		t.Fatalf("started run: %+v", run)
+	}
+	if err := c.UpdateCheckRun(ctx, id, "acme", "shop", runID, service.GitHubCheckRun{Name: "vx: e2e", Conclusion: "failure", Title: "e2e failed", Summary: "2 of 9 steps failed"}); err != nil {
+		t.Fatal(err)
+	}
+	run, _ = gh.CheckRun(runID)
+	if run.Status != "completed" || run.Conclusion != "failure" || run.Summary != "2 of 9 steps failed" || run.Updates != 1 {
+		t.Fatalf("updated run: %+v", run)
+	}
+	if n := len(gh.CheckRuns("acme/shop")); n != 1 {
+		t.Errorf("an update made a new run: %d runs", n)
+	}
+
+	gh.SetAppPermission("checks", "read")
+	if _, err := c.StartCheckRun(ctx, id, "acme", "shop", service.GitHubCheckRun{Name: "vx: unit", HeadSHA: "abc123", Status: "queued"}); !errors.Is(err, service.ErrGitHubForbidden) {
+		t.Errorf("start without checks: write: %v", err)
+	}
+	if err := c.UpdateCheckRun(ctx, id, "acme", "shop", runID, service.GitHubCheckRun{Name: "vx: e2e", Conclusion: "success"}); !errors.Is(err, service.ErrGitHubForbidden) {
+		t.Errorf("update without checks: write: %v", err)
+	}
 }

@@ -103,6 +103,7 @@ var countNames = []struct{ key, name string }{
 	{"teams", "teams"},
 	{"github_installation_links", "GitHub App installation links"},
 	{"dpa_acceptances", "data processing agreement acceptances"},
+	{"check_versions", "versions of the organization checks"},
 	{"operations", "operation log entries"},
 }
 

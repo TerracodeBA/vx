@@ -60,7 +60,11 @@ func (u *UI) renderGitHubAdmin(w http.ResponseWriter, r *http.Request, actor ser
 	switch {
 	case err == nil:
 		data["App"] = app
-		data["Gaps"], _ = u.svc.GitHubAppGaps(ctx, actor)
+		gaps, _ := u.svc.GitHubAppGaps(ctx, actor)
+		data["Gaps"] = gaps
+		if service.GitHubChecksOff(gaps) {
+			data["ChecksOff"] = service.GitHubChecksOffNotice
+		}
 	case !errors.Is(err, service.ErrGitHubNotConfigured):
 		data["LoadErr"] = err.Error()
 	}

@@ -13,6 +13,7 @@
   <li><span class="fy-count">{{index .Counts "ci"}}</span> CI failed</li>
   <li><span class="fy-count">{{.OnEfforts}}</span> on your efforts</li>
 </ul>
+{{template "foryouchecks" .}}
 {{if not .Rows}}
 {{if .Access}}{{template "noaccess" .}}{{else}}
 <div class="panel empty">

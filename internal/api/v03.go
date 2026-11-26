@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -58,7 +59,15 @@ func (h *Handlers) GetRules(ctx context.Context, req *connect.Request[vxv1.GetRu
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&vxv1.GetRulesResponse{Rules: rulesPB(r)}), nil
+	out := rulesPB(r)
+	if org, err := h.svc.RepoOrgChecks(ctx, actorFrom(ctx), req.Msg.Repo); err == nil && org.Version > 0 {
+		for _, c := range org.Checks {
+			out.OrgChecks = append(out.OrgChecks, CheckDefPB(c))
+		}
+		out.OrgChecksFrom = fmt.Sprintf("organization %s (version %d)", org.Org, org.Version)
+		_, out.CheckWarnings = service.MergeOrgChecks(org, r.Checks)
+	}
+	return connect.NewResponse(&vxv1.GetRulesResponse{Rules: out}), nil
 }
 
 func (h *Handlers) Reserve(ctx context.Context, req *connect.Request[vxv1.ReserveRequest]) (*connect.Response[vxv1.ReserveResponse], error) {

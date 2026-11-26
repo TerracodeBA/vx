@@ -204,6 +204,9 @@ func (a *App) printCheckStatus(w checkWhere, st *vxv1.CheckStatusResponse) {
 	for _, w := range st.Warnings {
 		a.printf("  Warning: %s\n", w)
 	}
+	if st.EditsRules {
+		a.printf("  Note: this change edits vx.toml: the checks of the effort's base apply until it lands (a check it adds applies too; one it removes or weakens still applies).\n")
+	}
 	var applying, other []*vxv1.CheckState
 	for _, c := range st.Checks {
 		if c.Applies {
@@ -215,10 +218,12 @@ func (a *App) printCheckStatus(w checkWhere, st *vxv1.CheckStatusResponse) {
 	if len(st.Checks) == 0 {
 		a.printf("  No checks: vx.toml defines none ([[check]], [checks] required, [[policy]]; see docs/checks.md).\n")
 	}
+	// The pipeline: each check indented under the one it runs after.
+	label := func(c *vxv1.CheckState) string { return strings.Repeat("  ", int(c.Depth)) + c.Def.Name }
 	width := 0
 	for _, c := range applying {
-		if len(c.Def.Name) > width {
-			width = len(c.Def.Name)
+		if len(label(c)) > width {
+			width = len(label(c))
 		}
 	}
 	needLand, needShip := []string{}, []string{}
@@ -230,7 +235,14 @@ func (a *App) printCheckStatus(w checkWhere, st *vxv1.CheckStatusResponse) {
 				detail += "; " + c.How
 			}
 		}
-		a.printf("  %-*s  %-8s %s%s\n", width, c.Def.Name, c.State, detail, blocksNote(c.Def))
+		state := c.State
+		switch c.PipelineState {
+		case "waiting", "skipped":
+			// Not run yet because of the checks it runs after: say why
+			// instead of how to report it.
+			state, detail = c.PipelineState, c.Reason
+		}
+		a.printf("  %-*s  %-8s %s%s%s\n", width, label(c), state, detail, blocksNote(c.Def), originNote(c.Origin))
 		for _, n := range c.Results {
 			if c.Latest != nil && n.Id == c.Latest.Id {
 				break
@@ -268,6 +280,15 @@ func (a *App) printCheckStatus(w checkWhere, st *vxv1.CheckStatusResponse) {
 	case len(applying) > 0:
 		a.printf("Nothing more needed: every check that blocks has a passing result.\n")
 	}
+}
+
+// originNote says where a check comes from: "[organization acme (version
+// 3)]", "[vx.toml line 12]", "[vx.toml [checks] required]".
+func originNote(origin string) string {
+	if origin == "" {
+		return ""
+	}
+	return "  [from " + origin + "]"
 }
 
 func blocksNote(d *vxv1.CheckDef) string {

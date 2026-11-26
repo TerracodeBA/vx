@@ -86,7 +86,8 @@ func (u *UI) forYou(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	data := map[string]any{
 		"Actor": actor, "Title": "For you", "Section": "foryou", "Rows": rows, "Counts": f.Counts,
 		"Flash": flash, "IsHuman": actor.Kind == store.KindHuman,
-		"OnEfforts": f.Counts[service.ForYouOverlap] + f.Counts[service.ForYouRebase],
+		"OnEfforts":   f.Counts[service.ForYouOverlap] + f.Counts[service.ForYouRebase],
+		"HumanChecks": u.humanChecks(r, actor),
 	}
 	if len(rows) == 0 {
 		if ids, _, err := u.svc.ReadableRepoIDs(r.Context(), actor); err == nil && len(ids) == 0 {
