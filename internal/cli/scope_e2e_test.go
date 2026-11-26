@@ -63,20 +63,24 @@ func TestAgentScopeCLI(t *testing.T) {
 	if out, code := agent.run("agent", "scope", "backend", "--clear"); code == 0 || !strings.Contains(out, "permission denied: agent:alice/backend cannot change scopes, not even its own") {
 		t.Fatalf("agent = %d %q", code, out)
 	}
-	// A site admin can.
+	// A superadmin cannot either: scopes name paths in other people's repositories.
 	ctx := context.Background()
 	root, _ := s.st.CreatePrincipal(ctx, store.Principal{Kind: store.KindHuman, Handle: "root", SiteAdmin: true})
 	rootTok, _ := s.st.CreateToken(ctx, root.ID, "test")
 	admin := s.user("root", rootTok, work)
-	if out := admin.must("agent", "scope", "alice/backend", "--max-files", "3"); !strings.Contains(out, "at most 3 files") || !strings.Contains(out, "Set by user:root") {
-		t.Fatalf("site admin = %q", out)
+	if out, code := admin.run("agent", "scope", "alice/backend", "--max-files", "3"); code == 0 || !strings.Contains(out, "permission denied: user:root cannot change the scope of agent:alice/backend") {
+		t.Fatalf("superadmin scope = %d %q", code, out)
 	}
+	if out, code := admin.run("agent", "show", "alice/backend"); code == 0 || !strings.Contains(out, "permission denied") {
+		t.Fatalf("superadmin show = %d %q", code, out)
+	}
+	alice.must("agent", "scope", "backend", "--max-files", "3")
 
 	// The agent sees its own scope.
 	if out := agent.must("whoami"); !strings.Contains(out, "agent:alice/backend (acting for user:alice)") || !strings.Contains(out, "Paths: only api/**") || !strings.Contains(out, "Lands: 3 of 3 left today") {
 		t.Fatalf("scoped whoami = %q", out)
 	}
-	if out := agent.must("agent", "show"); !strings.Contains(out, "Set by user:root") {
+	if out := agent.must("agent", "show"); !strings.Contains(out, "Set by user:alice") {
 		t.Fatalf("agent show own = %q", out)
 	}
 

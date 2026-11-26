@@ -204,8 +204,8 @@ func TestAgentBudgetWorkspaces(t *testing.T) {
 	}
 }
 
-// TestAgentScopeWhoMaySet: the agent's person and site admins set scopes;
-// other people and every agent, the scoped one included, cannot.
+// TestAgentScopeWhoMaySet: only the agent's person sets scopes; other
+// people, superadmins and every agent, the scoped one included, cannot.
 func TestAgentScopeWhoMaySet(t *testing.T) {
 	e := newEnv(t)
 	bob := e.person("bob")
@@ -218,19 +218,20 @@ func TestAgentScopeWhoMaySet(t *testing.T) {
 		t.Fatalf("alice: %v", err)
 	}
 	_, err := e.svc.SetAgentScope(e.ctx, bob, "alice/claude", in)
-	wantErr(t, err, service.CodePermission, "user:bob cannot change the scope of agent:alice/claude: only user:alice and superadmins can")
+	wantErr(t, err, service.CodePermission, "user:bob cannot change the scope of agent:alice/claude: only user:alice can")
 	_, err = e.svc.GetAgent(e.ctx, bob, "alice/claude")
 	wantErr(t, err, service.CodePermission, "user:bob cannot see the scope of agent:alice/claude")
 	// "claude" from bob means bob/claude, which does not exist.
 	_, err = e.svc.SetAgentScope(e.ctx, bob, "claude", in)
 	wantErr(t, err, service.CodeNotFound, "no agent bob/claude")
 
-	v, err := e.svc.SetAgentScope(e.ctx, admin, "alice/claude", service.ScopeInput{MaxFiles: ip(5)})
-	if err != nil || v.UpdatedBy != "user:root" || v.Scope.MaxFiles != 5 || len(v.Scope.Allow) != 1 {
-		t.Fatalf("site admin: %+v %v", v, err)
-	}
-	if _, err := e.svc.GetAgent(e.ctx, admin, "alice/claude"); err != nil {
-		t.Errorf("site admin reads: %v", err)
+	_, err = e.svc.SetAgentScope(e.ctx, admin, "alice/claude", service.ScopeInput{MaxFiles: ip(5)})
+	wantErr(t, err, service.CodePermission, "user:root cannot change the scope of agent:alice/claude: only user:alice can")
+	_, err = e.svc.GetAgent(e.ctx, admin, "alice/claude")
+	wantErr(t, err, service.CodePermission, "user:root cannot see the scope of agent:alice/claude")
+	v, err := e.svc.SetAgentScope(e.ctx, e.alice, "claude", service.ScopeInput{MaxFiles: ip(5)})
+	if err != nil || v.UpdatedBy != "user:alice" || v.Scope.MaxFiles != 5 || len(v.Scope.Allow) != 1 {
+		t.Fatalf("alice sets budgets: %+v %v", v, err)
 	}
 
 	_, err = e.svc.SetAgentScope(e.ctx, e.agent, "", service.ScopeInput{Clear: true})

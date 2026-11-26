@@ -333,8 +333,8 @@ A repository role is read, write or admin; each includes the one before it. Agen
 | Report a workspace's changed files (your own workspace) | `vx status`, `vx sync` | write |
 | Post notes, ask, answer | `vx post`, `vx ask`, `vx answer`, `vx_post_note`, `vx_ask`, `vx_answer` | write |
 | Plan and open a shipment (push `vx/<effort>`, open the PR) | `vx ship plan`, `vx ship open` | admin |
-| Set an agent's path scope and budgets (no repository role: only the agent's person or a superadmin; never an agent, not even for itself) | `vx agent scope`, Settings | person or superadmin |
-| See an agent's scope, budgets and usage (the agent itself, its person, superadmins) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person, agent or superadmin |
+| Set an agent's path scope and budgets (no repository role: only the agent's person; never a superadmin or an agent, not even for itself) | `vx agent scope`, Settings | person |
+| See an agent's scope, budgets and usage (the agent itself and its person) | `vx agent show`, `vx whoami`, `vx status`, `vx_whoami`, Settings | person or agent |
 | Plan and open a split shipment (one `vx/<effort>/<n>-<name>` branch and PR per part) | `vx ship plan --split`, `vx ship open --split`, the Prepare pull requests page | admin |
 | Set a GitLab, Gitea, Forgejo or Bitbucket repository's token, make a new webhook secret | `vx repo host` | admin |
 | Grant and revoke access, see who has access (on GitHub-backed repositories only service principals are granted; roles come from GitHub) | `vx repo grant`, `vx repo revoke`, `vx repo access` | admin |
