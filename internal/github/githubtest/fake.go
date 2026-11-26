@@ -889,6 +889,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getRepo(w, r, seg[1], seg[2])
 	case r.Method == http.MethodPost && len(seg) == 4 && seg[0] == "repos" && seg[3] == "check-runs":
 		s.createCheckRun(w, r, seg[1], seg[2])
+	case r.Method == http.MethodPatch && len(seg) == 5 && seg[0] == "repos" && seg[3] == "check-runs":
+		s.updateCheckRun(w, r, seg[1], seg[2], seg[4])
 	default:
 		writeMsg(w, http.StatusNotFound, "Not Found")
 	}

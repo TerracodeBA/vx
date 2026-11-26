@@ -1,0 +1,99 @@
+{{/* Checks (#47): the pipeline of a change or effort, the organization's checks. */}}
+
+{{define "checklist"}}{{$repo := .Repo.Name}}
+{{range .Notes}}<p class="note warn small check-note">{{.}}</p>{{end}}
+{{if .Checks}}
+<ul class="check-list">
+  {{range .Checks}}
+  <li class="check-row check-depth-{{depth .Depth}}" id="check-{{.Def.Name}}">
+    <div class="check-line">
+      <span class="pill {{checkPill .State}}">{{.State}}</span>
+      <span class="mono check-name">{{.Def.Name}}</span>
+      <span class="muted small check-meta">{{.Origin}}{{with .Def.Blocks}} · blocks {{.}}{{end}}{{with .Def.Runner}} · runner {{.}}{{end}}{{if gt (len .Def.After) 1}} · after {{range $i, $a := .Def.After}}{{if $i}}, {{end}}{{$a}}{{end}}{{end}}</span>
+    </div>
+    {{with .Reason}}<p class="muted small check-reason">{{.}}</p>{{end}}
+    {{with .Rejected}}<p class="note warn small">The newest result does not count: {{.}}</p>{{end}}
+    {{with .Result}}{{$res := .}}
+    <div class="check-result">
+      {{with .Summary}}<p class="small check-summary">{{.}}</p>{{end}}
+      <p class="muted small">Reported by <span class="mono">{{principal .Reporter}}</span>{{if and .OnBehalfOf (ne .OnBehalfOf .Reporter)}} for {{principal .OnBehalfOf}}{{end}} <span class="pill neutral trust">{{trustOf .}}</span> {{ago .CreatedAt}}{{with .Model}} · {{.}}{{end}}{{with .How}} · {{.}}{{end}}</p>
+      {{with checkData .Data}}<dl class="kv check-data">{{range .}}<dt class="mono">{{.Key}}</dt><dd class="mono">{{.Value}}</dd>{{end}}</dl>{{end}}
+      {{if .Artifacts}}
+      <ul class="check-artifacts">
+        {{range .Artifacts}}
+        <li>
+          {{if isImage .ContentType}}<a href="/ui/checks/artifact?repo={{$repo}}&amp;result={{$res.ID}}&amp;name={{.Name}}"><img class="check-shot" src="/ui/checks/artifact?repo={{$repo}}&amp;result={{$res.ID}}&amp;name={{.Name}}" alt="{{.Name}}" loading="lazy"></a>{{end}}
+          <a class="mono small" href="/ui/checks/artifact?repo={{$repo}}&amp;result={{$res.ID}}&amp;name={{.Name}}&amp;download=1" download>{{.Name}}</a> <span class="muted small">{{bytes .Size}}</span>
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
+      {{if not .LogHash.IsZero}}<p class="small"><a href="/ui/checks/log?repo={{$repo}}&amp;result={{.ID}}">Log</a> <span class="muted">{{bytes .LogSize}}</span></p>{{end}}
+    </div>
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="muted small">No checks apply. Define them as [[check]] tables in vx.toml{{if .Org.Org}}, or ask an owner of {{.Org.Org}} to set organization checks{{end}}; see docs/checks.md.</p>
+{{end}}
+{{end}}
+
+{{define "checksview"}}
+<div class="panel panel-pad checks-panel">
+  <div class="panel-head"><h2>Checks</h2>{{with .Pipeline}}{{with .Counts}}<span class="muted small">{{.Passed}} passed · {{.Failed}} failed · {{.Waiting}} waiting{{if .Skipped}} · {{.Skipped}} skipped{{end}}</span>{{end}}{{end}}</div>
+  {{with .Pipeline}}
+  <p class="panel-note muted small">On the effort head{{if not .Tree.IsZero}} (tree <span class="mono">{{short .Tree}}</span>){{end}}: what the ship gate reads. Checks run after the ones they are indented under; a failure skips the checks after it.</p>
+  {{template "checklist" .}}
+  {{else}}<p class="muted small">The checks could not be read.</p>{{end}}
+</div>
+{{end}}
+
+{{define "changechecks"}}{{with .Pipeline}}
+<section class="panel panel-pad" id="checks">
+  <h2 class="sec">Checks</h2>
+  {{template "checklist" .}}
+</section>
+{{end}}{{end}}
+
+{{define "orgchecks"}}{{$o := .O}}
+<section class="panel" id="checks">
+  <div class="panel-head"><h2>Checks</h2>{{with .OrgChecks}}{{if .Version}}<span class="muted small">version {{.Version}}, by {{principal .By}} {{ago .At}}</span>{{end}}{{end}}</div>
+  <p class="panel-note muted small">[[check]] tables, as in vx.toml, that every repository of {{$o.Handle}} must pass. A repository adds checks of its own but cannot remove or weaken these: a vx.toml check with the same name is ignored, with a warning. Every version is kept and every change is in the audit log.</p>
+  {{with .OrgChecks}}
+  {{if .Checks}}<ul class="plain-list org-check-names">{{range .Checks}}<li><span class="mono">{{.Name}}</span><span class="muted small">{{with .When}}when {{.}}{{end}}{{with .Blocks}} · blocks {{.}}{{end}}{{with .Runner}} · runner {{.}}{{end}}</span></li>{{end}}</ul>
+  {{else}}<p class="muted small panel-pad">No organization checks: each repository's vx.toml decides.</p>{{end}}
+  {{end}}
+  {{if .Manage}}
+  <form method="post" action="/ui/orgs/{{$o.Handle}}/checks" class="admin-form org-checks-form">
+    <div class="field"><label for="org-checks-src">Organization checks</label>
+      <textarea id="org-checks-src" name="source" rows="12" spellcheck="false" class="mono" placeholder="[[check]]&#10;name   = &quot;security-review&quot;&#10;when   = &quot;ship&quot;&#10;runner = &quot;human&quot;">{{with .OrgChecks}}{{.Source}}{{end}}</textarea></div>
+    <button class="btn primary" type="submit">Save a new version</button>
+    <p class="field-hint">Same fields as [[check]] in vx.toml. Empty saves a version without checks. Also: <span class="mono">vx org checks {{$o.Handle}} --file checks.toml</span>.</p>
+  </form>
+  {{else}}{{with .OrgChecks}}{{if .Source}}<pre class="code org-checks-src">{{.Source}}</pre>{{end}}{{end}}{{end}}
+  {{if .CheckHistory}}
+  <details class="org-check-history">
+    <summary class="small">History ({{len .CheckHistory}} version{{if ne (len .CheckHistory) 1}}s{{end}})</summary>
+    <ul class="plain-list">{{range .CheckHistory}}<li><span class="mono">v{{.Version}}</span><span class="small">{{principal .By}}</span><span class="muted small">{{ago .At}} · {{if .Checks}}{{range $i, $c := .Checks}}{{if $i}}, {{end}}{{$c.Name}}{{end}}{{else}}no checks{{end}}</span></li>{{end}}</ul>
+  </details>
+  {{end}}
+</section>
+{{end}}
+
+{{define "foryouchecks"}}{{with .HumanChecks}}
+<h2 class="sec fy-sec" id="fy-checks">Checks waiting for a person <span class="count">{{len .}}</span></h2>
+<ol class="fy-list fy-checks">
+  {{range .}}
+  <li class="fy-item fy-check" id="fy-check-{{.Effort}}-{{.Check}}">
+    <div class="fy-head">
+      <span class="pill warn">check</span>
+      <a class="fy-where" href="/ui/effort?repo={{.Repo}}&amp;slug={{.Effort}}">{{.Repo}} / {{.Effort}}</a>
+      <span class="muted small nowrap">{{ago .Since}}</span>
+    </div>
+    <a class="fy-title mono" href="/ui/effort?repo={{.Repo}}&amp;slug={{.Effort}}&amp;view=checks#check-{{.Check}}">{{.Check}}</a>
+    <p class="fy-meta muted small">{{.EffortName}}{{with .ChangeID}} · change <span class="mono">{{.}}</span>{{end}} · report it with <span class="mono">vx check report {{.Check}} --status pass</span></p>
+  </li>
+  {{end}}
+</ol>
+{{end}}{{end}}

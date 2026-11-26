@@ -121,11 +121,41 @@ func (h *Handlers) CheckStatus(ctx context.Context, req *connect.Request[vxv1.Ch
 	if err != nil {
 		return nil, invalid(err)
 	}
-	v, err := h.svc.CheckStatus(ctx, actorFrom(ctx), service.CheckStatusInput{Repo: m.Repo, Effort: m.Effort, ChangeID: m.ChangeId, Tree: tree})
+	pv, err := h.svc.PipelineStatus(ctx, actorFrom(ctx), service.CheckStatusInput{Repo: m.Repo, Effort: m.Effort, ChangeID: m.ChangeId, Tree: tree})
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(CheckStatusPB(v)), nil
+	return connect.NewResponse(pipelinePB(pv)), nil
+}
+
+// pipelinePB is CheckStatusPB with the checks in pipeline order and their
+// place in it (#47 part 3).
+func pipelinePB(pv service.PipelineView) *vxv1.CheckStatusResponse {
+	out := CheckStatusPB(pv.View)
+	byName := map[string]*vxv1.CheckState{}
+	for _, c := range out.Checks {
+		if _, dup := byName[c.Def.GetName()]; !dup {
+			byName[c.Def.GetName()] = c
+		}
+	}
+	ordered := make([]*vxv1.CheckState, 0, len(out.Checks))
+	for _, pc := range pv.Checks {
+		c := byName[pc.Def.Name]
+		if c == nil {
+			continue
+		}
+		delete(byName, pc.Def.Name)
+		c.Depth, c.Parent, c.Origin, c.PipelineState, c.Reason = int32(pc.Depth), pc.Parent, pc.Origin, pc.State, pc.Reason
+		ordered = append(ordered, c)
+	}
+	for _, c := range out.Checks { // not placed (should not happen): keep them
+		if byName[c.Def.GetName()] == c {
+			ordered = append(ordered, c)
+		}
+	}
+	out.Checks = ordered
+	out.EditsRules = pv.EditsRules
+	return out
 }
 
 // GetCheckResult implements CheckService.

@@ -20,6 +20,7 @@
     <dt>Client id</dt><dd class="mono">{{.ClientID}}</dd>
     <dt>Created</dt><dd>{{ago .CreatedAt}}</dd>
   </dl>
+  {{with $.ChecksOff}}<p class="note warn" role="alert" id="gh-checks-off"><strong>{{.}}</strong> (Checks: Read and write). Until it has it, vx publishes no check runs on its pull requests; shipping is not affected.</p>{{end}}
   {{with $.Gaps}}<div class="note warn" role="alert" id="gh-gaps"><p>The App lacks permissions or events this vx uses (an App created before vx asked for them):</p>
     <ul>{{range .}}<li>{{.Fix}}</li>{{end}}</ul></div>{{end}}
   <p>Install it on each GitHub organization or account whose repositories vx should work on. Its repositories show up in vx with roles from GitHub.</p>

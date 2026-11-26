@@ -93,6 +93,22 @@ A repository linked to a GitHub repository through an installation of the vx Git
 
 **Limits.** A list (repositories, efforts, the inbox) asks GitHub at most once per organization and once per repository of your organizations every 5 minutes, up to 8 calls at a time; for tens of repositories that is well under a second with a cold cache and a few database queries otherwise. Every installation counts against GitHub's API rate limit for the App (5,000 requests per hour per installation and up). Hundreds of repositories per person, or hundreds of installations on one server, would want a batch API (GraphQL) and webhook-driven membership instead of per-repository checks. The access page lists people whose role vx checked in the last 5 minutes, not everyone GitHub allows. The settings links point to github.com.
 
+## Organization checks
+
+Owners and admins define [checks](checks.md) for every repository of the organization: `[[check]]` tables with the same fields as in `vx.toml`, stored on the server.
+
+```sh
+vx org checks acme --file checks.toml   # save a new version (people only, never agents)
+vx org checks acme                      # the version in force
+vx org checks acme --history            # every version, newest first
+vx org checks acme --clear              # a version without checks
+```
+
+- They apply to every repository of the organization, on every land and ship, next to the repository's own `vx.toml` checks. A repository can **add** checks but cannot remove or weaken one: a `vx.toml` check with the name of an organization check is ignored, and `vx check status`, `vx rules` and the land say so. A repository check may run `after` an organization check; an organization check runs after organization checks only.
+- `vx rules`, `vx check status` and the web pages show where each check comes from: `organization acme (version 3)` or `vx.toml`.
+- Every save is a new version; the history is kept, and every change is in the operation log as `org.checks` with the version before and after. Saving the same text again changes nothing.
+- The organization page has a **Checks** panel: the checks in force, the history, and (owners and admins) the text to edit.
+
 ## Commands
 
 ```sh
@@ -102,6 +118,7 @@ vx org show acme                                # members, teams, repositories y
 vx org set-default acme none|read|write         # what every member gets
 vx org member acme bob --role owner|admin|member
 vx org remove acme bob                          # also removes bob from acme's teams
+vx org checks acme --file checks.toml           # owners and admins: checks for every repository (see Organization checks)
 
 vx team create acme/backend
 vx team add acme/backend bob                    # bob must be a member of acme
@@ -120,7 +137,7 @@ vx org deletion acme -o acme-deletion.txt       # the deletion confirmation (own
 vx org restore acme                             # owners, during the grace period
 ```
 
-Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `org.delete`, `org.restore`, `org.purge`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, `org.dpa_accept`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
+Every command takes `--json`. Every change is recorded in the operation log (`org.create`, `org.update`, `org.member`, `org.delete`, `org.restore`, `org.purge`, `team.create`, `team.delete`, `team.add`, `team.remove`, `repo.grant`, `repo.revoke`, `repo.support.grant`, `repo.support.revoke`, `person.create`, `server.notice.resolve`, `org.dpa_accept`, `org.checks`, and for GitHub sign-in `person.signup`, `person.signin`, `person.github_link`, `person.invite`, `person.uninvite`).
 
 ## Web UI
 
@@ -426,6 +443,9 @@ A superadmin has none of the repository roles in this table from being one: ever
 | Change an organization's quotas (never an agent) | the organization page, `vx-server quota ORG --repos N ...` | superadmin |
 | Export an organization's audit log (with what changed for repositories you administer) | `vx admin audit --org ORG`, Admin > Audit | organization owner or admin |
 | See an organization's data processing agreement: status, acceptances, the texts (servers with `VX_REQUIRE_DPA`) | `vx org agreement ORG`, `GetOrgAgreement`, the organization page | member or superadmin |
+| See an organization's checks and their history | `vx org checks ORG [--history]`, `GetOrgChecks`, Checks on the organization page | member or superadmin |
+| Change an organization's checks: save a new version, clear them (a person, never an agent; recorded as `org.checks`) | `vx org checks ORG --file checks.toml`, `vx org checks ORG --clear`, `SetOrgChecks`, Checks on the organization page | organization owner or admin |
+| See the checks of a change or effort in their pipeline, their results, logs and artifacts, and the organization checks a repository is held to | `vx check status`, `vx rules`, `PipelineStatus`, `RepoOrgChecks`, the effort's Checks tab, the change page, `/ui/checks/artifact`, `/ui/checks/log` | read |
 | Accept the data processing agreement (a person, in the web UI only; never an agent, never a superadmin who is not an owner) | Organization > Agreement | organization owner |
 | Work in an organization without the agreement in effect accepted: create, connect or import repositories, `vx repo sync`, `vx effort new`, `vx new`, uploads and `vx land`, approving reviews, `vx ship` | every such row above | the row's role, then refused until an owner accepts (`TestAuthzMatrix`, agreement rows) |
 | Export the whole server's audit log (metadata only for repository entries) | `vx admin audit`, Admin > Audit | superadmin |

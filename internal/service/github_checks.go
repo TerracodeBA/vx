@@ -28,11 +28,22 @@ type GitHubChecksAPI interface {
 	AppSettings(ctx context.Context) (GitHubAppSettings, error)
 }
 
-// GitHubCheckRun is a completed check run on a commit.
+// GitHubCheckRunsAPI creates check runs that stay open and updates them
+// as results arrive: one per [[check]] on a shipped pull request (see
+// github_check_runs.go). internal/github implements it.
+type GitHubCheckRunsAPI interface {
+	StartCheckRun(ctx context.Context, installationID int64, owner, repo string, run GitHubCheckRun) (int64, error)
+	UpdateCheckRun(ctx context.Context, installationID int64, owner, repo string, id int64, run GitHubCheckRun) error
+}
+
+// GitHubCheckRun is a check run on a commit.
 type GitHubCheckRun struct {
-	Name       string
-	HeadSHA    string
-	Conclusion string // success, neutral, failure
+	Name    string
+	HeadSHA string
+	// Status is queued, in_progress or completed; empty means completed.
+	// CreateCheckRun always completes.
+	Status     string
+	Conclusion string // success, neutral, failure, skipped (completed runs)
 	Title      string
 	Summary    string // markdown
 	Text       string // markdown
@@ -251,4 +262,18 @@ func boolKeys(m map[string]string) map[string]bool {
 		out[k] = true
 	}
 	return out
+}
+
+// GitHubChecksOffNotice is what Admin > GitHub says while the App cannot
+// post check runs.
+const GitHubChecksOffNotice = "GitHub checks are off: the vx GitHub App needs the Checks permission"
+
+// GitHubChecksOff reports whether gaps include the Checks permission.
+func GitHubChecksOff(gaps []GitHubAppGap) bool {
+	for _, g := range gaps {
+		if g.What == gapChecksWrite {
+			return true
+		}
+	}
+	return false
 }

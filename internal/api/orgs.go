@@ -206,3 +206,38 @@ func (h *Handlers) ListPeople(ctx context.Context, _ *connect.Request[vxv1.ListP
 	}
 	return connect.NewResponse(&vxv1.ListPeopleResponse{People: peoplePB(people)}), nil
 }
+
+func orgChecksPB(o service.OrgChecks) *vxv1.OrgChecksVersion {
+	out := &vxv1.OrgChecksVersion{Org: o.Org, Version: int32(o.Version), Source: o.Source, Checks: o.Names(), By: o.By}
+	if !o.At.IsZero() {
+		out.At = ts(o.At)
+	}
+	return out
+}
+
+func (h *Handlers) GetOrgChecks(ctx context.Context, req *connect.Request[vxv1.GetOrgChecksRequest]) (*connect.Response[vxv1.GetOrgChecksResponse], error) {
+	actor := actorFrom(ctx)
+	cur, err := h.svc.GetOrgChecks(ctx, actor, req.Msg.Org)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &vxv1.GetOrgChecksResponse{Current: orgChecksPB(cur)}
+	if req.Msg.History {
+		hist, err := h.svc.OrgCheckHistory(ctx, actor, req.Msg.Org)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		for _, v := range hist {
+			out.History = append(out.History, orgChecksPB(v))
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handlers) SetOrgChecks(ctx context.Context, req *connect.Request[vxv1.SetOrgChecksRequest]) (*connect.Response[vxv1.SetOrgChecksResponse], error) {
+	o, changed, err := h.svc.SetOrgChecks(ctx, actorFrom(ctx), req.Msg.Org, req.Msg.Source)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&vxv1.SetOrgChecksResponse{Checks: orgChecksPB(o), Changed: changed}), nil
+}

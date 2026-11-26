@@ -141,6 +141,92 @@ A check with a `runner` (`agent:KIND`, `ci` or `human`) is not run by the landin
 
 [runners.md](runners.md) has the details: the inputs, leases across several servers, CI tokens with a GitHub Actions example, and a browser runner with Claude in Chrome with its security rules.
 
+## Pipelines
+
+`after = ["unit"]` makes a check wait until `unit` passed on the **same tree**; its `inputs` may name what an earlier check reported:
+
+```toml
+[[check]]
+name   = "build"
+runner = "ci"
+outputs = { required = ["preview_url"], artifacts = ["app.zip"] }
+
+[[check]]
+name   = "browser-e2e"
+runner = "agent:browser"
+after  = ["build"]
+inputs = ["diff", "build.preview_url", "build.artifact:app.zip"]
+```
+
+- `build.preview_url` is the field `preview_url` of the data `build` reported (`--data`, a JSON object; numbers and booleans become text). `build.artifact:app.zip` is its artifact `app.zip`, as a link to it on the vx web UI; the result id is in the link, so a runner can also fetch it with `vx check show RESULT --download DIR`. Artifacts stay behind the repository's read permission. An input names a check the check runs after, directly or through others; anything else is refused when vx.toml is read.
+- **When a check runs.** Its job is made once every check it runs after **passed** (or was `neutral`) on the tree, or does not apply to the change (its `paths` do not match). The job carries the earlier checks' outputs as named values, keyed as written (`inputs["build.preview_url"]`).
+- **After a failure** the checks after it are **skipped**, with the reason, instead of left pending: `skipped: build failed`, and further down `skipped: deploy was skipped (build failed)`. A new passing result for `build` on the same tree lets them run.
+- **Cycles** (`a` after `b` after `a`), a check after itself, the same name twice in `after`, and inputs from checks that do not run first are errors with the line, like any other mistake in vx.toml. `after` may name an [organization check](#organization-checks); a name that is neither is a warning on the land that writes it.
+- `vx check status` draws the pipeline: each check indented under the check it runs after, waiting checks with `waits for build`, skipped ones with the reason, and where each comes from:
+
+```
+$ vx check status
+Checks of change kxqr-7m2p (the effort head), tree 3f2a1c9d0e7b:
+  security     missing  runner human: vx check report security --status pass ...  [from organization acme (version 3)]
+  build        failed   fail by ci:acme/shop/ci at 14:02: does not compile [810379a1]; ...  [from vx.toml line 1]
+    browser-e2e  skipped  skipped: build failed  [from vx.toml line 6]
+```
+
+In `--json` (and `CheckService.CheckStatus`) each check has `depth`, `parent`, `origin`, `pipeline_state` (passed, failed, neutral, ready, waiting, skipped, not needed) and `reason`.
+
+## Organization checks
+
+Owners and admins of an organization define checks for **every repository** of the organization: `[[check]]` tables with the same fields and validation as in vx.toml, stored on the server (people only, never agents):
+
+```sh
+vx org checks acme --file checks.toml   # save a new version
+vx org checks acme                      # the version in force
+vx org checks acme --history            # every version, newest first
+vx org checks acme --clear              # a version without checks
+```
+
+The organization page has the same as a **Checks** panel (the text, the history, and for owners and admins a form).
+
+- They apply to every land and ship of the organization's repositories, next to each repository's own checks, with the same gates, jobs, pipelines and reporters.
+- A repository **cannot remove or weaken** an organization check: a `vx.toml` check with the same name is ignored, with a warning in `vx check status`, `vx rules` and on the land that writes it (`vx.toml [[check]] "unit" is ignored: organization acme defines a check of that name ...`). A repository adds checks under other names, and they may run `after` an organization check. An organization check runs after organization checks only.
+- Every save is a new version, the history is kept, and each change is in the operation log as `org.checks` with the version before and after. Saving the same text again changes nothing.
+- `vx rules` lists them ("Organization checks, from organization acme (version 3)"), and `vx check status` and the web pages say where each check comes from.
+
+## Protecting the rules
+
+Agents change a repository's checks the way they change code: by landing `vx.toml`. A company that wants a person to approve every rule change puts the file under a `human` policy:
+
+```toml
+[[policy]]
+paths     = ["vx.toml"]
+mode      = "human"
+approvers = ["team:acme/platform"]   # optional: who may approve
+```
+
+A land that changes `vx.toml` then waits as a pending review until a person approves it (`vx review approve`, the change page or For you); the agent cannot approve its own change, and removing the policy in the same change does not help, since the policy of the effort head applies too.
+
+While such a change has not landed, it is held to the checks of the effort's base: a check it adds applies to it, but one it removes or weakens still applies (the gate reads the checks of both). `vx check status` says so: `Note: this change edits vx.toml: the checks of the effort's base apply until it lands`. Organization checks change only through `vx org checks` by owners and admins, never through a repository.
+
+## Checks on GitHub pull requests
+
+For a shipped effort on a GitHub repository, vx publishes every check that applies as a **GitHub check run** named `vx: NAME` on the pull request's head commit, next to the `vx evidence` run:
+
+- **Queued** while it waits for a result (`Waiting for a result`) or for the checks it runs after (`Waits for build`); **completed** as `success`, `failure` or `neutral` with the summary, or as `skipped` with the reason.
+- The summary says who reported it, with the trust label (person, CI, agent and whether its result counts), and links to the effort's Checks tab, the log and each artifact on vx. Artifacts are **linked, not uploaded**: opening them needs read on the repository in vx.
+- vx updates each run as results arrive and when you ship again (a new head gets runs of its own). The checks are those of the effort head, the tree the ship gate reads; every pull request of a split shows them.
+- It needs the App's **Checks** permission (Read and write). Without it GitHub refuses the calls: vx logs it once, Admin > GitHub says **"GitHub checks are off: the vx GitHub App needs the Checks permission"**, and ships and reports go on as before. See [deploy.md](deploy.md#github-app) for granting it.
+
+These runs are vx's record, never CI results: vx's CI feedback ignores them.
+
+## On the web
+
+- **Effort page, Checks tab**: the checks of the effort head in pipeline order, indented under the checks they run after, with their state, where they come from, what they block, the newest result (summary, reporter with trust label, data fields), artifacts (PNG, GIF, JPEG and WebP shown as previews; everything else, and SVG, as downloads), the log, and results that did not count with the reason.
+- **Change page**: the same for that change's tree.
+- **For you**: checks with `runner = "human"` waiting for a person who may report them.
+- **Organization page**: the organization's checks and their history; owners and admins edit them there.
+
+Artifacts and logs are served from `/ui/checks/artifact` and `/ui/checks/log` with `nosniff` and a CSP that runs nothing; to anyone without read on the repository they are "not found".
+
 ## Compatibility
 
 Existing `vx.toml` files keep working exactly as before:

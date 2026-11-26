@@ -98,6 +98,7 @@
       {{else}}<p class="muted small">No evidence recorded.</p>{{end}}
       {{if .C.DependsOn}}<h3 class="sec small-sec">Depends on</h3><p class="mono small">{{range $i, $d := .C.DependsOn}}{{if $i}}, {{end}}{{$d}}{{end}}</p>{{end}}
     </section>
+    {{template "changechecks" .}}
   </aside>
 </div>
 {{end}}

@@ -18,7 +18,7 @@ import (
 // worker, the offline page and the notification settings.
 func (u *UI) mountPhone(mux *http.ServeMux, funcs template.FuncMap) error {
 	for _, page := range []string{"foryou", "offline"} {
-		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/"+page+".html")
+		t, err := template.New("layout.html").Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/partials.html", "templates/checks.html", "templates/"+page+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", page, err)
 		}

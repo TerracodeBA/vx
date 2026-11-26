@@ -349,6 +349,14 @@ var authzOps = []authzOp{
 		_, err := e.svc.CheckStatus(e.ctx, a, service.CheckStatusInput{Repo: "acme/shop", Effort: e.eff.Slug})
 		return err
 	}},
+	{"PipelineStatus", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.PipelineStatus(e.ctx, a, service.CheckStatusInput{Repo: "acme/shop", Effort: e.eff.Slug})
+		return err
+	}},
+	{"RepoOrgChecks", service.RoleRead, func(e *authzEnv, a service.Actor) error {
+		_, err := e.svc.RepoOrgChecks(e.ctx, a, "acme/shop")
+		return err
+	}},
 	{"CheckResults", service.RoleRead, func(e *authzEnv, a service.Actor) error {
 		_, err := e.svc.CheckResults(e.ctx, a, "acme/shop", e.eff.Slug, "", hash.Zero)
 		return err

@@ -274,10 +274,22 @@ func (s *Service) enqueueCheckJobs(ctx context.Context, in EnqueueInput, defs []
 	return out, nil
 }
 
-// pipelineReady reports whether d may run now on this tree: checks without
-// after always may; the rest wait for what they come after (pipelines).
-func (s *Service) pipelineReady(_ context.Context, _ EnqueueInput, d jobDef, _ []jobDef) bool {
-	return len(d.After) == 0
+// pipelineReady reports whether d may run now on this tree: every check
+// it runs after passed (or was neutral) on in.Tree, or does not apply to
+// the change (see rules.Pipeline). After a failure it never is: the
+// pipeline shows it as skipped instead.
+func (s *Service) pipelineReady(ctx context.Context, in EnqueueInput, d jobDef, defs []jobDef) bool {
+	if len(d.After) == 0 {
+		return true
+	}
+	steps := make([]rules.Step, 0, len(defs))
+	applies := map[string]bool{}
+	for _, x := range defs {
+		steps = append(steps, rules.Step{Name: x.Name, After: x.After, Inputs: x.Inputs})
+		applies[x.Name] = x.applies(in.Paths)
+	}
+	results := s.treeResults(ctx, in.Repo, in.Effort, in.Change.ID, in.Tree)
+	return slices.Contains(rules.PipelineReady(steps, results, func(n string) bool { return applies[n] }), d.Name)
 }
 
 // jobDefsAt returns the checks of a repository at the given trees as the
@@ -886,6 +898,7 @@ func (s *Service) afterCheckResult(ctx context.Context, repo store.Repo, effortI
 			slog.Warn("logging check job", "repo", repo.Name, "err", err)
 		}
 	}
+	s.pipelineAdvance(ctx, repo, effortID, check, tree, resultID)
 }
 
 func (s *Service) jobView(ctx context.Context, j store.CheckJob) CheckJobView {

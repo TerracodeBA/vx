@@ -237,6 +237,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 	}
 	res.Warnings = append(res.Warnings, engine.GeneratedWarnings(generated)...)
 	res.Warnings = append(res.Warnings, s.ruleWarnings(ctx, head.Tree, newTree)...)
+	res.Warnings = append(res.Warnings, s.orgCheckWarnings(ctx, v.Repo, head.Tree, newTree)...)
 
 	cs := &object.Changeset{
 		Version:  object.CurrentVersion,

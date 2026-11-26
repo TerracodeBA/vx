@@ -132,3 +132,23 @@ func TestGitHubInstalledPage(t *testing.T) {
 		t.Fatalf("asked GitHub %d times", n)
 	}
 }
+
+// Without the Checks permission, Admin > GitHub says that GitHub checks
+// are off, and stops saying so once the App has it.
+func TestGitHubAdminChecksOff(t *testing.T) {
+	e := newAdminEnv(t)
+	gh := githubtest.New(t)
+	gh.Configure(t, e.svc)
+	if _, body := e.get("alice", "/ui/admin/github"); strings.Contains(body, "gh-checks-off") {
+		t.Fatalf("checks off with the permission:\n%s", body)
+	}
+	gh.SetAppPermission("checks", "read")
+	_, body := e.get("alice", "/ui/admin/github")
+	if !strings.Contains(body, `id="gh-checks-off"`) || !strings.Contains(body, "GitHub checks are off: the vx GitHub App needs the Checks permission") || !strings.Contains(body, "shipping is not affected") {
+		t.Fatalf("no checks-off notice:\n%s", body)
+	}
+	gh.SetAppPermission("checks", "write")
+	if _, body := e.get("alice", "/ui/admin/github"); strings.Contains(body, "gh-checks-off") {
+		t.Fatal("notice stays after the permission was granted")
+	}
+}

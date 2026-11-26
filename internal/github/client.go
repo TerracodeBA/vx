@@ -653,6 +653,57 @@ func (c *Client) CreateCheckRun(ctx context.Context, installationID int64, owner
 	return err
 }
 
+// checkRunBody is the JSON of a check run to create or update. A run
+// without Status, or with "completed", is completed with its Conclusion;
+// "queued" and "in_progress" leave it open.
+func checkRunBody(run service.GitHubCheckRun, create bool) map[string]any {
+	status := run.Status
+	if status == "" {
+		status = "completed"
+	}
+	in := map[string]any{
+		"name": run.Name, "status": status,
+		"output": map[string]any{"title": run.Title, "summary": run.Summary, "text": run.Text},
+	}
+	if create {
+		in["head_sha"] = run.HeadSHA
+	}
+	if status == "completed" {
+		in["conclusion"] = run.Conclusion
+	}
+	if run.DetailsURL != "" {
+		in["details_url"] = run.DetailsURL
+	}
+	if run.ExternalID != "" {
+		in["external_id"] = run.ExternalID
+	}
+	return in
+}
+
+// StartCheckRun creates a check run on a commit of owner/repo and returns
+// its id, for UpdateCheckRun. A refusal for want of the checks: write
+// permission matches service.ErrGitHubForbidden.
+func (c *Client) StartCheckRun(ctx context.Context, installationID int64, owner, repo string, run service.GitHubCheckRun) (int64, error) {
+	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/check-runs"
+	var out struct {
+		ID int64 `json:"id"`
+	}
+	if _, err := c.installationCall(ctx, installationID, http.MethodPost, path, checkRunBody(run, true), &out); err != nil {
+		return 0, err
+	}
+	return out.ID, nil
+}
+
+// UpdateCheckRun changes a check run StartCheckRun created: its status,
+// conclusion and output.
+func (c *Client) UpdateCheckRun(ctx context.Context, installationID int64, owner, repo string, id int64, run service.GitHubCheckRun) error {
+	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/check-runs/" + strconv.FormatInt(id, 10)
+	_, err := c.installationCall(ctx, installationID, http.MethodPatch, path, checkRunBody(run, false), nil)
+	return err
+}
+
+var _ service.GitHubCheckRunsAPI = (*Client)(nil)
+
 // AppSettings reads the App's permissions and webhook events (GET /app).
 func (c *Client) AppSettings(ctx context.Context) (service.GitHubAppSettings, error) {
 	a, err := c.appAuth()

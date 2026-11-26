@@ -143,6 +143,19 @@ from the default branch (or --effort).`,
 					}
 				}
 			}
+			if len(r.OrgChecks) > 0 {
+				a.printf("\nOrganization checks, from %s (vx.toml cannot remove or weaken them):\n", r.OrgChecksFrom)
+				for _, c := range r.OrgChecks {
+					how := "runner " + c.Runner
+					if c.Run != "" {
+						how = "run `" + c.Run + "`"
+					}
+					a.printf("  %-16s when %-6s blocks %-7s %s\n", c.Name, c.When, c.Blocks, how)
+				}
+				for _, w := range r.CheckWarnings {
+					a.printf("  Warning: %s\n", w)
+				}
+			}
 			if len(res.Msg.Reservations) > 0 {
 				a.printf("\nReservations:\n")
 				for _, x := range res.Msg.Reservations {
