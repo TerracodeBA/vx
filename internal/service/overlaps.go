@@ -361,7 +361,7 @@ func (r *forecastRun) compute(ctx context.Context, repo store.Repo, branch store
 	if err != nil {
 		return fc, err
 	}
-	r2, err := engine.MergeTreesKeepConflicts(ctx, s.Blobs, secondBase.Tree, secondHead.Tree, onto,
+	r2, err := engine.MergeTreesKeepConflicts(ctx, s.repoWrites(repo.ID), secondBase.Tree, secondHead.Tree, onto,
 		merge.Labels{Base: "base", Ours: second.eff.Slug, Theirs: first.eff.Slug}, s.mergeOptions(ctx, secondHead.Tree, onto)...)
 	if err != nil {
 		return fc, err

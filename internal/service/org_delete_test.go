@@ -14,6 +14,7 @@ import (
 
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
+	"github.com/TerracodeBA/vx/internal/object"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
 )
@@ -285,10 +286,100 @@ func (e *authzEnv) fillOrg() (shared hash.Hash) {
 	return shared
 }
 
+// serverMadeObjects makes the server write objects of its own in acme/shop
+// that no land keeps: a rebase that stops on a conflict after merging
+// another file cleanly, and an overlap forecast between two efforts that
+// conflict (merged trees and a blob with conflict markers). It returns
+// the contents those objects hold.
+func (e *authzEnv) serverMadeObjects() []string {
+	t := e.t
+	t.Helper()
+	base := "a\nb\nc\nd\ne\nf\ng\n"
+	e.moveMain(e.repo, "Notes on main", map[string]*string{"notes.txt": s(base)})
+	docs, err := e.svc.CreateEffort(e.ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: "Docs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.land(e.repo, docs, "Docs", map[string]*string{"notes.txt": s("a\nb\nc\nd\ne\nf\nG docs\n"), "readme.md": s("docs readme\n")}, nil)
+	e.moveMain(e.repo, "Main notes", map[string]*string{"notes.txt": s("A main\nb\nc\nd\ne\nf\ng\n"), "readme.md": s("main readme\n")})
+	v, err := e.svc.RebaseEffort(e.ctx, e.alice, "acme/shop", docs.Slug, "")
+	if err != nil || v.Rebase.State != store.RebaseStopped {
+		t.Fatalf("the rebase should stop on readme.md: %+v %v", v.Rebase, err)
+	}
+	// Two efforts give cart.go different contents: the forecast keeps both
+	// in one file with conflict markers.
+	pricing, err := e.svc.CreateEffort(e.ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: "Pricing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.land(e.repo, pricing, "Prices", map[string]*string{"cart.go": s("package shop\n\nvar price = 2\n")}, nil)
+	e.land(e.repo, e.effort(e.eff), "Totals", map[string]*string{"cart.go": s("package shop\n\nvar total = 1\n")}, nil)
+	e.svc.WaitForecasts()
+	os, err := e.svc.ListOverlaps(e.ctx, e.alice, "acme/shop", pricing.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflict := false
+	for _, o := range os {
+		conflict = conflict || (o.Other.ID == e.eff.ID && o.Status == service.OverlapConflict)
+	}
+	if !conflict {
+		t.Fatalf("the forecast of pricing and checkout should conflict: %+v", os)
+	}
+	return []string{"G docs", "<<<<<<<"}
+}
+
+// unrecorded lists the objects in the blob store that no repository
+// outside acme records, and the empty tree aside, with what they hold.
+func (e *authzEnv) blobsNotOf(keep map[hash.Hash]bool) map[hash.Hash]string {
+	e.t.Helper()
+	empty, _ := object.EmptyTree(e.ctx, blob.NewMem())
+	out := map[hash.Hash]string{}
+	err := e.blobs.(blob.Lister).List(e.ctx, func(h hash.Hash) error {
+		if keep[h] || h == empty {
+			return nil
+		}
+		_, data, err := e.blobs.Get(e.ctx, h)
+		out[h] = string(data)
+		return err
+	})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return out
+}
+
 func TestPurgeOrgLeavesNothing(t *testing.T) {
 	e := newAuthzEnv(t)
 	shared := e.fillOrg()
+	made := e.serverMadeObjects()
 	orgID := e.repo.OrgID
+	globex, err := e.svc.Store.RepoByName(e.ctx, "globex/site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every object in the blob store, the server's own merge results too,
+	// is recorded by some repository: so the purge can find all of acme's.
+	acmeOwn, acmeShared, err := e.svc.Store.OrgObjectHashes(e.ctx, orgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded := map[hash.Hash]bool{}
+	for _, h := range append(acmeOwn, acmeShared...) {
+		recorded[h] = true
+	}
+	for h, data := range e.blobsNotOf(recorded) {
+		t.Errorf("object %s in the blob store is recorded by no repository: %q", h.Short(), data)
+	}
+	all := ""
+	for _, data := range e.blobsNotOf(nil) {
+		all += data
+	}
+	for _, m := range made {
+		if !strings.Contains(all, m) {
+			t.Fatalf("setup: no server-made object holds %q", m)
+		}
+	}
 	ids, err := e.svc.Store.OrgRecordIDs(e.ctx, orgID)
 	if err != nil {
 		t.Fatal(err)
@@ -339,6 +430,22 @@ func TestPurgeOrgLeavesNothing(t *testing.T) {
 	if ok, _ := e.blobs.Has(e.ctx, shared); !ok {
 		t.Fatal("the purge deleted an object globex/site still uses")
 	}
+	// Nothing acme's repositories ever wrote is left, server-made objects
+	// included; only what globex records (the shared file among it) stays.
+	globexOwn, globexShared, err := e.svc.Store.OrgObjectHashes(e.ctx, globex.OrgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep := map[hash.Hash]bool{}
+	for _, h := range append(globexOwn, globexShared...) {
+		keep[h] = true
+	}
+	if !keep[shared] {
+		t.Fatal("globex/site does not record the shared object")
+	}
+	for h, data := range e.blobsNotOf(keep) {
+		t.Errorf("object %s survived the purge: %q", h.Short(), data)
+	}
 	if got, err := e.svc.GetObjects(e.ctx, e.bob, "globex/site", []hash.Hash{shared}, 0); err != nil || len(got) != 1 {
 		t.Errorf("globex/site reads its shared object: %v", err)
 	}
@@ -348,12 +455,12 @@ func TestPurgeOrgLeavesNothing(t *testing.T) {
 		t.Fatalf("deletion record = %+v, %v", recs, err)
 	}
 	c := recs[0].Counts
-	for k, want := range map[string]int64{"repositories": 1, "efforts": 1, "members": 2, "teams": 1, "github_installation_links": 1, "dpa_acceptances": 1} {
+	for k, want := range map[string]int64{"repositories": 1, "efforts": 3, "members": 2, "teams": 1, "github_installation_links": 1, "dpa_acceptances": 1} {
 		if c[k] != want {
 			t.Errorf("counts[%s] = %d, want %d (all: %v)", k, c[k], want, c)
 		}
 	}
-	for _, k := range []string{"changes", "notes", "workspaces", "tasks", "claims", "reviews", "object_records", "blobs", "operations"} {
+	for _, k := range []string{"changes", "notes", "workspaces", "tasks", "claims", "reviews", "rebases", "object_records", "blobs", "operations"} {
 		if c[k] == 0 {
 			t.Errorf("counts[%s] = 0 (all: %v)", k, c)
 		}

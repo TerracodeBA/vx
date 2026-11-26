@@ -179,7 +179,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 	}
 	var generated []engine.GeneratedFile
 	if eff.Head != base.Hash {
-		mr, err := engine.MergeTrees(ctx, s.Blobs, base.Tree, in.Tree, head.Tree, merge.Labels{
+		mr, err := engine.MergeTrees(ctx, s.repoWrites(v.Repo.ID), base.Tree, in.Tree, head.Tree, merge.Labels{
 			Base:   "base " + base.Hash.Short(),
 			Ours:   "workspace",
 			Theirs: "effort " + eff.Head.Short(),

@@ -193,7 +193,7 @@ func (s *Service) replayChain(ctx context.Context, repoID uuid.UUID, chain []sto
 			labels := merge.Labels{Base: "base", Ours: c.ChangeID, Theirs: target}
 			opts := s.mergeOptions(ctx, c.Tree, cur)
 			if mode == replayForecast {
-				mr, err := engine.MergeTreesKeepConflicts(ctx, s.Blobs, parent.Tree, c.Tree, cur, labels, opts...)
+				mr, err := engine.MergeTreesKeepConflicts(ctx, s.repoWrites(repoID), parent.Tree, c.Tree, cur, labels, opts...)
 				if err != nil {
 					return res, err
 				}
@@ -210,7 +210,7 @@ func (s *Service) replayChain(ctx context.Context, repoID uuid.UUID, chain []sto
 				}
 				next = mr.Tree
 			} else {
-				mr, err := engine.MergeTrees(ctx, s.Blobs, parent.Tree, c.Tree, cur, labels, opts...)
+				mr, err := engine.MergeTrees(ctx, s.repoWrites(repoID), parent.Tree, c.Tree, cur, labels, opts...)
 				if err != nil {
 					return res, err
 				}

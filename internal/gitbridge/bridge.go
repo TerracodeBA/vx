@@ -368,6 +368,10 @@ func (b *Bridge) syncBranch(ctx context.Context, repo store.Repo, branch string)
 		c := todo[i]
 		tree, err := conv.tree(ctx, c.TreeHash)
 		if err != nil {
+			// Record what was converted before the failure: every object in
+			// the blob store belongs to a repository, so the purge of a
+			// deleted organization finds it (and the next sync reuses it).
+			_ = conv.flush(context.WithoutCancel(ctx))
 			return store.Branch{}, 0, fmt.Errorf("import %s: %w", c.Hash.String()[:12], err)
 		}
 		if err := conv.flush(ctx); err != nil {
