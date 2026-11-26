@@ -60,9 +60,25 @@ func startChrome(t *testing.T) *cdp {
 	if bin == "" {
 		t.Skip("no headless Chrome or Chromium (set VX_CHROME)")
 	}
+	// Not t.TempDir: Chrome's helper processes outlive the main one and
+	// may still write to the profile when the test ends, which makes
+	// t.TempDir's cleanup fail. Remove it ourselves, retrying for a while.
+	profile, err := os.MkdirTemp("", "vx-phone-chrome-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for i := 0; i < 50; i++ {
+			if os.RemoveAll(profile) == nil {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("could not remove Chrome profile %s", profile)
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, bin, "--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--remote-debugging-port=0",
-		"--remote-allow-origins=*", "--user-data-dir="+t.TempDir(), "about:blank")
+		"--remote-allow-origins=*", "--user-data-dir="+profile, "about:blank")
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
