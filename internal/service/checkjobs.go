@@ -280,19 +280,23 @@ func (s *Service) pipelineReady(_ context.Context, _ EnqueueInput, d jobDef, _ [
 	return len(d.After) == 0
 }
 
-// jobDefsAt returns the check definitions of a repository at tree, as the
-// queue sees them.
-func (s *Service) jobDefsAt(ctx context.Context, tree hash.Hash) ([]jobDef, error) {
-	rs, err := rules.At(ctx, s.Blobs, tree)
-	if err != nil {
-		// A vx.toml that does not parse makes no jobs; land reports it.
-		var re *rules.Error
-		if errors.As(err, &re) {
-			return nil, nil
+// jobDefsAt returns the checks of a repository at the given trees as the
+// queue sees them, through the same definitions the gates use (checkDefs:
+// vx.toml's [[check]] tables and organization checks); the first tree's
+// definition of a name wins. [checks] required and [[policy]] make no
+// jobs. A vx.toml that does not parse makes none either; land reports it.
+func (s *Service) jobDefsAt(ctx context.Context, repo store.Repo, trees ...hash.Hash) ([]jobDef, error) {
+	defs, _, _ := s.checkDefs(ctx, repo, trees...)
+	var out []jobDef
+	seen := map[string]bool{}
+	for _, d := range defs {
+		if (d.Origin != rules.OriginCheck && d.Origin != rules.OriginOrg) || seen[d.Name] {
+			continue
 		}
-		return nil, err
+		seen[d.Name] = true
+		out = append(out, jobDefOf(d))
 	}
-	return jobDefsOf(rs), nil
+	return out, nil
 }
 
 // changedPaths lists the paths that differ between two trees.
@@ -325,9 +329,10 @@ func (s *Service) enqueueLandJobs(ctx context.Context, repo store.Repo, effortID
 	if err != nil {
 		return err
 	}
-	// The checks of the effort before this change apply to it, as for the
-	// land gate: a change cannot switch off the checks it is held to.
-	defs, err := s.jobDefsAt(ctx, base)
+	// The checks of the effort before this change and of the change itself
+	// apply, as for the land gate: a change can add checks for itself,
+	// never drop one the effort has.
+	defs, err := s.jobDefsAt(ctx, repo, base, cs.Tree)
 	if err != nil || !slices.ContainsFunc(defs, func(d jobDef) bool { return d.queued() && d.When == "land" }) {
 		return err
 	}
@@ -352,7 +357,7 @@ func (s *Service) enqueueShipJobs(ctx context.Context, repo store.Repo, eff stor
 	if err != nil {
 		return nil, classify(err)
 	}
-	defs, err := s.jobDefsAt(ctx, head.Tree)
+	defs, err := s.jobDefsAt(ctx, repo, head.Tree)
 	if err != nil || !slices.ContainsFunc(defs, func(d jobDef) bool { return d.queued() && d.When == "ship" }) {
 		return nil, err
 	}
@@ -461,7 +466,7 @@ func (s *Service) RequestCheck(ctx context.Context, actor Actor, in RequestCheck
 	if err != nil {
 		return CheckJobView{}, classify(err)
 	}
-	defs, err := s.jobDefsAt(ctx, head.Tree)
+	defs, err := s.jobDefsAt(ctx, v.Repo, head.Tree)
 	if err != nil {
 		return CheckJobView{}, err
 	}
