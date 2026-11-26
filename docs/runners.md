@@ -93,7 +93,7 @@ It is a service principal of its own (`service:ci-...`, the name its results car
 
 ### GitHub Actions
 
-Store the secret as `VX_TOKEN` in the repository's Actions secrets and the server's URL as the variable `VX_SERVER`. The pull request vx opens is on the branch `vx/EFFORT`; its commits carry `Vx-Change-Id` trailers, and the effort head's tree is what a ship check's result is for.
+Store the secret as `VX_TOKEN` in the repository's Actions secrets and the server's URL as the variable `VX_SERVER`. The pull request vx opens is on the branch `vx/EFFORT`, and each commit carries its change in a `Vx-Change-Id` trailer: the head commit's change is the effort head, so reporting for it binds the result to the tree that was pushed.
 
 ```yaml
 name: unit
@@ -110,32 +110,39 @@ jobs:
       VX_REPO: acme/shop
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ github.event.pull_request.head.sha }}" }
       - uses: actions/setup-go@v5
         with: { go-version: stable }
       - name: Install vx
         run: curl -fsSL "$VX_SERVER/install.sh" | sh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Test
-        run: go test ./... 2>&1 | tee test.log
+        id: test
+        shell: bash
+        run: go test ./... 2>&1 | tee test.log; exit "${PIPESTATUS[0]}"
       - name: Report to vx
         if: always()
+        shell: bash
         run: |
           effort="${GITHUB_HEAD_REF#vx/}"
-          status=pass; [ "${{ job.status }}" = success ] || status=fail
-          vx check report unit --effort "$effort" --status "$status" \
+          change=$(git log -1 --format='%(trailers:key=Vx-Change-Id,valueonly)' | head -1)
+          status=pass; [ "${{ steps.test.outcome }}" = success ] || status=fail
+          vx check report unit --repo "$VX_REPO" --effort "$effort" --change "$change" --status "$status" \
             --summary "go test ./... on ${GITHUB_SHA::7}" --log test.log --artifact test.log
 ```
 
-Without the CLI, the same report is one HTTP call to the API (connect protocol, JSON); artifacts travel base64-encoded:
+Without the CLI, the same report is one HTTP call to the API (connect protocol with JSON; `bytes` fields such as `log` and an artifact's `data` are base64):
 
 ```sh
 curl -fsS "$VX_SERVER/vx.v1.CheckService/ReportCheck" \
   -H "Authorization: Bearer $VX_TOKEN" -H "Content-Type: application/json" \
   --data @- <<EOF
-{"repo": "acme/shop", "effort": "$effort", "name": "unit", "status": "$status",
- "summary": "go test ./...",
+{"repo": "acme/shop", "effort": "$effort", "change_id": "$change", "check": "unit", "status": "$status",
+ "summary": "go test ./...", "log": "$(base64 -w0 test.log)",
  "artifacts": [{"name": "test.log", "content_type": "text/plain", "data": "$(base64 -w0 test.log)"}]}
 EOF
 ```
+
+The answer says whether the result counts (`result.counts`, and `result.why` when it does not). `--tree` (`"tree"`) pins the result to an exact tree; without it a change's result is for its newest tree on the effort, so a change rebased after the push needs a new run.
 
 A CI runner can also pull work instead of reacting to pull requests: `vx check next --runner ci --wait --json` hands it a `ci` job with the tree to test, and `files` and `GetObjects` give it the changed files without git.
 
