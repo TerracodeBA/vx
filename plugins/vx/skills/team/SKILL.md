@@ -40,6 +40,8 @@ vx agent show backend                                     # what it may change, 
 
 Globs work as in vx.toml (`*`, `?`, `**`); `--allow` and `--deny` replace their list; a deny wins. Only you (the person) can change a scope, never the agent. Shared files several parts touch (a vx.toml, an options file) go into the scope of each agent that needs them. If an agent reports `permission denied: ... may only change ...`, decide whether its task really needs that path: widen with the command the error prints, or hand the change to the part that owns it.
 
+When `vx.toml` has checks run by someone other than the landing agent (`runner = "agent:browser"`, `"ci"` or `"human"`), they become jobs in a queue. Say which of your agents run which kinds with `vx agent runner qa --kinds browser` (only you can); such an agent loops on `vx check next --runner browser --wait`, runs the check and reports it with `vx check report`. A check with `reporter = "independent"` does not count from the author or another agent of the same person, so the runner for those is usually another person's agent. `vx repo ci-token create NAME --repo REPO --checks unit` makes a token CI reports with. See docs/runners.md, also for running runners isolated from production credentials.
+
 Then write the plan into the effort as tasks, from one of the working copies (or with `--repo REPO --effort SLUG`). Contracts come first and the work that builds on them waits for them with `--after`:
 
 ```sh
