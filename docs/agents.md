@@ -88,7 +88,23 @@ When an agent lands without `--run` and others landed first, the server merges t
 - **Reused on identical files.** vx remembers each command that passed, keyed by the command and the tree hash of the working copy it ran on (`.vx/checks.json`, files ignored by `.gitignore` are not part of the tree). Running the same command on byte-identical files reuses the result: `pass go vet ./... (reused from 14:02: it passed on these exact files in 12.3s)`. The check is still "run by vx" (vx ran it, on exactly these files) and its notes say `reused from 14:02: passed on these exact files`. That helps when a land stopped after the checks (another check failed for a reason outside the files, such as a database that was down, a scope or policy refusal, a review to replace), so a retry runs only what did not pass. `--no-reuse` runs everything.
 - **The rule, and why.** A result is reused only for the exact tree it ran on. Any other tree runs every command again, including the tree a sync produced when the sync only brought files you did not touch: a check reads the whole tree, and a change elsewhere (a renamed function, a new migration, a changed fixture) is exactly what breaks a build after a clean text merge. Evidence must describe what lands, so vx never carries a result over to files it did not run on. If you would rather not wait, land without `--run`: the server merges and says the evidence predates the merge.
 - **Checks that change files.** If a `--run` command rewrites files (a formatter, a generator), vx warns that the land takes the files as they are now while the checks ran on them before, and remembers nothing for that run.
-- **Failures show their output.** A failed command prints its last 30 lines (stdout and stderr, for example gofmt's file list) under `FAIL CMD`, and `Last 30 of 112 lines; full output: .vx/last-check-4.log`. Each command's full output of the last run is in `.vx/last-check-N.log`, N being its place among the `--run` flags.
+- **Cheapest first, stop at the first failure.** The commands run in the order of the time each took when it last ran in this working copy (passed or failed, kept in `.vx/checks.json`), fastest first, so a failure shows up early; commands never run here go last, in the order given. The first failure stops the rest: `1 of 4 checks failed: go vet ./...; not run after it: go test ./... (--keep-going runs every check)`. `--keep-going` (and `--allow-failing`) runs them all and the line says `2 of 4 checks failed: ...`. The evidence keeps the order of the flags.
+- **Failures show what failed.** A failed command prints its output under `FAIL CMD`: for Go tests, the `--- FAIL` blocks with their log lines, panics, build errors and the `FAIL pkg` lines (`The failing tests and packages of 412 lines; full output: .vx/last-check-4.log`); otherwise its last 30 lines (stdout and stderr, for example gofmt's file list) and `Last 30 of 112 lines; full output: ...`. A `test -z "$(CMD)"` check that fails without output (the test swallows what CMD printed) adds ``Hint: ... run `CMD` to see it.`` Each command's full output of the last run is in `.vx/last-check-N.log`, N being its place among the `--run` flags.
+
+### Company-defined checks
+
+A repository's `vx.toml` (or its organization) can define **checks** that must pass before a change lands or ships: run checks (`run = "CMD"`, vx runs them) and checks a runner reports (an agent kind, CI or a person). Results are bound to the exact tree they describe; a new tree needs new evidence. [checks.md](checks.md) has the reference.
+
+```sh
+vx check status                      # what this change still needs: missing, pending, passed, failed, by whom
+vx check run unit                    # run a run check's command on your files and report it
+vx check report security-review --status pass --summary "No findings" --log review.md --artifact shot.png
+vx check show 1a2b3c4d --download out/
+```
+
+- `vx land` refuses while a check that blocks land and applies to your files has no passing result on exactly your snapshot, and lists each with how to provide it (`vx land --run ...`, `vx check run NAME`, or who reports it). Checks with a runner become jobs on your snapshot ([runners.md](runners.md)); land again when their results are in.
+- Whether a result counts is the check's `reporter`: `self`, `independent` (not you, nor another agent of your person), `ci` or `human`. `vx check report` says at once whether yours counts. Do not report checks you did not run, and never report for a reporter rule you do not meet; ask on the board instead.
+- `vx ship open` refuses while a check that blocks ship has no passing result on the effort head.
 
 ## Shipping several pull requests
 
@@ -459,6 +475,9 @@ Put it in `.mcp.json` in the repository root, or add it for yourself with `claud
 | `vx_claim`, `vx_release`, `vx_claims` | Claim paths or symbols before a larger edit (returns others' overlapping claims; `moving_to` for code you are moving), end your claims, list an effort's active claims |
 | `vx_overlaps` | Forecast collisions with the other open efforts of the repository: shared files, files that would not merge, duplicate Go declarations and `vx.toml` violations of the two combined (`effort` empty: every pair) |
 | `vx_rules` | The repository's `vx.toml` rules (unique keys, generated files, required checks, landing policies), their source, and the keys reserved so far |
+| `vx_check_status` | What a change still needs: each check with its state on the change's tree, the result that counts, and how to provide a missing one |
+| `vx_check_report` | Report a check result with a log, artifacts (base64) and JSON data; says whether it counts |
+| `vx_check_show` | One check result; with `artifact`, that artifact's bytes or the log |
 | `vx_reserve` | Reserve the next free key of a `[[unique]]` rule for an effort, e.g. the next migration number |
 | `vx_tasks` | An effort's tasks: open, taken (with owner) and done, blocked ones with `depends_on` |
 | `vx_task_add` | Add a task, optionally waiting for others (`depends_on`) or assigned at once (`owner`) |

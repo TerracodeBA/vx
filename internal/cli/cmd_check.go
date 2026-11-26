@@ -193,7 +193,11 @@ func (a *App) printCheckStatus(w checkWhere, st *vxv1.CheckStatusResponse) {
 			what += " (the effort head)"
 		}
 	}
-	a.printf("Checks of %s, tree %s:\n", what, short(st.Tree))
+	if strings.Contains(what, "tree ") {
+		a.printf("Checks of %s:\n", what)
+	} else {
+		a.printf("Checks of %s, tree %s:\n", what, short(st.Tree))
+	}
 	if st.Problem != "" {
 		a.printf("  vx.toml does not parse, so its checks are not known: %s\n", st.Problem)
 	}
