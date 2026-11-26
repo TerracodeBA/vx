@@ -205,3 +205,49 @@ func TestBoardTabReplacedAndRead(t *testing.T) {
 		t.Error("the legend does not explain the vx label")
 	}
 }
+
+// Two questions that closely match are linked both ways on the Board tab.
+func TestBoardTabSimilarQuestions(t *testing.T) {
+	e := newWebEnv(t)
+	ctx := e.ctx
+	if _, err := e.svc.CreateRepo(ctx, e.alice, service.CreateRepoInput{Name: "acme/shop"}); err != nil {
+		t.Fatal(err)
+	}
+	eff, err := e.svc.CreateEffort(ctx, e.alice, service.CreateEffortInput{Repo: "acme/shop", Name: "Rate limiting"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := func(name, body string) service.Note {
+		t.Helper()
+		p, _, err := e.svc.CreateAgent(ctx, e.alice, name, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, _ := e.svc.ResolveActor(ctx, p)
+		n, err := e.svc.Ask(ctx, a, service.AskInput{Repo: "acme/shop", Effort: eff.Slug, Targets: []string{"limit.Allow"}, Body: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	first := ask("backend", "Does Allow take the client IP?")
+	second := ask("audit", "Does Allow take the client IP, or the user id?")
+
+	token, _ := e.st.CreateToken(ctx, e.alice.ID, "web")
+	e.signIn(token)
+	resp, err := e.c.Get(e.srv.URL + "/ui/effort?repo=acme%2Fshop&slug=" + eff.Slug + "&view=board")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	body := string(raw)
+	for _, want := range []string{
+		`similar to <a class="mono" href="#n-` + first.ID.String() + `">` + first.ID.String()[:8] + `</a>`,
+		`asked again as <a class="mono" href="#n-` + second.ID.String() + `">` + second.ID.String()[:8] + `</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("board: missing %q", want)
+		}
+	}
+}

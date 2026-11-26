@@ -376,6 +376,7 @@ func (c *noteCache) convert(ctx context.Context, r store.Note, now time.Time) (N
 		ID: r.ID, RepoName: r.RepoName, EffortSlug: r.EffortSlug, EffortID: r.EffortID, ThreadID: r.ThreadID,
 		Kind: NoteKind(r.Kind), Targets: r.Targets, Body: r.Body, State: noteState(r, now), AnswerBy: r.AnswerBy,
 		CreatedAt: r.CreatedAt, Supersedes: r.Supersedes, SupersededBy: r.SupersededBy, System: r.System,
+		SimilarTo: r.SimilarTo, Similar: r.Similar,
 	}
 	var err error
 	if n.Author, err = c.principal(ctx, r.AuthorID); err != nil {

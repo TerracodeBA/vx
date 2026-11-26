@@ -44,6 +44,9 @@ type Note struct {
 	Supersedes   string `json:"supersedes,omitempty" jsonschema:"id of the earlier note this one replaces"`
 	SupersededBy string `json:"superseded_by,omitempty" jsonschema:"id of the newer note that replaced this one; read that one instead"`
 	System       bool   `json:"system,omitempty" jsonschema:"posted by vx itself, not by a person or agent"`
+	// SimilarTo and Similar link questions that closely match.
+	SimilarTo string   `json:"similar_to,omitempty" jsonschema:"questions: the open question this one closely matched when it was asked"`
+	Similar   []string `json:"similar,omitempty" jsonschema:"questions: later questions that closely matched this one"`
 	// Truncated: vx_context cut the body to 80 characters; vx_board with
 	// ids has all of it.
 	Truncated bool `json:"truncated,omitempty" jsonschema:"untrusted_body holds only the first 80 characters; read the whole note with vx_board and ids: [id]"`
@@ -128,6 +131,8 @@ type askOutput struct {
 	Note Note `json:"note"`
 	// Notice is set when the agent asked is not working right now.
 	Notice string `json:"notice,omitempty" jsonschema:"set when the agent asked is not working right now: it will not see the question soon, and its person got a copy"`
+	// SimilarNotice is set when a similar question was already open.
+	SimilarNotice string `json:"similar_notice,omitempty" jsonschema:"set when a similar question (same targets, nearly the same words) was already open in the effort: its id and author; its answer may answer yours (vx_board with ids)"`
 }
 
 type answerOutput struct {
@@ -291,7 +296,7 @@ func (t *tools) ask(ctx context.Context, req *sdk.CallToolRequest, in askInput) 
 	if err != nil {
 		return nil, askOutput{}, t.userError("vx_ask", err)
 	}
-	return nil, askOutput{Note: note(a, n), Notice: service.AwayNotice(n, t.svc.Clock())}, nil
+	return nil, askOutput{Note: note(a, n), Notice: service.AwayNotice(n, t.svc.Clock()), SimilarNotice: service.SimilarNotice(n)}, nil
 }
 
 func (t *tools) answer(ctx context.Context, req *sdk.CallToolRequest, in answerInput) (*sdk.CallToolResult, answerOutput, error) {
@@ -411,6 +416,12 @@ func note(a service.Actor, n service.Note) Note {
 	}
 	if n.SupersededBy != nil {
 		out.SupersededBy = n.SupersededBy.String()
+	}
+	if n.SimilarTo != nil {
+		out.SimilarTo = n.SimilarTo.String()
+	}
+	for _, id := range n.Similar {
+		out.Similar = append(out.Similar, id.String())
 	}
 	if out.Targets == nil {
 		out.Targets = []string{}

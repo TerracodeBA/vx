@@ -430,6 +430,21 @@ func (r *forecastRun) compute(ctx context.Context, repo store.Repo, branch store
 				fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, inA...), append(fc.involvedOfB, inB...)
 			}
 		}
+		// Unreachable code, undefined names and unused imports that only
+		// the combination of both efforts has, in packages both changed.
+		tws, err := engine.CheckGoMerge(ctx, s.Blobs, engine.GoSides{
+			Base: secondBase.Tree, Ours: secondHead.Tree, Theirs: onto, Merged: combined,
+		})
+		if err != nil {
+			slog.Warn("overlap forecast: Go type check", "repo", repo.Name, "err", err)
+		}
+		for _, w := range engine.WithoutCovered(sws, tws) {
+			inA, inB := involvedInPackage(w.Path, a.changed), involvedInPackage(w.Path, b.changed)
+			if len(inA) > 0 && len(inB) > 0 {
+				fc.warnings = append(fc.warnings, w)
+				fc.involvedOfA, fc.involvedOfB = append(fc.involvedOfA, inA...), append(fc.involvedOfB, inB...)
+			}
+		}
 		// Shared files the merge could only do declaration by declaration.
 		for _, w := range engine.MergedByDeclWarnings(r2.MergedByDecl) {
 			if shared[w.Path] {
@@ -475,6 +490,24 @@ func involved(files []string, changed map[string]bool) []string {
 			out = append(out, f)
 		}
 	}
+	return out
+}
+
+// involvedInPackage returns file if it is in changed, else the changed .go
+// files of its directory: what an effort contributed to a problem in that
+// Go package.
+func involvedInPackage(file string, changed map[string]bool) []string {
+	if changed[file] {
+		return []string{file}
+	}
+	dir := path.Dir(file)
+	var out []string
+	for f := range changed {
+		if strings.HasSuffix(f, ".go") && path.Dir(f) == dir {
+			out = append(out, f)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 

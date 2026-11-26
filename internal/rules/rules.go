@@ -10,6 +10,8 @@
 //	[[policy]]      how changes to some paths land: fast (default), gated
 //	                (required checks run by vx and passing) or human (a
 //	                person approves first)
+//	[files]         large = the size above which vx status and vx land warn
+//	                about a new file (default 1 MiB)
 //
 // The package is pure: it reads trees and blobs through a blob.Store, so
 // the server (land, ship, rebase) and the CLI (vx sync, vx land) apply the
@@ -71,6 +73,9 @@ type Rules struct {
 	Rebase   string
 	Policies []Policy
 	Source   string // e.g. "vx.toml at 3f2a1c9d0e7b"; empty: none
+	// LargeFile is [files] large in bytes: vx status and vx land warn
+	// about new files above it. 0 means DefaultLargeFile.
+	LargeFile int64
 	// Ignored says what of vx.toml this vx does not know (keys or tables
 	// of a newer vx) and so left out: a rule with an unknown key is
 	// ignored as a whole. "vx.toml line 15: rule [[unique]] "proto-field"
@@ -93,9 +98,20 @@ func (r Rules) RebaseMode() string {
 	return r.Rebase
 }
 
+// DefaultLargeFile is the [files] large default: 1 MiB.
+const DefaultLargeFile = 1 << 20
+
+// LargeFileLimit is [files] large, DefaultLargeFile when unset.
+func (r Rules) LargeFileLimit() int64 {
+	if r.LargeFile <= 0 {
+		return DefaultLargeFile
+	}
+	return r.LargeFile
+}
+
 // IsEmpty reports whether there are no rules.
 func (r Rules) IsEmpty() bool {
-	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && r.Rebase == "" && len(r.Policies) == 0
+	return len(r.Unique) == 0 && len(r.Generated) == 0 && len(r.RequiredChecks) == 0 && r.Rebase == "" && len(r.Policies) == 0 && r.LargeFile == 0
 }
 
 // UniqueRule returns the [[unique]] rule called name.
@@ -162,21 +178,27 @@ type tomlAutomation struct {
 	Rebase string `toml:"rebase"`
 }
 
+type tomlFiles struct {
+	Large any `toml:"large"` // "5 MiB", "500KB" or a number of bytes
+}
+
 type tomlFile struct {
 	Unique     []tomlUnique    `toml:"unique"`
 	Generated  []tomlGenerated `toml:"generated"`
 	Checks     tomlChecks      `toml:"checks"`
 	Automation tomlAutomation  `toml:"automation"`
 	Policy     []tomlPolicy    `toml:"policy"`
+	Files      tomlFiles       `toml:"files"`
 }
 
 var known = map[string][]string{
-	"":           {"[[unique]]", "[[generated]]", "[checks]", "[automation]", "[[policy]]"},
+	"":           {"[[unique]]", "[[generated]]", "[checks]", "[automation]", "[[policy]]", "[files]"},
 	"unique":     {"name", "glob", "key", "content", "scope"},
 	"generated":  {"glob", "command"},
 	"checks":     {"required"},
 	"automation": {"rebase"},
 	"policy":     {"paths", "mode", "require", "approvers"},
+	"files":      {"large"},
 }
 
 var arrayTables = map[string]bool{"unique": true, "generated": true, "policy": true}
@@ -340,6 +362,13 @@ func Parse(data []byte) (Rules, error) {
 		r.Rebase = rb
 	default:
 		probs = append(probs, Problem{loc.at("automation", 0, "rebase"), fmt.Sprintf("[automation] rebase is %q; use \"auto\" (rebase when it replays cleanly), \"notify\" (only tell the effort) or \"off\"", rb)})
+	}
+	if f.Files.Large != nil {
+		n, err := ParseSize(f.Files.Large)
+		if err != nil {
+			probs = append(probs, Problem{loc.at("files", 0, "large"), "[files] large: " + err.Error()})
+		}
+		r.LargeFile = n
 	}
 	var pprobs []Problem
 	r.Policies, pprobs = parsePolicies(f.Policy, r.RequiredChecks, loc, skip["policy"])
@@ -847,4 +876,35 @@ func joinAnd(xs []string) string {
 		return xs[0]
 	}
 	return strings.Join(xs[:len(xs)-1], ", ") + " and " + xs[len(xs)-1]
+}
+
+// ParseSize reads a size such as "1 MiB", "500KB", "2MB" or a number of
+// bytes (1048576). KB, MB and GB are powers of 1000; KiB, MiB and GiB of
+// 1024.
+func ParseSize(v any) (int64, error) {
+	switch v := v.(type) {
+	case int64:
+		if v <= 0 {
+			return 0, fmt.Errorf("%d is not a positive size", v)
+		}
+		return v, nil
+	case string:
+		s := strings.TrimSpace(v)
+		i := 0
+		for i < len(s) && (s[i] >= '0' && s[i] <= '9' || s[i] == '.') {
+			i++
+		}
+		num, err := strconv.ParseFloat(s[:i], 64)
+		if i == 0 || err != nil || num <= 0 {
+			return 0, fmt.Errorf("%q is not a size; write it like \"1 MiB\", \"500KB\" or 1048576", v)
+		}
+		mult := map[string]float64{"": 1, "B": 1, "KB": 1e3, "MB": 1e6, "GB": 1e9, "KIB": 1 << 10, "MIB": 1 << 20, "GIB": 1 << 30, "K": 1 << 10, "M": 1 << 20, "G": 1 << 30}
+		unit := strings.ToUpper(strings.TrimSpace(s[i:]))
+		m, ok := mult[unit]
+		if !ok {
+			return 0, fmt.Errorf("%q has an unknown unit %q; use B, KB, MB, GB, KiB, MiB or GiB", v, strings.TrimSpace(s[i:]))
+		}
+		return int64(num * m), nil
+	}
+	return 0, fmt.Errorf("%v is not a size; write it like \"1 MiB\" or a number of bytes", v)
 }
