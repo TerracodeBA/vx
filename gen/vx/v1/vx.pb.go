@@ -6365,8 +6365,15 @@ func (x *AskRequest) GetAnswerWithinSeconds() int32 {
 }
 
 type AskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Question      *Note                  `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Question *Note                  `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	// Set when the agent asked is not working right now (no open workspace
+	// active in the last 2 hours, no token use in the last 15 minutes): what
+	// to tell the asker, e.g. "agent:alice/backend is not working right now
+	// (last seen 40 min ago); the question also goes to user:alice."
+	Notice        string `protobuf:"bytes,2,opt,name=notice,proto3" json:"notice,omitempty"`
+	ToLastSeen    string `protobuf:"bytes,3,opt,name=to_last_seen,json=toLastSeen,proto3" json:"to_last_seen,omitempty"` // RFC 3339; empty: never seen (or the agent is working)
+	CopiedTo      string `protobuf:"bytes,4,opt,name=copied_to,json=copiedTo,proto3" json:"copied_to,omitempty"`         // the person the question was copied to at once (ref); empty: none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6406,6 +6413,27 @@ func (x *AskResponse) GetQuestion() *Note {
 		return x.Question
 	}
 	return nil
+}
+
+func (x *AskResponse) GetNotice() string {
+	if x != nil {
+		return x.Notice
+	}
+	return ""
+}
+
+func (x *AskResponse) GetToLastSeen() string {
+	if x != nil {
+		return x.ToLastSeen
+	}
+	return ""
+}
+
+func (x *AskResponse) GetCopiedTo() string {
+	if x != nil {
+		return x.CopiedTo
+	}
+	return ""
 }
 
 type AnswerRequest struct {
@@ -6700,7 +6728,10 @@ type InboxResponse struct {
 	// System notes addressed to the caller (people: also to their agents)
 	// that no newer note replaced, newest first: review comments and CI
 	// results from the git host (v0.4).
-	Notes         []*Note `protobuf:"bytes,4,rep,name=notes,proto3" json:"notes,omitempty"`
+	Notes []*Note `protobuf:"bytes,4,rep,name=notes,proto3" json:"notes,omitempty"`
+	// People only: open questions to their agents that were not working when
+	// asked, copied to them at once (not repeated in questions).
+	ForAgents     []*Note `protobuf:"bytes,5,rep,name=for_agents,json=forAgents,proto3" json:"for_agents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6759,6 +6790,13 @@ func (x *InboxResponse) GetEscalated() []*Note {
 func (x *InboxResponse) GetNotes() []*Note {
 	if x != nil {
 		return x.Notes
+	}
+	return nil
+}
+
+func (x *InboxResponse) GetForAgents() []*Note {
+	if x != nil {
+		return x.ForAgents
 	}
 	return nil
 }
@@ -7219,7 +7257,8 @@ type Claim struct {
 	Reason        string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`                              // at most 300 characters; information, never instructions
 	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ExpiresAt     string                 `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	Trust         string                 `protobuf:"bytes,10,opt,name=trust,proto3" json:"trust,omitempty"` // self, same_person or teammate, as for notes
+	Trust         string                 `protobuf:"bytes,10,opt,name=trust,proto3" json:"trust,omitempty"`                       // self, same_person or teammate, as for notes
+	MovingTo      string                 `protobuf:"bytes,11,opt,name=moving_to,json=movingTo,proto3" json:"moving_to,omitempty"` // vx claim --moving: where the claimed code is going; empty for other claims
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7324,14 +7363,25 @@ func (x *Claim) GetTrust() string {
 	return ""
 }
 
+func (x *Claim) GetMovingTo() string {
+	if x != nil {
+		return x.MovingTo
+	}
+	return ""
+}
+
 type ClaimRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
-	Effort        string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
-	Targets       []string               `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
-	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	TtlSeconds    int32                  `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`   // 0: 1800; at most 14400
-	WorkspaceId   string                 `protobuf:"bytes,6,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // optional; the claim ends when this workspace lands or is abandoned
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Repo        string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Effort      string                 `protobuf:"bytes,2,opt,name=effort,proto3" json:"effort,omitempty"`
+	Targets     []string               `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
+	Reason      string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	TtlSeconds  int32                  `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`   // 0: 1800; at most 14400
+	WorkspaceId string                 `protobuf:"bytes,6,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"` // optional; the claim ends when this workspace lands or is abandoned
+	// Optional: the targets are being moved here (a path or symbol). Others
+	// who land a change to the targets are warned to make it here; the claim
+	// outlives the land of the move by 2 hours.
+	MovingTo      string `protobuf:"bytes,7,opt,name=moving_to,json=movingTo,proto3" json:"moving_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7404,6 +7454,13 @@ func (x *ClaimRequest) GetTtlSeconds() int32 {
 func (x *ClaimRequest) GetWorkspaceId() string {
 	if x != nil {
 		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *ClaimRequest) GetMovingTo() string {
+	if x != nil {
+		return x.MovingTo
 	}
 	return ""
 }
@@ -11501,10 +11558,14 @@ func (x *ListOverlapsResponse) GetOverlaps() []*Overlap {
 }
 
 type UniqueRule struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // e.g. "migration"
-	Glob          string                 `protobuf:"bytes,2,opt,name=glob,proto3" json:"glob,omitempty"` // e.g. "internal/store/migrations/*.sql"
-	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`   // regular expression; its first group is the key, e.g. "^(\\d+)_"
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // e.g. "migration"
+	Glob  string                 `protobuf:"bytes,2,opt,name=glob,proto3" json:"glob,omitempty"` // e.g. "internal/store/migrations/*.sql"
+	Key   string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`   // regular expression; its first group is the key, e.g. "^(\\d+)_"
+	// Instead of key: a regular expression matched against each line of the
+	// files; its first group may not be used twice (within a scope).
+	Content       string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	Scope         string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"` // with content: a regular expression whose first group names a scope, e.g. a proto message
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11556,6 +11617,20 @@ func (x *UniqueRule) GetGlob() string {
 func (x *UniqueRule) GetKey() string {
 	if x != nil {
 		return x.Key
+	}
+	return ""
+}
+
+func (x *UniqueRule) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *UniqueRule) GetScope() string {
+	if x != nil {
+		return x.Scope
 	}
 	return ""
 }
@@ -11619,8 +11694,11 @@ type RepoRules struct {
 	RequiredChecks []string               `protobuf:"bytes,3,rep,name=required_checks,json=requiredChecks,proto3" json:"required_checks,omitempty"`
 	Source         string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"` // where they came from, e.g. "vx.toml at 3f2a1c9d0e7b"; empty: no vx.toml
 	Policies       []*LandingPolicy       `protobuf:"bytes,5,rep,name=policies,proto3" json:"policies,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// What of vx.toml this server does not know (keys or tables of a newer
+	// vx), left out: a rule with an unknown key is ignored as a whole.
+	Ignored       []string `protobuf:"bytes,6,rep,name=ignored,proto3" json:"ignored,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RepoRules) Reset() {
@@ -11684,6 +11762,13 @@ func (x *RepoRules) GetSource() string {
 func (x *RepoRules) GetPolicies() []*LandingPolicy {
 	if x != nil {
 		return x.Policies
+	}
+	return nil
+}
+
+func (x *RepoRules) GetIgnored() []string {
+	if x != nil {
+		return x.Ignored
 	}
 	return nil
 }
@@ -13457,9 +13542,13 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\atargets\x18\x03 \x03(\tR\atargets\x12\x12\n" +
 	"\x04body\x18\x04 \x01(\tR\x04body\x12\x0e\n" +
 	"\x02to\x18\x05 \x01(\tR\x02to\x122\n" +
-	"\x15answer_within_seconds\x18\x06 \x01(\x05R\x13answerWithinSeconds\"6\n" +
+	"\x15answer_within_seconds\x18\x06 \x01(\x05R\x13answerWithinSeconds\"\x8d\x01\n" +
 	"\vAskResponse\x12'\n" +
-	"\bquestion\x18\x01 \x01(\v2\v.vx.v1.NoteR\bquestion\"<\n" +
+	"\bquestion\x18\x01 \x01(\v2\v.vx.v1.NoteR\bquestion\x12\x16\n" +
+	"\x06notice\x18\x02 \x01(\tR\x06notice\x12 \n" +
+	"\fto_last_seen\x18\x03 \x01(\tR\n" +
+	"toLastSeen\x12\x1b\n" +
+	"\tcopied_to\x18\x04 \x01(\tR\bcopiedTo\"<\n" +
 	"\rAnswerRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\tR\x06noteId\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"^\n" +
@@ -13477,12 +13566,14 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x12include_superseded\x18\b \x01(\bR\x11includeSuperseded\"6\n" +
 	"\x11ListNotesResponse\x12!\n" +
 	"\x05notes\x18\x01 \x03(\v2\v.vx.v1.NoteR\x05notes\"\x0e\n" +
-	"\fInboxRequest\"\xaf\x01\n" +
+	"\fInboxRequest\"\xdb\x01\n" +
 	"\rInboxResponse\x12)\n" +
 	"\tquestions\x18\x01 \x03(\v2\v.vx.v1.NoteR\tquestions\x12%\n" +
 	"\aanswers\x18\x02 \x03(\v2\v.vx.v1.NoteR\aanswers\x12)\n" +
 	"\tescalated\x18\x03 \x03(\v2\v.vx.v1.NoteR\tescalated\x12!\n" +
-	"\x05notes\x18\x04 \x03(\v2\v.vx.v1.NoteR\x05notes\"V\n" +
+	"\x05notes\x18\x04 \x03(\v2\v.vx.v1.NoteR\x05notes\x12*\n" +
+	"\n" +
+	"for_agents\x18\x05 \x03(\v2\v.vx.v1.NoteR\tforAgents\"V\n" +
 	"\x0eContextRequest\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x18\n" +
@@ -13526,7 +13617,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\bwarnings\x18\t \x03(\v2\x0e.vx.v1.WarningR\bwarnings\x12\x1d\n" +
 	"\n" +
 	"checked_at\x18\n" +
-	" \x01(\tR\tcheckedAt\"\x94\x02\n" +
+	" \x01(\tR\tcheckedAt\"\xb1\x02\n" +
 	"\x05Claim\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
@@ -13540,7 +13631,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\n" +
 	"expires_at\x18\t \x01(\tR\texpiresAt\x12\x14\n" +
 	"\x05trust\x18\n" +
-	" \x01(\tR\x05trust\"\xb0\x01\n" +
+	" \x01(\tR\x05trust\x12\x1b\n" +
+	"\tmoving_to\x18\v \x01(\tR\bmovingTo\"\xcd\x01\n" +
 	"\fClaimRequest\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x18\n" +
@@ -13548,7 +13640,8 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1f\n" +
 	"\vttl_seconds\x18\x05 \x01(\x05R\n" +
 	"ttlSeconds\x12!\n" +
-	"\fworkspace_id\x18\x06 \x01(\tR\vworkspaceId\"c\n" +
+	"\fworkspace_id\x18\x06 \x01(\tR\vworkspaceId\x12\x1b\n" +
+	"\tmoving_to\x18\a \x01(\tR\bmovingTo\"c\n" +
 	"\rClaimResponse\x12\"\n" +
 	"\x05claim\x18\x01 \x01(\v2\f.vx.v1.ClaimR\x05claim\x12.\n" +
 	"\voverlapping\x18\x02 \x03(\v2\f.vx.v1.ClaimR\voverlapping\"C\n" +
@@ -13839,21 +13932,24 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06effort\x18\x02 \x01(\tR\x06effort\"B\n" +
 	"\x14ListOverlapsResponse\x12*\n" +
-	"\boverlaps\x18\x01 \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\"F\n" +
+	"\boverlaps\x18\x01 \x03(\v2\x0e.vx.v1.OverlapR\boverlaps\"v\n" +
 	"\n" +
 	"UniqueRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04glob\x18\x02 \x01(\tR\x04glob\x12\x10\n" +
-	"\x03key\x18\x03 \x01(\tR\x03key\"=\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\"=\n" +
 	"\rGeneratedRule\x12\x12\n" +
 	"\x04glob\x18\x01 \x01(\tR\x04glob\x12\x18\n" +
-	"\acommand\x18\x02 \x01(\tR\acommand\"\xdd\x01\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\"\xf7\x01\n" +
 	"\tRepoRules\x12)\n" +
 	"\x06unique\x18\x01 \x03(\v2\x11.vx.v1.UniqueRuleR\x06unique\x122\n" +
 	"\tgenerated\x18\x02 \x03(\v2\x14.vx.v1.GeneratedRuleR\tgenerated\x12'\n" +
 	"\x0frequired_checks\x18\x03 \x03(\tR\x0erequiredChecks\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06source\x120\n" +
-	"\bpolicies\x18\x05 \x03(\v2\x14.vx.v1.LandingPolicyR\bpolicies\"\x85\x01\n" +
+	"\bpolicies\x18\x05 \x03(\v2\x14.vx.v1.LandingPolicyR\bpolicies\x12\x18\n" +
+	"\aignored\x18\x06 \x03(\tR\aignored\"\x85\x01\n" +
 	"\rLandingPolicy\x12\x14\n" +
 	"\x05paths\x18\x01 \x03(\tR\x05paths\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\x12\x18\n" +
@@ -14347,238 +14443,239 @@ var file_vx_v1_vx_proto_depIdxs = []int32{
 	89,  // 71: vx.v1.InboxResponse.answers:type_name -> vx.v1.Note
 	89,  // 72: vx.v1.InboxResponse.escalated:type_name -> vx.v1.Note
 	89,  // 73: vx.v1.InboxResponse.notes:type_name -> vx.v1.Note
-	89,  // 74: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
-	101, // 75: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
-	9,   // 76: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
-	105, // 77: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
-	103, // 78: vx.v1.ContextResponse.other_efforts:type_name -> vx.v1.OtherEffort
-	104, // 79: vx.v1.ContextResponse.overlaps:type_name -> vx.v1.Overlap
-	105, // 80: vx.v1.OtherEffort.claims:type_name -> vx.v1.Claim
-	89,  // 81: vx.v1.OtherEffort.notes:type_name -> vx.v1.Note
-	101, // 82: vx.v1.OtherEffort.working:type_name -> vx.v1.ContextWorkspace
-	12,  // 83: vx.v1.Overlap.warnings:type_name -> vx.v1.Warning
-	0,   // 84: vx.v1.Claim.owner:type_name -> vx.v1.Principal
-	105, // 85: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
-	105, // 86: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
-	105, // 87: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
-	105, // 88: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
-	0,   // 89: vx.v1.Task.owner:type_name -> vx.v1.Principal
-	0,   // 90: vx.v1.Task.created_by:type_name -> vx.v1.Principal
-	112, // 91: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
-	112, // 92: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
-	112, // 93: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
-	112, // 94: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
-	9,   // 95: vx.v1.Rebase.stopped_at:type_name -> vx.v1.Changeset
-	120, // 96: vx.v1.Rebase.conflicts:type_name -> vx.v1.RebaseConflict
-	119, // 97: vx.v1.RebaseEffortResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 98: vx.v1.RebaseEffortResponse.effort:type_name -> vx.v1.Effort
-	119, // 99: vx.v1.ContinueRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 100: vx.v1.ContinueRebaseResponse.effort:type_name -> vx.v1.Effort
-	119, // 101: vx.v1.AbortRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	3,   // 102: vx.v1.AbortRebaseResponse.effort:type_name -> vx.v1.Effort
-	119, // 103: vx.v1.GetRebaseResponse.rebase:type_name -> vx.v1.Rebase
-	0,   // 104: vx.v1.OrgMember.person:type_name -> vx.v1.Principal
-	0,   // 105: vx.v1.Team.members:type_name -> vx.v1.Principal
-	0,   // 106: vx.v1.RepoAccessEntry.person:type_name -> vx.v1.Principal
-	129, // 107: vx.v1.CreateOrgResponse.org:type_name -> vx.v1.Org
-	129, // 108: vx.v1.ListOrgsResponse.orgs:type_name -> vx.v1.Org
-	129, // 109: vx.v1.GetOrgResponse.org:type_name -> vx.v1.Org
-	130, // 110: vx.v1.GetOrgResponse.members:type_name -> vx.v1.OrgMember
-	131, // 111: vx.v1.GetOrgResponse.teams:type_name -> vx.v1.Team
-	2,   // 112: vx.v1.GetOrgResponse.repos:type_name -> vx.v1.Repo
-	129, // 113: vx.v1.UpdateOrgResponse.org:type_name -> vx.v1.Org
-	130, // 114: vx.v1.SetMemberResponse.member:type_name -> vx.v1.OrgMember
-	131, // 115: vx.v1.CreateTeamResponse.team:type_name -> vx.v1.Team
-	131, // 116: vx.v1.SetTeamMemberResponse.team:type_name -> vx.v1.Team
-	131, // 117: vx.v1.RemoveTeamMemberResponse.team:type_name -> vx.v1.Team
-	132, // 118: vx.v1.GrantRepoResponse.grant:type_name -> vx.v1.RepoGrant
-	132, // 119: vx.v1.RepoAccessResponse.grants:type_name -> vx.v1.RepoGrant
-	133, // 120: vx.v1.RepoAccessResponse.people:type_name -> vx.v1.RepoAccessEntry
-	0,   // 121: vx.v1.SupportGrant.person:type_name -> vx.v1.Principal
-	160, // 122: vx.v1.GrantSupportResponse.grant:type_name -> vx.v1.SupportGrant
-	160, // 123: vx.v1.ListSupportResponse.grants:type_name -> vx.v1.SupportGrant
-	0,   // 124: vx.v1.CreatePersonResponse.person:type_name -> vx.v1.Principal
-	0,   // 125: vx.v1.ListPeopleResponse.people:type_name -> vx.v1.Principal
-	0,   // 126: vx.v1.PollCLILoginResponse.principal:type_name -> vx.v1.Principal
-	104, // 127: vx.v1.ListOverlapsResponse.overlaps:type_name -> vx.v1.Overlap
-	179, // 128: vx.v1.RepoRules.unique:type_name -> vx.v1.UniqueRule
-	180, // 129: vx.v1.RepoRules.generated:type_name -> vx.v1.GeneratedRule
-	182, // 130: vx.v1.RepoRules.policies:type_name -> vx.v1.LandingPolicy
-	181, // 131: vx.v1.GetRulesResponse.rules:type_name -> vx.v1.RepoRules
-	188, // 132: vx.v1.ListReservationsResponse.reservations:type_name -> vx.v1.Reservation
-	3,   // 133: vx.v1.CloseEffortResponse.effort:type_name -> vx.v1.Effort
-	0,   // 134: vx.v1.Review.author:type_name -> vx.v1.Principal
-	6,   // 135: vx.v1.Review.evidence:type_name -> vx.v1.Evidence
-	192, // 136: vx.v1.Review.approvers:type_name -> vx.v1.ApproverList
-	0,   // 137: vx.v1.Review.decided_by:type_name -> vx.v1.Principal
-	8,   // 138: vx.v1.Review.files:type_name -> vx.v1.FileChange
-	193, // 139: vx.v1.ListReviewsResponse.reviews:type_name -> vx.v1.Review
-	193, // 140: vx.v1.GetReviewResponse.review:type_name -> vx.v1.Review
-	193, // 141: vx.v1.ApproveReviewResponse.review:type_name -> vx.v1.Review
-	72,  // 142: vx.v1.ApproveReviewResponse.land:type_name -> vx.v1.LandResponse
-	11,  // 143: vx.v1.ApproveReviewResponse.conflicts:type_name -> vx.v1.Conflict
-	193, // 144: vx.v1.RejectReviewResponse.review:type_name -> vx.v1.Review
-	32,  // 145: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
-	34,  // 146: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
-	24,  // 147: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
-	26,  // 148: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
-	28,  // 149: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
-	30,  // 150: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
-	20,  // 151: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
-	16,  // 152: vx.v1.AuthService.GetAgent:input_type -> vx.v1.GetAgentRequest
-	18,  // 153: vx.v1.AuthService.SetAgentScope:input_type -> vx.v1.SetAgentScopeRequest
-	36,  // 154: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
-	38,  // 155: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
-	40,  // 156: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
-	42,  // 157: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
-	47,  // 158: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
-	49,  // 159: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
-	51,  // 160: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
-	45,  // 161: vx.v1.RepoService.SetRepoHost:input_type -> vx.v1.SetRepoHostRequest
-	53,  // 162: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
-	55,  // 163: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
-	57,  // 164: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
-	190, // 165: vx.v1.EffortService.CloseEffort:input_type -> vx.v1.CloseEffortRequest
-	177, // 166: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
-	59,  // 167: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
-	61,  // 168: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
-	121, // 169: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
-	123, // 170: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
-	125, // 171: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
-	127, // 172: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
-	65,  // 173: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
-	67,  // 174: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
-	69,  // 175: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
-	71,  // 176: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
-	73,  // 177: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
-	63,  // 178: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
-	81,  // 179: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
-	83,  // 180: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
-	85,  // 181: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
-	90,  // 182: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
-	92,  // 183: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
-	94,  // 184: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
-	96,  // 185: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
-	98,  // 186: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
-	100, // 187: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
-	87,  // 188: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
-	106, // 189: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
-	108, // 190: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
-	110, // 191: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
-	113, // 192: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
-	115, // 193: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
-	117, // 194: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
-	134, // 195: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
-	136, // 196: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
-	138, // 197: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
-	140, // 198: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
-	142, // 199: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
-	144, // 200: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
-	146, // 201: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
-	148, // 202: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
-	150, // 203: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
-	152, // 204: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
-	154, // 205: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
-	156, // 206: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
-	158, // 207: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
-	161, // 208: vx.v1.OrgService.GrantSupport:input_type -> vx.v1.GrantSupportRequest
-	163, // 209: vx.v1.OrgService.RevokeSupport:input_type -> vx.v1.RevokeSupportRequest
-	165, // 210: vx.v1.OrgService.ListSupport:input_type -> vx.v1.ListSupportRequest
-	167, // 211: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
-	169, // 212: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
-	171, // 213: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
-	173, // 214: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
-	175, // 215: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
-	183, // 216: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
-	185, // 217: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
-	187, // 218: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
-	194, // 219: vx.v1.ReviewService.ListReviews:input_type -> vx.v1.ListReviewsRequest
-	196, // 220: vx.v1.ReviewService.GetReview:input_type -> vx.v1.GetReviewRequest
-	198, // 221: vx.v1.ReviewService.ApproveReview:input_type -> vx.v1.ApproveReviewRequest
-	200, // 222: vx.v1.ReviewService.RejectReview:input_type -> vx.v1.RejectReviewRequest
-	33,  // 223: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
-	35,  // 224: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
-	25,  // 225: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
-	27,  // 226: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
-	29,  // 227: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
-	31,  // 228: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
-	21,  // 229: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
-	17,  // 230: vx.v1.AuthService.GetAgent:output_type -> vx.v1.GetAgentResponse
-	19,  // 231: vx.v1.AuthService.SetAgentScope:output_type -> vx.v1.SetAgentScopeResponse
-	37,  // 232: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
-	39,  // 233: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
-	41,  // 234: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
-	43,  // 235: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
-	48,  // 236: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
-	50,  // 237: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
-	52,  // 238: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
-	46,  // 239: vx.v1.RepoService.SetRepoHost:output_type -> vx.v1.SetRepoHostResponse
-	54,  // 240: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
-	56,  // 241: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
-	58,  // 242: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
-	191, // 243: vx.v1.EffortService.CloseEffort:output_type -> vx.v1.CloseEffortResponse
-	178, // 244: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
-	60,  // 245: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
-	62,  // 246: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
-	122, // 247: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
-	124, // 248: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
-	126, // 249: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
-	128, // 250: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
-	66,  // 251: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
-	68,  // 252: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
-	70,  // 253: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
-	72,  // 254: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
-	74,  // 255: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
-	64,  // 256: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
-	82,  // 257: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
-	84,  // 258: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
-	86,  // 259: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
-	91,  // 260: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
-	93,  // 261: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
-	95,  // 262: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
-	97,  // 263: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
-	99,  // 264: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
-	102, // 265: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
-	88,  // 266: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
-	107, // 267: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
-	109, // 268: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
-	111, // 269: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
-	114, // 270: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
-	116, // 271: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
-	118, // 272: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
-	135, // 273: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
-	137, // 274: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
-	139, // 275: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
-	141, // 276: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
-	143, // 277: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
-	145, // 278: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
-	147, // 279: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
-	149, // 280: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
-	151, // 281: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
-	153, // 282: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
-	155, // 283: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
-	157, // 284: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
-	159, // 285: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
-	162, // 286: vx.v1.OrgService.GrantSupport:output_type -> vx.v1.GrantSupportResponse
-	164, // 287: vx.v1.OrgService.RevokeSupport:output_type -> vx.v1.RevokeSupportResponse
-	166, // 288: vx.v1.OrgService.ListSupport:output_type -> vx.v1.ListSupportResponse
-	168, // 289: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
-	170, // 290: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
-	172, // 291: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
-	174, // 292: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
-	176, // 293: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
-	184, // 294: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
-	186, // 295: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
-	189, // 296: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
-	195, // 297: vx.v1.ReviewService.ListReviews:output_type -> vx.v1.ListReviewsResponse
-	197, // 298: vx.v1.ReviewService.GetReview:output_type -> vx.v1.GetReviewResponse
-	199, // 299: vx.v1.ReviewService.ApproveReview:output_type -> vx.v1.ApproveReviewResponse
-	201, // 300: vx.v1.ReviewService.RejectReview:output_type -> vx.v1.RejectReviewResponse
-	223, // [223:301] is the sub-list for method output_type
-	145, // [145:223] is the sub-list for method input_type
-	145, // [145:145] is the sub-list for extension type_name
-	145, // [145:145] is the sub-list for extension extendee
-	0,   // [0:145] is the sub-list for field type_name
+	89,  // 74: vx.v1.InboxResponse.for_agents:type_name -> vx.v1.Note
+	89,  // 75: vx.v1.ContextResponse.notes:type_name -> vx.v1.Note
+	101, // 76: vx.v1.ContextResponse.working:type_name -> vx.v1.ContextWorkspace
+	9,   // 77: vx.v1.ContextResponse.recent_changes:type_name -> vx.v1.Changeset
+	105, // 78: vx.v1.ContextResponse.claims:type_name -> vx.v1.Claim
+	103, // 79: vx.v1.ContextResponse.other_efforts:type_name -> vx.v1.OtherEffort
+	104, // 80: vx.v1.ContextResponse.overlaps:type_name -> vx.v1.Overlap
+	105, // 81: vx.v1.OtherEffort.claims:type_name -> vx.v1.Claim
+	89,  // 82: vx.v1.OtherEffort.notes:type_name -> vx.v1.Note
+	101, // 83: vx.v1.OtherEffort.working:type_name -> vx.v1.ContextWorkspace
+	12,  // 84: vx.v1.Overlap.warnings:type_name -> vx.v1.Warning
+	0,   // 85: vx.v1.Claim.owner:type_name -> vx.v1.Principal
+	105, // 86: vx.v1.ClaimResponse.claim:type_name -> vx.v1.Claim
+	105, // 87: vx.v1.ClaimResponse.overlapping:type_name -> vx.v1.Claim
+	105, // 88: vx.v1.ReleaseResponse.released:type_name -> vx.v1.Claim
+	105, // 89: vx.v1.ListClaimsResponse.claims:type_name -> vx.v1.Claim
+	0,   // 90: vx.v1.Task.owner:type_name -> vx.v1.Principal
+	0,   // 91: vx.v1.Task.created_by:type_name -> vx.v1.Principal
+	112, // 92: vx.v1.AddTaskResponse.task:type_name -> vx.v1.Task
+	112, // 93: vx.v1.UpdateTaskResponse.task:type_name -> vx.v1.Task
+	112, // 94: vx.v1.UpdateTaskResponse.unblocked:type_name -> vx.v1.Task
+	112, // 95: vx.v1.ListTasksResponse.tasks:type_name -> vx.v1.Task
+	9,   // 96: vx.v1.Rebase.stopped_at:type_name -> vx.v1.Changeset
+	120, // 97: vx.v1.Rebase.conflicts:type_name -> vx.v1.RebaseConflict
+	119, // 98: vx.v1.RebaseEffortResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 99: vx.v1.RebaseEffortResponse.effort:type_name -> vx.v1.Effort
+	119, // 100: vx.v1.ContinueRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 101: vx.v1.ContinueRebaseResponse.effort:type_name -> vx.v1.Effort
+	119, // 102: vx.v1.AbortRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	3,   // 103: vx.v1.AbortRebaseResponse.effort:type_name -> vx.v1.Effort
+	119, // 104: vx.v1.GetRebaseResponse.rebase:type_name -> vx.v1.Rebase
+	0,   // 105: vx.v1.OrgMember.person:type_name -> vx.v1.Principal
+	0,   // 106: vx.v1.Team.members:type_name -> vx.v1.Principal
+	0,   // 107: vx.v1.RepoAccessEntry.person:type_name -> vx.v1.Principal
+	129, // 108: vx.v1.CreateOrgResponse.org:type_name -> vx.v1.Org
+	129, // 109: vx.v1.ListOrgsResponse.orgs:type_name -> vx.v1.Org
+	129, // 110: vx.v1.GetOrgResponse.org:type_name -> vx.v1.Org
+	130, // 111: vx.v1.GetOrgResponse.members:type_name -> vx.v1.OrgMember
+	131, // 112: vx.v1.GetOrgResponse.teams:type_name -> vx.v1.Team
+	2,   // 113: vx.v1.GetOrgResponse.repos:type_name -> vx.v1.Repo
+	129, // 114: vx.v1.UpdateOrgResponse.org:type_name -> vx.v1.Org
+	130, // 115: vx.v1.SetMemberResponse.member:type_name -> vx.v1.OrgMember
+	131, // 116: vx.v1.CreateTeamResponse.team:type_name -> vx.v1.Team
+	131, // 117: vx.v1.SetTeamMemberResponse.team:type_name -> vx.v1.Team
+	131, // 118: vx.v1.RemoveTeamMemberResponse.team:type_name -> vx.v1.Team
+	132, // 119: vx.v1.GrantRepoResponse.grant:type_name -> vx.v1.RepoGrant
+	132, // 120: vx.v1.RepoAccessResponse.grants:type_name -> vx.v1.RepoGrant
+	133, // 121: vx.v1.RepoAccessResponse.people:type_name -> vx.v1.RepoAccessEntry
+	0,   // 122: vx.v1.SupportGrant.person:type_name -> vx.v1.Principal
+	160, // 123: vx.v1.GrantSupportResponse.grant:type_name -> vx.v1.SupportGrant
+	160, // 124: vx.v1.ListSupportResponse.grants:type_name -> vx.v1.SupportGrant
+	0,   // 125: vx.v1.CreatePersonResponse.person:type_name -> vx.v1.Principal
+	0,   // 126: vx.v1.ListPeopleResponse.people:type_name -> vx.v1.Principal
+	0,   // 127: vx.v1.PollCLILoginResponse.principal:type_name -> vx.v1.Principal
+	104, // 128: vx.v1.ListOverlapsResponse.overlaps:type_name -> vx.v1.Overlap
+	179, // 129: vx.v1.RepoRules.unique:type_name -> vx.v1.UniqueRule
+	180, // 130: vx.v1.RepoRules.generated:type_name -> vx.v1.GeneratedRule
+	182, // 131: vx.v1.RepoRules.policies:type_name -> vx.v1.LandingPolicy
+	181, // 132: vx.v1.GetRulesResponse.rules:type_name -> vx.v1.RepoRules
+	188, // 133: vx.v1.ListReservationsResponse.reservations:type_name -> vx.v1.Reservation
+	3,   // 134: vx.v1.CloseEffortResponse.effort:type_name -> vx.v1.Effort
+	0,   // 135: vx.v1.Review.author:type_name -> vx.v1.Principal
+	6,   // 136: vx.v1.Review.evidence:type_name -> vx.v1.Evidence
+	192, // 137: vx.v1.Review.approvers:type_name -> vx.v1.ApproverList
+	0,   // 138: vx.v1.Review.decided_by:type_name -> vx.v1.Principal
+	8,   // 139: vx.v1.Review.files:type_name -> vx.v1.FileChange
+	193, // 140: vx.v1.ListReviewsResponse.reviews:type_name -> vx.v1.Review
+	193, // 141: vx.v1.GetReviewResponse.review:type_name -> vx.v1.Review
+	193, // 142: vx.v1.ApproveReviewResponse.review:type_name -> vx.v1.Review
+	72,  // 143: vx.v1.ApproveReviewResponse.land:type_name -> vx.v1.LandResponse
+	11,  // 144: vx.v1.ApproveReviewResponse.conflicts:type_name -> vx.v1.Conflict
+	193, // 145: vx.v1.RejectReviewResponse.review:type_name -> vx.v1.Review
+	32,  // 146: vx.v1.AuthService.WhoAmI:input_type -> vx.v1.WhoAmIRequest
+	34,  // 147: vx.v1.AuthService.CreateAgent:input_type -> vx.v1.CreateAgentRequest
+	24,  // 148: vx.v1.AuthService.ListAgents:input_type -> vx.v1.ListAgentsRequest
+	26,  // 149: vx.v1.AuthService.ListTokens:input_type -> vx.v1.ListTokensRequest
+	28,  // 150: vx.v1.AuthService.RevokeToken:input_type -> vx.v1.RevokeTokenRequest
+	30,  // 151: vx.v1.AuthService.CreateToken:input_type -> vx.v1.CreateTokenRequest
+	20,  // 152: vx.v1.AuthService.CreateLoginCode:input_type -> vx.v1.CreateLoginCodeRequest
+	16,  // 153: vx.v1.AuthService.GetAgent:input_type -> vx.v1.GetAgentRequest
+	18,  // 154: vx.v1.AuthService.SetAgentScope:input_type -> vx.v1.SetAgentScopeRequest
+	36,  // 155: vx.v1.ObjectService.MissingObjects:input_type -> vx.v1.MissingObjectsRequest
+	38,  // 156: vx.v1.ObjectService.PutObjects:input_type -> vx.v1.PutObjectsRequest
+	40,  // 157: vx.v1.ObjectService.GetObjects:input_type -> vx.v1.GetObjectsRequest
+	42,  // 158: vx.v1.RepoService.CreateRepo:input_type -> vx.v1.CreateRepoRequest
+	47,  // 159: vx.v1.RepoService.GetRepo:input_type -> vx.v1.GetRepoRequest
+	49,  // 160: vx.v1.RepoService.ListRepos:input_type -> vx.v1.ListReposRequest
+	51,  // 161: vx.v1.RepoService.SyncBranch:input_type -> vx.v1.SyncBranchRequest
+	45,  // 162: vx.v1.RepoService.SetRepoHost:input_type -> vx.v1.SetRepoHostRequest
+	53,  // 163: vx.v1.EffortService.CreateEffort:input_type -> vx.v1.CreateEffortRequest
+	55,  // 164: vx.v1.EffortService.GetEffort:input_type -> vx.v1.GetEffortRequest
+	57,  // 165: vx.v1.EffortService.ListEfforts:input_type -> vx.v1.ListEffortsRequest
+	190, // 166: vx.v1.EffortService.CloseEffort:input_type -> vx.v1.CloseEffortRequest
+	177, // 167: vx.v1.EffortService.ListOverlaps:input_type -> vx.v1.ListOverlapsRequest
+	59,  // 168: vx.v1.EffortService.Log:input_type -> vx.v1.LogRequest
+	61,  // 169: vx.v1.EffortService.GetChangeset:input_type -> vx.v1.GetChangesetRequest
+	121, // 170: vx.v1.EffortService.RebaseEffort:input_type -> vx.v1.RebaseEffortRequest
+	123, // 171: vx.v1.EffortService.ContinueRebase:input_type -> vx.v1.ContinueRebaseRequest
+	125, // 172: vx.v1.EffortService.AbortRebase:input_type -> vx.v1.AbortRebaseRequest
+	127, // 173: vx.v1.EffortService.GetRebase:input_type -> vx.v1.GetRebaseRequest
+	65,  // 174: vx.v1.WorkspaceService.OpenWorkspace:input_type -> vx.v1.OpenWorkspaceRequest
+	67,  // 175: vx.v1.WorkspaceService.GetWorkspace:input_type -> vx.v1.GetWorkspaceRequest
+	69,  // 176: vx.v1.WorkspaceService.SetBase:input_type -> vx.v1.SetBaseRequest
+	71,  // 177: vx.v1.WorkspaceService.Land:input_type -> vx.v1.LandRequest
+	73,  // 178: vx.v1.WorkspaceService.Abandon:input_type -> vx.v1.AbandonRequest
+	63,  // 179: vx.v1.WorkspaceService.ReportChanges:input_type -> vx.v1.ReportChangesRequest
+	81,  // 180: vx.v1.ShipService.PlanShipment:input_type -> vx.v1.PlanShipmentRequest
+	83,  // 181: vx.v1.ShipService.OpenShipment:input_type -> vx.v1.OpenShipmentRequest
+	85,  // 182: vx.v1.ShipService.ListShipments:input_type -> vx.v1.ListShipmentsRequest
+	90,  // 183: vx.v1.BoardService.PostNote:input_type -> vx.v1.PostNoteRequest
+	92,  // 184: vx.v1.BoardService.Ask:input_type -> vx.v1.AskRequest
+	94,  // 185: vx.v1.BoardService.Answer:input_type -> vx.v1.AnswerRequest
+	96,  // 186: vx.v1.BoardService.ListNotes:input_type -> vx.v1.ListNotesRequest
+	98,  // 187: vx.v1.BoardService.Inbox:input_type -> vx.v1.InboxRequest
+	100, // 188: vx.v1.BoardService.Context:input_type -> vx.v1.ContextRequest
+	87,  // 189: vx.v1.BoardService.MarkRead:input_type -> vx.v1.MarkReadRequest
+	106, // 190: vx.v1.CoordinationService.Claim:input_type -> vx.v1.ClaimRequest
+	108, // 191: vx.v1.CoordinationService.Release:input_type -> vx.v1.ReleaseRequest
+	110, // 192: vx.v1.CoordinationService.ListClaims:input_type -> vx.v1.ListClaimsRequest
+	113, // 193: vx.v1.CoordinationService.AddTask:input_type -> vx.v1.AddTaskRequest
+	115, // 194: vx.v1.CoordinationService.UpdateTask:input_type -> vx.v1.UpdateTaskRequest
+	117, // 195: vx.v1.CoordinationService.ListTasks:input_type -> vx.v1.ListTasksRequest
+	134, // 196: vx.v1.OrgService.CreateOrg:input_type -> vx.v1.CreateOrgRequest
+	136, // 197: vx.v1.OrgService.ListOrgs:input_type -> vx.v1.ListOrgsRequest
+	138, // 198: vx.v1.OrgService.GetOrg:input_type -> vx.v1.GetOrgRequest
+	140, // 199: vx.v1.OrgService.UpdateOrg:input_type -> vx.v1.UpdateOrgRequest
+	142, // 200: vx.v1.OrgService.SetMember:input_type -> vx.v1.SetMemberRequest
+	144, // 201: vx.v1.OrgService.RemoveMember:input_type -> vx.v1.RemoveMemberRequest
+	146, // 202: vx.v1.OrgService.CreateTeam:input_type -> vx.v1.CreateTeamRequest
+	148, // 203: vx.v1.OrgService.DeleteTeam:input_type -> vx.v1.DeleteTeamRequest
+	150, // 204: vx.v1.OrgService.SetTeamMember:input_type -> vx.v1.SetTeamMemberRequest
+	152, // 205: vx.v1.OrgService.RemoveTeamMember:input_type -> vx.v1.RemoveTeamMemberRequest
+	154, // 206: vx.v1.OrgService.GrantRepo:input_type -> vx.v1.GrantRepoRequest
+	156, // 207: vx.v1.OrgService.RevokeRepo:input_type -> vx.v1.RevokeRepoRequest
+	158, // 208: vx.v1.OrgService.RepoAccess:input_type -> vx.v1.RepoAccessRequest
+	161, // 209: vx.v1.OrgService.GrantSupport:input_type -> vx.v1.GrantSupportRequest
+	163, // 210: vx.v1.OrgService.RevokeSupport:input_type -> vx.v1.RevokeSupportRequest
+	165, // 211: vx.v1.OrgService.ListSupport:input_type -> vx.v1.ListSupportRequest
+	167, // 212: vx.v1.OrgService.CreatePerson:input_type -> vx.v1.CreatePersonRequest
+	169, // 213: vx.v1.OrgService.ListPeople:input_type -> vx.v1.ListPeopleRequest
+	171, // 214: vx.v1.PublicService.ServerInfo:input_type -> vx.v1.ServerInfoRequest
+	173, // 215: vx.v1.PublicService.StartCLILogin:input_type -> vx.v1.StartCLILoginRequest
+	175, // 216: vx.v1.PublicService.PollCLILogin:input_type -> vx.v1.PollCLILoginRequest
+	183, // 217: vx.v1.RulesService.GetRules:input_type -> vx.v1.GetRulesRequest
+	185, // 218: vx.v1.RulesService.Reserve:input_type -> vx.v1.ReserveRequest
+	187, // 219: vx.v1.RulesService.ListReservations:input_type -> vx.v1.ListReservationsRequest
+	194, // 220: vx.v1.ReviewService.ListReviews:input_type -> vx.v1.ListReviewsRequest
+	196, // 221: vx.v1.ReviewService.GetReview:input_type -> vx.v1.GetReviewRequest
+	198, // 222: vx.v1.ReviewService.ApproveReview:input_type -> vx.v1.ApproveReviewRequest
+	200, // 223: vx.v1.ReviewService.RejectReview:input_type -> vx.v1.RejectReviewRequest
+	33,  // 224: vx.v1.AuthService.WhoAmI:output_type -> vx.v1.WhoAmIResponse
+	35,  // 225: vx.v1.AuthService.CreateAgent:output_type -> vx.v1.CreateAgentResponse
+	25,  // 226: vx.v1.AuthService.ListAgents:output_type -> vx.v1.ListAgentsResponse
+	27,  // 227: vx.v1.AuthService.ListTokens:output_type -> vx.v1.ListTokensResponse
+	29,  // 228: vx.v1.AuthService.RevokeToken:output_type -> vx.v1.RevokeTokenResponse
+	31,  // 229: vx.v1.AuthService.CreateToken:output_type -> vx.v1.CreateTokenResponse
+	21,  // 230: vx.v1.AuthService.CreateLoginCode:output_type -> vx.v1.CreateLoginCodeResponse
+	17,  // 231: vx.v1.AuthService.GetAgent:output_type -> vx.v1.GetAgentResponse
+	19,  // 232: vx.v1.AuthService.SetAgentScope:output_type -> vx.v1.SetAgentScopeResponse
+	37,  // 233: vx.v1.ObjectService.MissingObjects:output_type -> vx.v1.MissingObjectsResponse
+	39,  // 234: vx.v1.ObjectService.PutObjects:output_type -> vx.v1.PutObjectsResponse
+	41,  // 235: vx.v1.ObjectService.GetObjects:output_type -> vx.v1.GetObjectsResponse
+	43,  // 236: vx.v1.RepoService.CreateRepo:output_type -> vx.v1.CreateRepoResponse
+	48,  // 237: vx.v1.RepoService.GetRepo:output_type -> vx.v1.GetRepoResponse
+	50,  // 238: vx.v1.RepoService.ListRepos:output_type -> vx.v1.ListReposResponse
+	52,  // 239: vx.v1.RepoService.SyncBranch:output_type -> vx.v1.SyncBranchResponse
+	46,  // 240: vx.v1.RepoService.SetRepoHost:output_type -> vx.v1.SetRepoHostResponse
+	54,  // 241: vx.v1.EffortService.CreateEffort:output_type -> vx.v1.CreateEffortResponse
+	56,  // 242: vx.v1.EffortService.GetEffort:output_type -> vx.v1.GetEffortResponse
+	58,  // 243: vx.v1.EffortService.ListEfforts:output_type -> vx.v1.ListEffortsResponse
+	191, // 244: vx.v1.EffortService.CloseEffort:output_type -> vx.v1.CloseEffortResponse
+	178, // 245: vx.v1.EffortService.ListOverlaps:output_type -> vx.v1.ListOverlapsResponse
+	60,  // 246: vx.v1.EffortService.Log:output_type -> vx.v1.LogResponse
+	62,  // 247: vx.v1.EffortService.GetChangeset:output_type -> vx.v1.GetChangesetResponse
+	122, // 248: vx.v1.EffortService.RebaseEffort:output_type -> vx.v1.RebaseEffortResponse
+	124, // 249: vx.v1.EffortService.ContinueRebase:output_type -> vx.v1.ContinueRebaseResponse
+	126, // 250: vx.v1.EffortService.AbortRebase:output_type -> vx.v1.AbortRebaseResponse
+	128, // 251: vx.v1.EffortService.GetRebase:output_type -> vx.v1.GetRebaseResponse
+	66,  // 252: vx.v1.WorkspaceService.OpenWorkspace:output_type -> vx.v1.OpenWorkspaceResponse
+	68,  // 253: vx.v1.WorkspaceService.GetWorkspace:output_type -> vx.v1.GetWorkspaceResponse
+	70,  // 254: vx.v1.WorkspaceService.SetBase:output_type -> vx.v1.SetBaseResponse
+	72,  // 255: vx.v1.WorkspaceService.Land:output_type -> vx.v1.LandResponse
+	74,  // 256: vx.v1.WorkspaceService.Abandon:output_type -> vx.v1.AbandonResponse
+	64,  // 257: vx.v1.WorkspaceService.ReportChanges:output_type -> vx.v1.ReportChangesResponse
+	82,  // 258: vx.v1.ShipService.PlanShipment:output_type -> vx.v1.PlanShipmentResponse
+	84,  // 259: vx.v1.ShipService.OpenShipment:output_type -> vx.v1.OpenShipmentResponse
+	86,  // 260: vx.v1.ShipService.ListShipments:output_type -> vx.v1.ListShipmentsResponse
+	91,  // 261: vx.v1.BoardService.PostNote:output_type -> vx.v1.PostNoteResponse
+	93,  // 262: vx.v1.BoardService.Ask:output_type -> vx.v1.AskResponse
+	95,  // 263: vx.v1.BoardService.Answer:output_type -> vx.v1.AnswerResponse
+	97,  // 264: vx.v1.BoardService.ListNotes:output_type -> vx.v1.ListNotesResponse
+	99,  // 265: vx.v1.BoardService.Inbox:output_type -> vx.v1.InboxResponse
+	102, // 266: vx.v1.BoardService.Context:output_type -> vx.v1.ContextResponse
+	88,  // 267: vx.v1.BoardService.MarkRead:output_type -> vx.v1.MarkReadResponse
+	107, // 268: vx.v1.CoordinationService.Claim:output_type -> vx.v1.ClaimResponse
+	109, // 269: vx.v1.CoordinationService.Release:output_type -> vx.v1.ReleaseResponse
+	111, // 270: vx.v1.CoordinationService.ListClaims:output_type -> vx.v1.ListClaimsResponse
+	114, // 271: vx.v1.CoordinationService.AddTask:output_type -> vx.v1.AddTaskResponse
+	116, // 272: vx.v1.CoordinationService.UpdateTask:output_type -> vx.v1.UpdateTaskResponse
+	118, // 273: vx.v1.CoordinationService.ListTasks:output_type -> vx.v1.ListTasksResponse
+	135, // 274: vx.v1.OrgService.CreateOrg:output_type -> vx.v1.CreateOrgResponse
+	137, // 275: vx.v1.OrgService.ListOrgs:output_type -> vx.v1.ListOrgsResponse
+	139, // 276: vx.v1.OrgService.GetOrg:output_type -> vx.v1.GetOrgResponse
+	141, // 277: vx.v1.OrgService.UpdateOrg:output_type -> vx.v1.UpdateOrgResponse
+	143, // 278: vx.v1.OrgService.SetMember:output_type -> vx.v1.SetMemberResponse
+	145, // 279: vx.v1.OrgService.RemoveMember:output_type -> vx.v1.RemoveMemberResponse
+	147, // 280: vx.v1.OrgService.CreateTeam:output_type -> vx.v1.CreateTeamResponse
+	149, // 281: vx.v1.OrgService.DeleteTeam:output_type -> vx.v1.DeleteTeamResponse
+	151, // 282: vx.v1.OrgService.SetTeamMember:output_type -> vx.v1.SetTeamMemberResponse
+	153, // 283: vx.v1.OrgService.RemoveTeamMember:output_type -> vx.v1.RemoveTeamMemberResponse
+	155, // 284: vx.v1.OrgService.GrantRepo:output_type -> vx.v1.GrantRepoResponse
+	157, // 285: vx.v1.OrgService.RevokeRepo:output_type -> vx.v1.RevokeRepoResponse
+	159, // 286: vx.v1.OrgService.RepoAccess:output_type -> vx.v1.RepoAccessResponse
+	162, // 287: vx.v1.OrgService.GrantSupport:output_type -> vx.v1.GrantSupportResponse
+	164, // 288: vx.v1.OrgService.RevokeSupport:output_type -> vx.v1.RevokeSupportResponse
+	166, // 289: vx.v1.OrgService.ListSupport:output_type -> vx.v1.ListSupportResponse
+	168, // 290: vx.v1.OrgService.CreatePerson:output_type -> vx.v1.CreatePersonResponse
+	170, // 291: vx.v1.OrgService.ListPeople:output_type -> vx.v1.ListPeopleResponse
+	172, // 292: vx.v1.PublicService.ServerInfo:output_type -> vx.v1.ServerInfoResponse
+	174, // 293: vx.v1.PublicService.StartCLILogin:output_type -> vx.v1.StartCLILoginResponse
+	176, // 294: vx.v1.PublicService.PollCLILogin:output_type -> vx.v1.PollCLILoginResponse
+	184, // 295: vx.v1.RulesService.GetRules:output_type -> vx.v1.GetRulesResponse
+	186, // 296: vx.v1.RulesService.Reserve:output_type -> vx.v1.ReserveResponse
+	189, // 297: vx.v1.RulesService.ListReservations:output_type -> vx.v1.ListReservationsResponse
+	195, // 298: vx.v1.ReviewService.ListReviews:output_type -> vx.v1.ListReviewsResponse
+	197, // 299: vx.v1.ReviewService.GetReview:output_type -> vx.v1.GetReviewResponse
+	199, // 300: vx.v1.ReviewService.ApproveReview:output_type -> vx.v1.ApproveReviewResponse
+	201, // 301: vx.v1.ReviewService.RejectReview:output_type -> vx.v1.RejectReviewResponse
+	224, // [224:302] is the sub-list for method output_type
+	146, // [146:224] is the sub-list for method input_type
+	146, // [146:146] is the sub-list for extension type_name
+	146, // [146:146] is the sub-list for extension extendee
+	0,   // [0:146] is the sub-list for field type_name
 }
 
 func init() { file_vx_v1_vx_proto_init() }
