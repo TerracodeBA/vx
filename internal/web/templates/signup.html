@@ -1,0 +1,13 @@
+{{define "content"}}
+<section class="login-card signup-card">
+  <div class="brand brand-lg"><span class="brand-mark">vx</span><span class="brand-text"><span class="brand-name">vx workbench</span><span class="brand-sub">agents in front of git</span></span></div>
+  <h1>Create a new vx account?</h1>
+  <p>You are about to create a new vx account for GitHub <strong class="mono">{{.Login}}</strong>{{if and .Name (ne .Name .Login)}} ({{.Name}}){{end}}.</p>
+  <p class="muted small">GitHub signed this browser in as {{.Login}}, and no vx account belongs to that GitHub account yet. If you have used vx before with another GitHub account, do not continue: switch accounts first, or the new account starts empty.</p>
+  <form method="post" action="/auth/github/signup" class="confirm-actions">
+    <button class="btn primary" type="submit">Continue</button>
+    <a class="btn ghost" href="{{.SwitchURL}}" rel="noreferrer">Not you? Switch GitHub account</a>
+  </form>
+  <p class="muted small">Switching: GitHub keeps its own session, separate from vx. Sign out on GitHub (or pick the other account in GitHub's account switcher), then <a href="{{.Retry}}">sign in to vx with GitHub again</a>. Nothing is created until you choose Continue.</p>
+</section>
+{{end}}

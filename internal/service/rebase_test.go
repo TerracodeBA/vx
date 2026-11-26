@@ -21,7 +21,7 @@ func (e *env) moveMain(repo store.Repo, intent string, files map[string]*string)
 	cs := &object.Changeset{
 		Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Parents: []hash.Hash{b.Head},
 		Tree: e.snapshot(repo, b.Head, files), Origin: object.OriginUpstream,
-		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: intent, CreatedAt: e.svc.Now(),
+		Author: object.Author{Name: "Bob", Email: "bob@example.com"}, Intent: intent, CreatedAt: e.svc.Clock(),
 	}
 	h, err := e.svc.Store.InsertChangeset(e.ctx, repo.ID, nil, cs, nil)
 	if err != nil {

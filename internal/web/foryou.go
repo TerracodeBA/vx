@@ -82,11 +82,18 @@ func (u *UI) forYou(w http.ResponseWriter, r *http.Request, actor service.Actor)
 	case "rejected":
 		flash = "Rejected. The author's agent sees why in vx inbox."
 	}
-	u.render(w, r, "foryou", map[string]any{
-		"Actor": actor, "Title": "For you", "Section": "foryou", "Rows": forYouRows(f, actor), "Counts": f.Counts,
+	rows := forYouRows(f, actor)
+	data := map[string]any{
+		"Actor": actor, "Title": "For you", "Section": "foryou", "Rows": rows, "Counts": f.Counts,
 		"Flash": flash, "IsHuman": actor.Kind == store.KindHuman,
 		"OnEfforts": f.Counts[service.ForYouOverlap] + f.Counts[service.ForYouRebase],
-	})
+	}
+	if len(rows) == 0 {
+		if ids, _, err := u.svc.ReadableRepoIDs(r.Context(), actor); err == nil && len(ids) == 0 {
+			data["Access"] = u.accessHelp(r, actor)
+		}
+	}
+	u.render(w, r, "foryou", data)
 }
 
 // forYouAnswerPost answers a question from the For you page.

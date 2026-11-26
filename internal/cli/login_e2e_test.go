@@ -319,7 +319,8 @@ func TestLoginOldServerWithoutBrowserLogin(t *testing.T) {
 
 // TestLoginWithGitHubOneFlow is the whole path for someone new: vx login
 // opens the approval page, the browser is sent to sign in, signs in with
-// GitHub (which creates the account), comes back to the same page, and
+// GitHub (which, after "create a new vx account?", creates the account),
+// comes back to the same page, and
 // approves; vx is then logged in as that person.
 func TestLoginWithGitHubOneFlow(t *testing.T) {
 	st := storetest.New(t)
@@ -351,6 +352,12 @@ func TestLoginWithGitHubOneFlow(t *testing.T) {
 		}
 		page, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		// A new GitHub user is asked before vx creates the account.
+		if !strings.Contains(string(page), "You are about to create a new vx account for GitHub") {
+			t.Fatalf("sign-up did not ask first:\n%s", page)
+		}
+		_, cont := b.post("/auth/github/signup", url.Values{}, srv.URL)
+		page = []byte(cont)
 		if !strings.Contains(string(page), "url="+html.EscapeString(next.Get("next"))) {
 			t.Fatalf("after GitHub the browser does not go back to the approval page:\n%s", page)
 		}

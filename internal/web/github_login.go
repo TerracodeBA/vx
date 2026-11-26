@@ -112,7 +112,7 @@ func (u *UI) setFlowCookie(w http.ResponseWriter, r *http.Request, value string,
 func (u *UI) mountGitHub(mux *http.ServeMux) {
 	// The pages share the layout and functions of the others: clone a
 	// parsed page and swap in their content.
-	for _, page := range []string{"github", "welcome"} {
+	for _, page := range []string{"github", "welcome", "signup"} {
 		t, err := u.pages["login"].Clone()
 		if err == nil {
 			t, err = t.ParseFS(assets, "templates/"+page+".html")
@@ -124,6 +124,8 @@ func (u *UI) mountGitHub(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /ui/login/github", u.gitHubStart)
 	mux.HandleFunc("GET "+service.GitHubCallbackPath, u.gitHubCallback)
+	mux.HandleFunc("GET "+gitHubSignupPath, u.gitHubSignupPage)
+	mux.HandleFunc("POST "+gitHubSignupPath, u.gitHubSignupPost)
 	mux.HandleFunc("POST /ui/settings/github", u.auth(u.gitHubLinkPost))
 	mux.HandleFunc("GET /ui/welcome", u.auth(u.welcome))
 	mux.HandleFunc("POST /ui/welcome", u.auth(u.welcomePost))
@@ -211,17 +213,143 @@ func (u *UI) gitHubCallback(w http.ResponseWriter, r *http.Request) {
 		u.gitHubLinkFinish(w, r, flow, q.Get("code"))
 		return
 	}
-	p, token, isNew, err := u.svc.GitHubSignInFinish(r.Context(), q.Get("code"), flow.Verifier)
+	gu, err := u.svc.GitHubSignInUser(r.Context(), q.Get("code"), flow.Verifier)
+	if err != nil {
+		u.gitHubFailErr(w, r, err, retry)
+		return
+	}
+	confirm, err := u.svc.GitHubSignupNeedsConfirm(r.Context(), gu)
+	if err != nil {
+		u.gitHubFailErr(w, r, err, retry)
+		return
+	}
+	if confirm {
+		// Ask before creating an account: the GitHub account this browser
+		// is signed in to may not be the one the person meant.
+		u.setSignupCookie(w, r, u.sealSignup(gitHubSignup{User: gu, Next: flow.Next, Expires: time.Now().Add(gitHubFlowTTL).Unix()}), int(gitHubFlowTTL/time.Second))
+		http.Redirect(w, r, gitHubSignupPath, http.StatusSeeOther)
+		return
+	}
+	u.gitHubSignInAs(w, r, gu, flow.Next, retry)
+}
+
+// gitHubSignInAs signs the browser in as GitHub user gu and moves on to
+// next (the welcome page for a new account).
+func (u *UI) gitHubSignInAs(w http.ResponseWriter, r *http.Request, gu service.GitHubUser, next, retry string) {
+	p, token, isNew, err := u.svc.GitHubSignInAs(r.Context(), gu)
 	if err != nil {
 		u.gitHubFailErr(w, r, err, retry)
 		return
 	}
 	setSession(w, r, token)
-	dest := safeNext(flow.Next)
+	dest := safeNext(next)
 	if isNew && dest == "/ui" {
 		dest = "/ui/welcome"
 	}
 	u.gitHubContinue(w, r, dest, p.DisplayName)
+}
+
+// ---------- confirming a new account ----------
+
+// gitHubSignupPath asks "create a new vx account for GitHub LOGIN?" (GET)
+// and creates it on Continue (POST). It is under /auth/github, where the
+// sign-in cookies live.
+const gitHubSignupPath = "/auth/github/signup"
+
+// gitHubSignup is what the signup cookie holds between the callback and
+// Continue: the GitHub user the code was for. It is signed like the flow
+// cookie, so a browser cannot name another GitHub account.
+type gitHubSignup struct {
+	User    service.GitHubUser `json:"u"`
+	Next    string             `json:"n,omitempty"`
+	Expires int64              `json:"e"`
+}
+
+func gitHubSignupCookieName(r *http.Request) string { return gitHubCookieName(r) + "_signup" }
+
+func (u *UI) sealSignup(sg gitHubSignup) string {
+	body, _ := json.Marshal(sg)
+	m := hmac.New(sha256.New, u.gitHubFlowKey())
+	m.Write([]byte("signup\x00"))
+	m.Write(body)
+	return base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
+func (u *UI) openSignup(r *http.Request) (gitHubSignup, bool) {
+	c, err := r.Cookie(gitHubSignupCookieName(r))
+	if err != nil {
+		return gitHubSignup{}, false
+	}
+	body64, sig64, ok := strings.Cut(c.Value, ".")
+	if !ok {
+		return gitHubSignup{}, false
+	}
+	body, err1 := base64.RawURLEncoding.DecodeString(body64)
+	sig, err2 := base64.RawURLEncoding.DecodeString(sig64)
+	if err1 != nil || err2 != nil {
+		return gitHubSignup{}, false
+	}
+	m := hmac.New(sha256.New, u.gitHubFlowKey())
+	m.Write([]byte("signup\x00"))
+	m.Write(body)
+	if !hmac.Equal(sig, m.Sum(nil)) {
+		return gitHubSignup{}, false
+	}
+	var sg gitHubSignup
+	if json.Unmarshal(body, &sg) != nil || sg.User.ID == 0 || sg.User.Login == "" || time.Now().Unix() > sg.Expires {
+		return gitHubSignup{}, false
+	}
+	return sg, true
+}
+
+func (u *UI) setSignupCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	// Lax like the flow cookie: it is set in the redirect chain that
+	// started on github.com and must come along to the page it leads to.
+	http.SetCookie(w, &http.Cookie{
+		Name: gitHubSignupCookieName(r), Value: value, Path: "/auth/github", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: secure(r), MaxAge: maxAge,
+	})
+}
+
+func (u *UI) signupExpired(w http.ResponseWriter, r *http.Request) {
+	u.gitHubFail(w, r, gitHubProblem{Status: http.StatusBadRequest, Title: "Sign-up expired",
+		Message: "This sign-up was started in another browser, more than 10 minutes ago, or was already finished. No account was created. Sign in with GitHub again.",
+		Retry:   "/ui/login/github"})
+}
+
+// gitHubSignupPage asks before a sign-in with GitHub creates an account.
+func (u *UI) gitHubSignupPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	sg, ok := u.openSignup(r)
+	if !ok {
+		u.signupExpired(w, r)
+		return
+	}
+	retry := "/ui/login/github"
+	if sg.Next != "" {
+		retry += "?next=" + url.QueryEscape(safeNext(sg.Next))
+	}
+	u.render(w, r, "signup", map[string]any{"Title": "Create a new account", "Login": sg.User.Login, "Name": sg.User.Name,
+		"SwitchURL": u.svc.GitHubWebURL() + "/logout", "Retry": retry})
+}
+
+// gitHubSignupPost creates the account the signup page asked about.
+func (u *UI) gitHubSignupPost(w http.ResponseWriter, r *http.Request) {
+	if !u.checkOrigin(w, r) {
+		return
+	}
+	sg, ok := u.openSignup(r)
+	if !ok {
+		u.signupExpired(w, r)
+		return
+	}
+	// One use per cookie: Continue twice creates no second account.
+	u.setSignupCookie(w, r, "", -1)
+	retry := "/ui/login/github"
+	if sg.Next != "" {
+		retry += "?next=" + url.QueryEscape(safeNext(sg.Next))
+	}
+	u.gitHubSignInAs(w, r, sg.User, sg.Next, retry)
 }
 
 func (u *UI) gitHubFailErr(w http.ResponseWriter, r *http.Request, err error, retry string) {

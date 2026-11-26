@@ -51,7 +51,10 @@ func TestForYouPage(t *testing.T) {
 	resp, _ := cw.c.Get(e.srv.URL + "/ui/for-you")
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(b), "Nothing waits for you") || strings.Contains(string(b), "acme/shop") || strings.Contains(string(b), e.quest) {
+	// She reads no repository at all, so the page says who is signed in
+	// and why it is empty (#44).
+	if !strings.Contains(string(b), "You are signed in as <strong class=\"mono\">carol</strong>") || !strings.Contains(string(b), "This account cannot read any repositories.") ||
+		strings.Contains(string(b), "Nothing waits for you") || strings.Contains(string(b), "acme/shop") || strings.Contains(string(b), e.quest) {
 		t.Fatalf("carol sees acme/shop on For you:\n%s", b)
 	}
 

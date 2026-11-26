@@ -46,7 +46,7 @@ func TestRebaseShownInEffortAndChangePages(t *testing.T) {
 	// main gets the same file differently: the rebase stops on it.
 	b, _ := e.st.GetBranch(e.ctx, repo.ID, "main")
 	up := &object.Changeset{Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Parents: []hash.Hash{b.Head},
-		Tree: write(b.Head, "limit.go", "package limit // main\n"), Origin: object.OriginUpstream, Intent: "Limiter on main", CreatedAt: e.svc.Now()}
+		Tree: write(b.Head, "limit.go", "package limit // main\n"), Origin: object.OriginUpstream, Intent: "Limiter on main", CreatedAt: e.svc.Clock()}
 	uh, err := e.st.InsertChangeset(e.ctx, repo.ID, nil, up, nil)
 	if err != nil {
 		t.Fatal(err)

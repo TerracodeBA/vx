@@ -197,7 +197,7 @@ func TestReserveAndRulesCommands(t *testing.T) {
 	alice.must("land")
 
 	out := alice.must("reserve", "migration")
-	if !strings.Contains(out, "Reserved migration 017 for this effort: name it db/migrations/017_<name>.sql") {
+	if !strings.Contains(out, "Reserved migration 017 for this effort: name it db/migrations/017_<name>.sql") || !strings.Contains(out, "reservation order, not run order") {
 		t.Fatalf("reserve:\n%s", out)
 	}
 	var res struct{ Value, Example string }

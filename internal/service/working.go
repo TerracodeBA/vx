@@ -43,7 +43,7 @@ func (s *Service) ReportChanges(ctx context.Context, actor Actor, workspaceID uu
 	if len(clean) > MaxReportedPaths {
 		clean = clean[:MaxReportedPaths]
 	}
-	return s.Store.SetWorkspaceChangedPaths(ctx, workspaceID, clean, s.Now())
+	return s.Store.SetWorkspaceChangedPaths(ctx, workspaceID, clean, s.Clock())
 }
 
 // contextWorking lists open workspaces for Context: those on the targets

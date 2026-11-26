@@ -103,7 +103,9 @@ type Service struct {
 	Shipper  Shipper        // nil: shipping disabled
 	// Hosts configures GitLab, Gitea, Forgejo and Bitbucket webhooks.
 	Hosts HostSettings
-	Now   func() time.Time
+	// Now overrides the clock, for tests; nil means time.Now. Read the
+	// time with Clock, never by calling Now.
+	Now func() time.Time
 	// MaxLandAttempts bounds compare-and-swap retries when several agents
 	// land into the same effort at once.
 	MaxLandAttempts int
@@ -188,4 +190,15 @@ func (a Actor) OnBehalfOf() string {
 		return a.Parent.Ref()
 	}
 	return ""
+}
+
+// Clock is the service's one clock: Now when set, else the wall clock.
+// Every time the service stores or compares goes through it, so a test
+// that sets Now sees one consistent time, and one that sets Now to nil
+// still works.
+func (s *Service) Clock() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }

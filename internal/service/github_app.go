@@ -344,7 +344,7 @@ func (s *Service) GitHubSetupManifest(ctx context.Context, actor Actor) (manifes
 	if err != nil {
 		return nil, "", err
 	}
-	state, err = s.signManifestState(actor.Human().ID, s.Now().Add(githubManifestStateTTL))
+	state, err = s.signManifestState(actor.Human().ID, s.Clock().Add(githubManifestStateTTL))
 	return manifest, state, err
 }
 
@@ -426,7 +426,7 @@ func (s *Service) checkManifestState(person uuid.UUID, state string) error {
 	if !hmac.Equal(mac, want) || !hmac.Equal(payload[:16], person[:]) {
 		return bad
 	}
-	if s.Now().Unix() > int64(binary.BigEndian.Uint64(payload[16:24])) {
+	if s.Clock().Unix() > int64(binary.BigEndian.Uint64(payload[16:24])) {
 		return bad
 	}
 	return nil

@@ -142,7 +142,7 @@ func (s *Service) SubscribePush(ctx context.Context, actor Actor, in PushSubscri
 	}
 	return s.Store.SavePushSubscription(ctx, store.PushSubscription{
 		PrincipalID: actor.ID, Endpoint: sub.Endpoint, P256dh: sub.P256dh, Auth: sub.Auth,
-		Device: pushClip(in.Device, 80), CreatedAt: s.Now(),
+		Device: pushClip(in.Device, 80), CreatedAt: s.Clock(),
 	})
 }
 
@@ -206,7 +206,7 @@ func (s *Service) pushSender(ctx context.Context) (*webpush.Sender, error) {
 	if !strings.HasPrefix(subject, "https://") {
 		subject = "https://github.com/TerracodeBA/vx"
 	}
-	return &webpush.Sender{Key: k, Subject: subject, Client: s.Push.Client, Now: s.Now}, nil
+	return &webpush.Sender{Key: k, Subject: subject, Client: s.Push.Client, Now: s.Clock}, nil
 }
 
 // pushTo sends one message to one browser and records the outcome; a
@@ -222,9 +222,9 @@ func (s *Service) pushTo(ctx context.Context, sender *webpush.Sender, sub store.
 	case errors.Is(err, webpush.ErrGone):
 		return errors.Join(err, s.Store.DeletePushSubscriptionByID(ctx, sub.ID))
 	case err != nil:
-		return errors.Join(err, s.Store.MarkPushResult(ctx, sub.ID, s.Now(), pushClip(err.Error(), 300)))
+		return errors.Join(err, s.Store.MarkPushResult(ctx, sub.ID, s.Clock(), pushClip(err.Error(), 300)))
 	}
-	return s.Store.MarkPushResult(ctx, sub.ID, s.Now(), "")
+	return s.Store.MarkPushResult(ctx, sub.ID, s.Clock(), "")
 }
 
 // topic is a push Topic header from a tag: up to 32 URL-safe characters.
@@ -325,7 +325,7 @@ func (s *Service) NotifyPush(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	now := s.Now()
+	now := s.Clock()
 	sent := 0
 	var errs []error
 	for _, id := range ids {

@@ -256,6 +256,12 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, page string, data ma
 				data["DiskLow"] = d
 			}
 			data["NavWelcome"] = u.svc.ShowWelcome(r.Context(), a)
+			// Which account is signed in, with its GitHub login, on every
+			// page: a second GitHub account in the browser makes a second
+			// vx account, and the sidebar is where that shows.
+			if l, ok, err := u.svc.GitHubLinkOf(r.Context(), a); err == nil && ok {
+				data["NavGitHub"] = l.Login
+			}
 			if notices, err := u.svc.AgreementNotices(r.Context(), a); err == nil && len(notices) > 0 {
 				data["AgreementNotices"] = notices[:min(len(notices), 3)]
 			}
@@ -401,7 +407,11 @@ func (u *UI) home(w http.ResponseWriter, r *http.Request, actor service.Actor) {
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].UpdatedAt.After(all[j].UpdatedAt) })
-	u.render(w, r, "home", map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts", "Finished": finished, "ShowFinished": showFinished})
+	data := map[string]any{"Actor": actor, "Repos": rows, "All": all, "Working": working, "Changes": changes, "Title": "Efforts", "Finished": finished, "ShowFinished": showFinished}
+	if len(repos) == 0 {
+		data["Access"] = u.accessHelp(r, actor)
+	}
+	u.render(w, r, "home", data)
 }
 
 // overlapCounts is the forecast badge data of a repository's efforts; on
@@ -676,7 +686,7 @@ func (u *UI) claimRows(r *http.Request, actor service.Actor, repo, slug string, 
 	if err != nil {
 		return nil
 	}
-	now := u.svc.Now()
+	now := u.svc.Clock()
 	out := make([]claimRow, 0, len(cs))
 	for _, c := range cs {
 		owner := c.Owner.Ref()

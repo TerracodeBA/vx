@@ -211,7 +211,7 @@ func (s *Service) PruneAudit(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	ret = max(ret, MinAuditRetention)
-	cut := s.Now().Add(-ret)
+	cut := s.Clock().Add(-ret)
 	var total int64
 	for {
 		n, err := s.Store.DeleteOpsBefore(ctx, cut, 5000)

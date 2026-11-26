@@ -13,12 +13,14 @@
   <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{.Working}}</span></div>
 </div>
 {{if not .Repos}}
+{{if .Access}}{{template "noaccess" .}}{{else}}
 <div class="panel empty">
   <h2>No repositories yet</h2>
   <p class="muted">Connect one from the command line:</p>
   <pre class="code">vx repo create acme/shop-api --github acme/shop-api
 vx effort new "Rate limiting" --repo acme/shop-api</pre>
 </div>
+{{end}}
 {{else}}
 <div class="panel">
   <div class="panel-head"><h2>Efforts</h2></div>

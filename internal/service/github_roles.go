@@ -137,7 +137,7 @@ func (s *Service) githubRoles(ctx context.Context, sub githubSubject, repos []st
 		}
 		return roles, errs
 	}
-	now := s.now()
+	now := s.Clock()
 	var ask []store.Repo
 	for _, r := range repos {
 		if r.GitHubInstallationID == nil {
@@ -208,7 +208,7 @@ func (s *Service) askGitHubRole(ctx context.Context, sub githubSubject, r store.
 		perm = "none" // public repositories give read to everyone; only explicit grants count
 	}
 	role := RoleFromGitHub(perm)
-	if err := s.Store.PutGitHubRole(ctx, r.ID, sub.person.ID, string(role), s.now()); err != nil {
+	if err := s.Store.PutGitHubRole(ctx, r.ID, sub.person.ID, string(role), s.Clock()); err != nil {
 		log.Printf("github roles: caching %s on %s: %v", sub.person.Ref(), r.Name, err)
 	}
 	return role, nil
@@ -228,13 +228,6 @@ func githubRepoName(r store.Repo) (owner, name string) {
 	}
 	owner, name, _ = strings.Cut(full, "/")
 	return owner, name
-}
-
-func (s *Service) now() time.Time {
-	if s.Now != nil {
-		return s.Now()
-	}
-	return time.Now()
 }
 
 // githubInstallations reads every installation by id. There are few.
@@ -299,7 +292,7 @@ func (s *Service) githubMemberships(ctx context.Context, sub githubSubject, repo
 // orgMembership is sub's membership in the organization of inst, from the
 // cache or GitHub; a fresh answer also updates the linked vx organization.
 func (s *Service) orgMembership(ctx context.Context, sub githubSubject, inst store.GitHubInstallationRow, cached map[int64]store.CachedRole) membership {
-	now := s.now()
+	now := s.Clock()
 	c, hit := cached[inst.AccountID]
 	if hit && now.Sub(c.CheckedAt) < GitHubRoleTTL {
 		return membership{member: c.Role != "", role: c.Role}
@@ -426,7 +419,7 @@ func (s *Service) ApplyGitHubOrgMembership(ctx context.Context, githubOrgID, git
 	if role != "admin" && role != "member" {
 		role = ""
 	}
-	if err := s.Store.PutGitHubMembership(ctx, githubOrgID, p.ID, role, s.now()); err != nil {
+	if err := s.Store.PutGitHubMembership(ctx, githubOrgID, p.ID, role, s.Clock()); err != nil {
 		return err
 	}
 	return s.applyOrgMembership(ctx, githubOrgID, p, role)
@@ -566,7 +559,7 @@ func (s *Service) githubRepoAccess(ctx context.Context, r store.Repo, rows []sto
 		sub := grantSubject{principal: g.Principal, team: g.Team}
 		grants = append(grants, RepoGrant{Repo: r.Name, Subject: sub.ref(), Role: RepoRole(g.Role)})
 	}
-	facts, err := s.Store.GitHubAccessFacts(ctx, r.ID, s.now().Add(-GitHubRoleTTL))
+	facts, err := s.Store.GitHubAccessFacts(ctx, r.ID, s.Clock().Add(-GitHubRoleTTL))
 	if err != nil {
 		return nil, nil, err
 	}

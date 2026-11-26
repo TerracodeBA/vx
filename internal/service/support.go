@@ -130,12 +130,12 @@ func (s *Service) GrantSupport(ctx context.Context, actor Actor, in SupportInput
 		if !p.SiteAdmin {
 			return errf(CodeFailedPrecondition, "%s is not a superadmin of this server; support access is for the people who run it. Give %s a role instead: vx repo grant %s %s --role %s", p.Ref(), p.Ref(), r.Name, p.Ref(), role)
 		}
-		expires := s.now().Add(d).UTC().Truncate(time.Second)
+		expires := s.Clock().Add(d).UTC().Truncate(time.Second)
 		prev, err := tx.SetSupportGrant(ctx, r.ID, p.ID, string(role), expires, reason, &actor.ID)
 		if err != nil {
 			return err
 		}
-		g := store.SupportGrant{RepoID: r.ID, Person: p, Role: string(role), ExpiresAt: expires, Reason: reason, GrantedBy: &actor.Principal, CreatedAt: s.now()}
+		g := store.SupportGrant{RepoID: r.ID, Person: p, Role: string(role), ExpiresAt: expires, Reason: reason, GrantedBy: &actor.Principal, CreatedAt: s.Clock()}
 		out = supportFromStore(r.Name, g)
 		var before any
 		if prev != nil {
@@ -186,7 +186,7 @@ func (s *Service) ListSupport(ctx context.Context, actor Actor, repo string) ([]
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Store.ListSupportGrants(ctx, r.ID, s.now())
+	rows, err := s.Store.ListSupportGrants(ctx, r.ID, s.Clock())
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (s *Service) ListSupport(ctx context.Context, actor Actor, repo string) ([]
 // withSupportAccess adds support grants in effect on r to the access
 // entries.
 func (s *Service) withSupportAccess(ctx context.Context, r store.Repo, entries []AccessEntry) ([]AccessEntry, error) {
-	rows, err := s.Store.ListSupportGrants(ctx, r.ID, s.now())
+	rows, err := s.Store.ListSupportGrants(ctx, r.ID, s.Clock())
 	if err != nil {
 		return nil, err
 	}

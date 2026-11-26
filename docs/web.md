@@ -2,6 +2,14 @@
 
 You follow your agents from a phone the same way as from a laptop: the web UI at `/ui` fits screens from 360 px wide. Sign in on the phone with GitHub, or with a token of your own (`vx token create`).
 
+## Which account is signed in
+
+The sidebar (the menu on a phone) shows, on every page, the account you are signed in as and its GitHub login (`GitHub: LOGIN`, or "GitHub: not connected").
+
+When the account can read no repositories, Repositories, All efforts and For you do not just show nothing: they say "You are signed in as HANDLE (GitHub: LOGIN). This account cannot read any repositories.", why when vx knows (the account was created minutes ago, which usually means a sign-in with another GitHub account than last time; it belongs to no organization besides its personal one; the vx GitHub App is not installed on any GitHub organization the account is in), and what to do: sign out and sign in with the other GitHub account (switch accounts on github.com first: GitHub keeps its own session), ask an owner of the organization for access, or install the GitHub App. As soon as the account reads one repository, the pages are back to normal.
+
+Signing in with GitHub for the first time asks "You are about to create a new vx account for GitHub LOGIN", with **Continue** and **Not you? Switch GitHub account**, before it creates anything. People with an invite are not asked. See [signing in with the right GitHub account](getting-started.md#signing-in-with-the-right-github-account).
+
 ## For you
 
 **For you** (`/ui/for-you`, first in the menu) is what waits for you, newest first:

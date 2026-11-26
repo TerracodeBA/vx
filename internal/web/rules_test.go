@@ -56,7 +56,7 @@ func TestRulesOnRepoAndChangePages(t *testing.T) {
 	storetest.AddTree(t, st, blobs, repo.ID, base.Tree, tree)
 	h, err := st.InsertChangeset(ctx, repo.ID, nil, &object.Changeset{
 		Version: object.CurrentVersion, ChangeID: object.NewChangeID(), Parents: []hash.Hash{main.Head}, Tree: tree,
-		Origin: object.OriginUpstream, Author: object.Author{Name: "Bob"}, Intent: "Rules", CreatedAt: svc.Now(),
+		Origin: object.OriginUpstream, Author: object.Author{Name: "Bob"}, Intent: "Rules", CreatedAt: svc.Clock(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)

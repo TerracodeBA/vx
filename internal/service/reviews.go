@@ -226,7 +226,7 @@ func (s *Service) submitReview(ctx context.Context, actor Actor, v WorkspaceView
 			body := fmt.Sprintf("Waiting for a person to review: %s by %s (%q) changes %s, under a human landing policy in %s. Approve or reject it in the web UI (Reviews) or with vx review approve %s / vx review reject %s --reason TEXT.",
 				ws.ChangeID, actor.Ref(), reviewTitle(intent), joinAnd(d.Paths), rules.File, shortID(rv.ID), shortID(rv.ID))
 			if _, err := tx.InsertNote(ctx, store.Note{EffortID: eff.ID, Kind: string(NoteApproval), Targets: noteTargets(d.Paths),
-				AuthorID: vx.ID, Body: clip(body, MaxNoteBody), State: NoteOpen, CreatedAt: s.Now(), System: true}); err != nil {
+				AuthorID: vx.ID, Body: clip(body, MaxNoteBody), State: NoteOpen, CreatedAt: s.Clock(), System: true}); err != nil {
 				return err
 			}
 		}
@@ -533,7 +533,7 @@ func (s *Service) ApproveReview(ctx context.Context, actor Actor, id string) (Re
 	if err != nil {
 		return ReviewDecision{}, classify(err)
 	}
-	now := s.Now().UTC().Truncate(time.Microsecond)
+	now := s.Clock().UTC().Truncate(time.Microsecond)
 	ev := &object.Evidence{}
 	if r.Evidence != nil {
 		*ev = *r.Evidence
@@ -613,7 +613,7 @@ func (s *Service) RejectReview(ctx context.Context, actor Actor, id, reason stri
 	if err := s.checkDecide(ctx, actor, r); err != nil {
 		return ReviewDecision{}, err
 	}
-	now := s.Now().UTC().Truncate(time.Microsecond)
+	now := s.Clock().UTC().Truncate(time.Microsecond)
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		ok, err := tx.DecideReview(ctx, r.ID, store.ReviewRejected, actor.ID, reason, hash.Zero, now)
 		if err != nil {
@@ -653,7 +653,7 @@ func (s *Service) noteAuthor(ctx context.Context, repo store.Repo, eff store.Eff
 	if err == nil {
 		to := r.AuthorID
 		_, err = s.Store.InsertNote(ctx, store.Note{EffortID: eff.ID, Kind: string(NoteApproval), Targets: noteTargets(paths),
-			AuthorID: vx.ID, ToID: &to, Body: clip(body, MaxNoteBody), State: NoteOpen, CreatedAt: s.Now(), System: true})
+			AuthorID: vx.ID, ToID: &to, Body: clip(body, MaxNoteBody), State: NoteOpen, CreatedAt: s.Clock(), System: true})
 	}
 	if err != nil {
 		slog.Warn("review note", "repo", repo.Name, "effort", eff.Slug, "review", r.ID, "err", err)

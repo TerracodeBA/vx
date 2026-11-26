@@ -213,7 +213,7 @@ func (s *Service) ownWorkspace(ctx context.Context, actor Actor, id uuid.UUID) (
 	}
 	// Its owner is working in it: its claims hold (see WorkspaceIdleAfter).
 	if v.Workspace.State == store.WorkspaceOpen {
-		now := s.Now()
+		now := s.Clock()
 		if err := s.Store.TouchWorkspace(ctx, id, now); err != nil {
 			return v, err
 		}
@@ -258,7 +258,7 @@ func (s *Service) Abandon(ctx context.Context, actor Actor, id uuid.UUID) (Works
 		if err := tx.WithdrawReviews(ctx, id); err != nil {
 			return err
 		}
-		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, id, nil, s.Now()); err != nil {
+		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, id, nil, s.Clock()); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, &v.Repo.ID, &actor.ID, "workspace.abandon", id.String(), nil, nil)

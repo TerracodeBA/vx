@@ -116,6 +116,9 @@ Start here:
   ...edit files...
   vx land`,
 	}
+	// vx --version prints what vx version does.
+	root.Version = version.String()
+	root.SetVersionTemplate("vx {{.Version}}\n")
 	root.PersistentFlags().BoolVar(&a.jsonOut, "json", false, "print JSON instead of text")
 	root.PersistentFlags().StringVarP(&a.chdir, "dir", "C", "", "run as if started in this directory")
 	root.PersistentFlags().StringVar(&a.profile, "profile", "", "use this saved login (see vx profiles; default: VX_PROFILE, else the current one)")

@@ -145,7 +145,7 @@ func cleanClientName(name string) string {
 
 // StartCLILogin begins a browser login for a CLI (no token needed).
 func (s *Service) StartCLILogin(ctx context.Context, clientName string) (CLILogin, error) {
-	now := s.Now()
+	now := s.Clock()
 	ip := clientIP(ctx)
 	// Old rows only matter for the rate limit window; drop them as we go.
 	if err := s.Store.DeleteCLILoginsBefore(ctx, now.Add(-CLILoginRateWindow-time.Hour)); err != nil {
@@ -201,7 +201,7 @@ func (s *Service) PollCLILogin(ctx context.Context, deviceCode string) (status, 
 		return "", "", store.Principal{}, errf(CodeInvalid, "device code is empty")
 	}
 	h := hashDeviceCode(deviceCode)
-	now := s.Now()
+	now := s.Clock()
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		l, err := tx.CLILoginByDevice(ctx, h)
 		if errors.Is(err, store.ErrNotFound) {
@@ -288,7 +288,7 @@ func (s *Service) pendingCLILogin(ctx context.Context, q interface {
 	if err != nil {
 		return store.CLILogin{}, err
 	}
-	if l.Status != CLILoginPending || !s.Now().Before(l.ExpiresAt) {
+	if l.Status != CLILoginPending || !s.Clock().Before(l.ExpiresAt) {
 		return store.CLILogin{}, gone
 	}
 	return l, nil
@@ -316,7 +316,7 @@ func (s *Service) ApproveCLILogin(ctx context.Context, actor Actor, userCode str
 		if approve {
 			to, op = CLILoginApproved, "cli_login.approve"
 		}
-		ok, err := tx.SetCLILoginStatus(ctx, l.DeviceHash, CLILoginPending, to, &actor.ID, s.Now())
+		ok, err := tx.SetCLILoginStatus(ctx, l.DeviceHash, CLILoginPending, to, &actor.ID, s.Clock())
 		if err != nil {
 			return err
 		}

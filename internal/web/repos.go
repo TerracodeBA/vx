@@ -51,8 +51,25 @@ func (u *UI) repos(w http.ResponseWriter, r *http.Request, actor service.Actor) 
 		efforts += row.OpenEfforts
 		rows = append(rows, row)
 	}
-	u.render(w, r, "repos", map[string]any{
+	data := map[string]any{
 		"Actor": actor, "Title": "Repositories", "Rows": rows,
 		"OpenEfforts": efforts, "Working": working, "GitHub": github,
-	})
+	}
+	if len(repos) == 0 {
+		data["Access"] = u.accessHelp(r, actor)
+	}
+	u.render(w, r, "repos", data)
+}
+
+// accessHelp explains an account that reads no repositories (#44): which
+// account is signed in, why it sees nothing and what to do. Callers show
+// it only when the list of readable repositories came back empty. nil when
+// vx cannot say, and the page falls back to its plain empty state.
+func (u *UI) accessHelp(r *http.Request, actor service.Actor) *service.AccessHelp {
+	h, err := u.svc.AccessHelp(r.Context(), actor)
+	if err != nil {
+		u.log.Warn("access help", "actor", actor.Ref(), "err", err)
+		return nil
+	}
+	return &h
 }

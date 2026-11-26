@@ -56,7 +56,7 @@ func TestSuperadminWebNoRepoAccess(t *testing.T) {
 			t.Errorf("superadmin GET %s = %d, want 404", p, code)
 		}
 	}
-	if _, body := e.get("root", "/ui/repos"); !strings.Contains(body, "No repositories yet") || strings.Contains(body, "name="+adminRepo) {
+	if _, body := e.get("root", "/ui/repos"); !strings.Contains(body, "This account cannot read any repositories.") || strings.Contains(body, "name="+adminRepo) {
 		t.Error("the superadmin's repository list shows acme/shop")
 	}
 	// The organization is visible, read-only, without its repositories.

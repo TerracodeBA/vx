@@ -70,7 +70,7 @@ func (s *Service) MakeClaim(ctx context.Context, actor Actor, in ClaimInput) (Cl
 		}
 		wsID = &ws.ID
 	}
-	now := s.Now()
+	now := s.Clock()
 	var row store.Claim
 	var others []store.Claim
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
@@ -117,7 +117,7 @@ func (s *Service) ReleaseClaims(ctx context.Context, actor Actor, id, workspaceI
 	case id != "" && workspaceID != "":
 		return nil, errf(CodeInvalid, "give either a claim id or a workspace, not both")
 	}
-	now := s.Now()
+	now := s.Clock()
 	var rows []store.Claim
 	if id != "" {
 		found, err := s.findClaim(ctx, id)
@@ -197,7 +197,7 @@ func (s *Service) activeClaims(ctx context.Context, q store.Q, effortID uuid.UUI
 	if err := s.lapseIdleClaims(ctx, q, effortID); err != nil {
 		return nil, err
 	}
-	rows, err := q.ActiveClaims(ctx, effortID, s.Now())
+	rows, err := q.ActiveClaims(ctx, effortID, s.Clock())
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (s *Service) landedOverClaims(ctx context.Context, tx *store.Tx, actor Acto
 			actor.Ref(), strings.Join(c.Targets, ", "), c.MovingTo, shortID(c.ID))
 		if _, err := tx.InsertNote(ctx, store.Note{
 			EffortID: effortID, Kind: string(NoteClaim), Targets: append(append([]string{}, c.Targets...), c.MovingTo), AuthorID: vx.ID, ToID: &owner,
-			Body: finishNote(body), State: NoteOpen, CreatedAt: s.Now(), System: true,
+			Body: finishNote(body), State: NoteOpen, CreatedAt: s.Clock(), System: true,
 		}); err != nil {
 			return nil, err
 		}
@@ -354,7 +354,7 @@ func (c *noteCache) claim(ctx context.Context, r store.Claim) (Claim, error) {
 	// A claim tied to an open workspace lasts as long as the workspace: it
 	// is renewed, always at least DefaultClaimTTL ahead, while it is open.
 	if r.WorkspaceOpen && r.ReleasedAt == nil {
-		if renewed := c.s.Now().Add(DefaultClaimTTL); renewed.After(out.ExpiresAt) {
+		if renewed := c.s.Clock().Add(DefaultClaimTTL); renewed.After(out.ExpiresAt) {
 			out.ExpiresAt = renewed
 		}
 	}

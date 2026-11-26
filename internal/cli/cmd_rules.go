@@ -142,7 +142,10 @@ reserving at the same time get different values.
   Reserved migration 017 for this effort: name it internal/store/migrations/017_<name>.sql
 
 Reserve before you add the file, so parallel efforts never pick the same
-number. vx rules lists the rules and reservations.`,
+number. Numbers follow the order of reservations, not the order changes
+land or migrations run: an effort that reserved 017 can ship after one that
+reserved 018, so a migration must not rely on a lower-numbered one from
+another open effort. vx rules lists the rules and reservations.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := a.client()
@@ -166,6 +169,7 @@ number. vx rules lists the rules and reservations.`,
 				whose = "effort " + effort
 			}
 			a.printf("Reserved %s %s for %s: name it %s\n", args[0], resp.Msg.Value, whose, resp.Msg.Example)
+			a.printf("Numbers follow reservation order, not run order: another open effort may ship a lower number after yours.\n")
 			a.emit(map[string]string{"rule": args[0], "value": resp.Msg.Value, "example": resp.Msg.Example, "repo": repo, "effort": effort})
 			return nil
 		},

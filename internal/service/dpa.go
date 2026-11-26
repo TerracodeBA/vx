@@ -215,7 +215,7 @@ func (s *Service) CheckAgreements(ctx context.Context) error {
 	if len(s.Agreement.Versions) == 0 {
 		return errors.New("VX_REQUIRE_DPA is on but no version of the data processing agreement is configured: set VX_DPA_DIR")
 	}
-	now := s.now()
+	now := s.Clock()
 	if cur := s.currentAgreement(now); cur == nil {
 		first := s.Agreement.Versions[0]
 		return fmt.Errorf("VX_REQUIRE_DPA is on but no version of the data processing agreement is in effect yet: the earliest, %s, takes effect %s. Start the server then, or publish a version that is in effect", first.ID, agreementDay(first.Effective))
@@ -278,7 +278,7 @@ func (s *Service) agreementGapOf(ctx context.Context, org uuid.UUID) (*agreement
 	if !s.Agreement.Required {
 		return nil, nil
 	}
-	cur := s.currentAgreement(s.now())
+	cur := s.currentAgreement(s.Clock())
 	if cur == nil {
 		return nil, errf(CodeUnavailable, "no version of the data processing agreement is in effect on this server; the operator publishes one (VX_DPA_DIR)")
 	}
@@ -442,7 +442,7 @@ func (s *Service) OrgAgreement(ctx context.Context, actor Actor, org string) (Ag
 		v.History = append(v.History, rec)
 		byID[x.VersionID] = rec
 	}
-	now := s.now()
+	now := s.Clock()
 	if cur := s.currentAgreement(now); cur != nil {
 		c := *cur
 		v.Current = &c
@@ -478,7 +478,7 @@ func (s *Service) AgreementText(ctx context.Context, actor Actor, org, version s
 	if !s.Agreement.Required {
 		return AgreementVersion{}, errf(CodeFailedPrecondition, "this server does not ask for a data processing agreement")
 	}
-	now := s.now()
+	now := s.Clock()
 	if version == "" {
 		cur := s.currentAgreement(now)
 		if cur == nil {
@@ -532,7 +532,7 @@ func (s *Service) AcceptAgreement(ctx context.Context, actor Actor, org, version
 		}
 		return AgreementRecord{}, errf(CodePermission, "only a person who owns %s accepts the data processing agreement, in the web UI; %s must sign in as themselves", org, who)
 	}
-	now := s.now()
+	now := s.Clock()
 	v, ok := s.agreementVersion(strings.TrimSpace(version))
 	if !ok || v.Published.After(now) {
 		return AgreementRecord{}, errf(CodeNotFound, "the data processing agreement has no version %q on this server", version)
@@ -616,7 +616,7 @@ func (s *Service) AgreementNotices(ctx context.Context, actor Actor) ([]Agreemen
 	for _, a := range acc {
 		have[a.OrgID] = append(have[a.OrgID], a.VersionID)
 	}
-	now := s.now()
+	now := s.Clock()
 	cur := s.currentAgreement(now)
 	announced := s.announcedAgreements(now)
 	var out []AgreementNotice

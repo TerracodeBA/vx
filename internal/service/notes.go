@@ -141,11 +141,24 @@ func (s *Service) boardEffort(ctx context.Context, actor Actor, repo, effort str
 	if repo == "" || effort == "" {
 		return EffortView{}, errf(CodeInvalid, "say which repo and effort the board is in; inside a clone vx fills them in")
 	}
-	v, err := s.effortFor(ctx, actor, repo, effort, need)
+	// A repository the caller cannot read reads exactly like one that does
+	// not exist; only in a readable one does the effort name the repo.
+	r, _, err := s.Authorize(ctx, actor, repo, need)
+	if err != nil {
+		return EffortView{}, err
+	}
+	eff, err := s.Store.GetEffort(ctx, r.ID, effort)
 	if errors.Is(err, store.ErrNotFound) {
 		return EffortView{}, errf(CodeNotFound, "no effort %s in repo %s; `vx effort list --repo %s` shows them", effort, repo, repo)
 	}
-	return v, err
+	if err != nil {
+		return EffortView{}, classify(err)
+	}
+	ws, err := s.Store.ListWorkspaces(ctx, eff.ID, store.WorkspaceOpen)
+	if err != nil {
+		return EffortView{}, err
+	}
+	return EffortView{Repo: r, Effort: eff, Workspaces: ws}, nil
 }
 
 // insertNote stores a note and logs op in one transaction.

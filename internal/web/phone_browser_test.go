@@ -323,49 +323,88 @@ func TestPhoneScreenshots(t *testing.T) {
 	if err := c.call("Network.setCookie", map[string]any{"name": "vx_token_" + u.Port(), "value": e.token, "url": e.srv.URL, "httpOnly": true}, nil); err != nil {
 		t.Fatal(err)
 	}
-	pages := append([]string{"/ui/offline"}, e.pages...)
+	sets := append([]phoneSession{{name: "alice", cookies: []phoneCookie{{"vx_token_" + u.Port(), e.token, e.srv.URL}}, pages: append([]string{"/ui/offline"}, e.pages...)}}, e.more...)
+	useCookies := func(s phoneSession) {
+		t.Helper()
+		if err := c.call("Network.clearBrowserCookies", nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		for _, ck := range s.cookies {
+			if err := c.call("Network.setCookie", map[string]any{"name": ck.Name, "value": ck.Value, "url": ck.URL, "httpOnly": true}, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	for _, width := range []int{360, 390, 430} {
 		if err := c.call("Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 844, "deviceScaleFactor": 1, "mobile": true}, nil); err != nil {
 			t.Fatal(err)
 		}
-		for _, p := range pages {
-			if err := c.navigate(e.srv.URL + p); err != nil {
-				t.Fatal(err)
-			}
-			// Open every file's diff, as a person reading the change does.
-			var opened int
-			if err := c.eval(`(async () => { const ds = document.querySelectorAll("details.fd"); ds.forEach(d => d.open = true); await new Promise(r => setTimeout(r, 400)); return ds.length; })()`, &opened); err != nil {
-				t.Fatal(err)
-			}
-			var res struct {
-				Scroll            float64
-				Wide, Small, Tiny []string
-			}
-			if err := c.eval(phoneCheck, &res); err != nil {
-				t.Fatalf("%s: %v", p, err)
-			}
-			if res.Scroll > 0 {
-				t.Errorf("%dpx %s: the page scrolls sideways by %.0fpx", width, p, res.Scroll)
-			}
-			if len(res.Wide) > 0 {
-				t.Errorf("%dpx %s: sticks out of the screen:\n  %s", width, p, strings.Join(res.Wide, "\n  "))
-			}
-			if len(res.Small) > 0 {
-				t.Errorf("%dpx %s: tap targets under 40px:\n  %s", width, p, strings.Join(res.Small, "\n  "))
-			}
-			if len(res.Tiny) > 0 {
-				t.Errorf("%dpx %s: text under 12px:\n  %s", width, p, strings.Join(res.Tiny, "\n  "))
-			}
-			if width == 390 {
-				// Stable names: ids and hashes left out.
-				name := regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f-]{27}|b3(:|%3a)[0-9a-f]+|slug=[a-z0-9-]+`).ReplaceAllString(strings.ToLower(p), "")
-				name = strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(name, "-"), "-")
-				if err := c.screenshot(filepath.Join(dir, name+".png"), width); err != nil {
-					t.Errorf("screenshot %s: %v", p, err)
+		for _, set := range sets {
+			useCookies(set)
+			for _, p := range set.pages {
+				if err := c.navigate(e.srv.URL + p); err != nil {
+					t.Fatal(err)
+				}
+				// Open every file's diff, as a person reading the change does.
+				var opened int
+				if err := c.eval(`(async () => { const ds = document.querySelectorAll("details.fd"); ds.forEach(d => d.open = true); await new Promise(r => setTimeout(r, 400)); return ds.length; })()`, &opened); err != nil {
+					t.Fatal(err)
+				}
+				var res struct {
+					Scroll            float64
+					Wide, Small, Tiny []string
+				}
+				if err := c.eval(phoneCheck, &res); err != nil {
+					t.Fatalf("%s: %v", p, err)
+				}
+				if res.Scroll > 0 {
+					t.Errorf("%dpx %s: the page scrolls sideways by %.0fpx", width, p, res.Scroll)
+				}
+				if len(res.Wide) > 0 {
+					t.Errorf("%dpx %s: sticks out of the screen:\n  %s", width, p, strings.Join(res.Wide, "\n  "))
+				}
+				if len(res.Small) > 0 {
+					t.Errorf("%dpx %s: tap targets under 40px:\n  %s", width, p, strings.Join(res.Small, "\n  "))
+				}
+				if len(res.Tiny) > 0 {
+					t.Errorf("%dpx %s: text under 12px:\n  %s", width, p, strings.Join(res.Tiny, "\n  "))
+				}
+				if width == 390 {
+					// Stable names: ids and hashes left out.
+					name := regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f-]{27}|b3(:|%3a)[0-9a-f]+|slug=[a-z0-9-]+`).ReplaceAllString(strings.ToLower(p), "")
+					name = strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(name, "-"), "-")
+					if set.name != "alice" {
+						name = set.name + "-" + name
+					}
+					if err := c.screenshot(filepath.Join(dir, name+".png"), width); err != nil {
+						t.Errorf("screenshot %s: %v", p, err)
+					}
 				}
 			}
 		}
 	}
+	// The newcomer's menu says which account is signed in, with its
+	// GitHub login.
+	for _, set := range e.more {
+		if set.bare {
+			continue
+		}
+		useCookies(set)
+		if err := c.navigate(e.srv.URL + "/ui"); err != nil {
+			t.Fatal(err)
+		}
+		var who string
+		if err := c.eval(`(async () => { document.querySelector(".menu-btn").click(); await new Promise(r => setTimeout(r, 300)); const g = document.querySelector(".side-gh"); const r = g.getBoundingClientRect(); return r.left >= 0 && r.width > 0 ? g.textContent.trim() : "hidden"; })()`, &who); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(who, "GitHub: "+set.gitHub[:20]) {
+			t.Errorf("%s: menu shows %q, not the GitHub login", set.name, who)
+		}
+		if dir == os.Getenv("VX_SCREENSHOTS") {
+			_ = c.screenshot(filepath.Join(dir, set.name+"-menu-open.png"), 390)
+		}
+	}
+	useCookies(sets[0])
 	// The menu opens as a drawer and lists For you first.
 	if err := c.navigate(e.srv.URL + "/ui"); err != nil {
 		t.Fatal(err)

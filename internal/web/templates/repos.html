@@ -13,11 +13,13 @@
   <div class="kpi"><span class="kpi-label">Working now</span><span class="kpi-value{{if .Working}} live-num{{end}}">{{.Working}}</span></div>
 </div>
 {{if not .Rows}}
+{{if .Access}}{{template "noaccess" .}}{{else}}
 <div class="panel empty">
   <h2>No repositories yet</h2>
   <p class="muted">Install the vx GitHub App on your organization (see <a href="/ui/welcome">Set up vx</a>), or connect one from the command line:</p>
   <pre class="code">vx repo create acme/shop-api --github acme/shop-api</pre>
 </div>
+{{end}}
 {{else}}
 <div class="panel">
   <div class="panel-head">

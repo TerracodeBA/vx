@@ -36,7 +36,7 @@ type Presence struct {
 // something within WorkspaceIdleAfter, or used a token within
 // AgentActiveWindow.
 func (s *Service) presence(ctx context.Context, p store.Principal) (Presence, error) {
-	now := s.Now()
+	now := s.Clock()
 	var out Presence
 	seen := func(t time.Time) {
 		if out.LastSeen == nil || t.After(*out.LastSeen) {
@@ -106,7 +106,7 @@ func Ago(now, t time.Time) string {
 // been idle for WorkspaceIdleAfter, and tells each owner on the board. It
 // runs before claims are read, inside q's transaction when there is one.
 func (s *Service) lapseIdleClaims(ctx context.Context, q store.Q, effortID uuid.UUID) error {
-	now := s.Now()
+	now := s.Clock()
 	rows, err := q.LapseIdleClaims(ctx, effortID, now, now.Add(-WorkspaceIdleAfter))
 	if err != nil || len(rows) == 0 {
 		return err

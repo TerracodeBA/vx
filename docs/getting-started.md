@@ -156,7 +156,7 @@ vx ship open --repo acme/shop-api rate-limiting --draft
 
 On a server with GitHub sign-in (a superadmin set up the GitHub App on Admin > GitHub, and `VX_PUBLIC_URL` is the address people open), people sign in with GitHub. There are no tokens to hand around:
 
-1. Open the server (for example https://app.vxbench.com) and choose **Sign in with GitHub**. Approve vx on GitHub. The first time, this creates your vx account: your handle is your GitHub login in lowercase (with `-2`, `-3`... when someone already has it), your email is GitHub's primary verified email, or your GitHub no-reply address when you do not share one.
+1. Open the server (for example https://app.vxbench.com) and choose **Sign in with GitHub**. Approve vx on GitHub. The first time, vx asks **You are about to create a new vx account for GitHub LOGIN**: check that LOGIN is the GitHub account you mean, then choose **Continue** (an invited person is not asked; their account is expected). Your handle is your GitHub login in lowercase (with `-2`, `-3`... when someone already has it), your email is GitHub's primary verified email, or your GitHub no-reply address when you do not share one.
 2. vx opens **Set up vx** with three steps: install the vx GitHub App on your organization, install the CLI (`curl -fsSL https://app.vxbench.com/install.sh | sh`), and `vx login --server https://app.vxbench.com`, which opens the browser for you to approve. Then, in Claude Code, `/plugin marketplace add TerracodeBA/vx` and `/plugin install vx@vx`. The page stays in the menu until you hide it.
 
 Who may create an account is the server's sign-up mode, `VX_SIGNUP`:
@@ -166,6 +166,17 @@ Who may create an account is the server's sign-up mode, `VX_SIGNUP`:
 - `closed`: nobody new; people who have an account still sign in.
 
 Someone who is not invited gets a page that says so and names the GitHub login to invite. People created earlier with `vx-server user-add` keep their account: signed in with their token, they choose **Settings > Connect GitHub** once, and sign in with GitHub from then on. vx links people by GitHub's numeric user id, so renaming a GitHub login keeps the account. Signing in with GitHub in a browser without a vx session never creates a second account for an email that already has one: vx shows **This looks like you** and asks you to sign in to that account and connect GitHub there.
+
+### Signing in with the right GitHub account
+
+vx signs you in as whichever GitHub account the browser is signed in to on GitHub. With two GitHub accounts (work and personal, say), a browser signed in to the other one gets you a different vx account, or on a server with open sign-up offers to create a new, empty one. To avoid that:
+
+- On **You are about to create a new vx account for GitHub LOGIN**, choose **Not you? Switch GitHub account** when LOGIN is not the account you use with vx. Nothing is created until you choose Continue.
+- GitHub keeps its own session, separate from vx: signing out of vx does not sign you out of GitHub. Switch accounts on github.com first (GitHub's account switcher, or sign out there), then sign in to vx with GitHub again.
+- The sidebar shows, on every page and in the phone menu, which account is signed in and its GitHub login (`GitHub: LOGIN`).
+- An account that can read no repositories says so on Repositories, All efforts and For you: "You are signed in as HANDLE (GitHub: LOGIN). This account cannot read any repositories.", then why, when vx knows (the account was created minutes ago, it belongs to no organization, the vx GitHub App is not installed on any GitHub organization the account is in), and what to do: sign out and sign in with your other GitHub account, ask an owner of your organization for access, or install the GitHub App.
+
+If you did end up with a second account, nothing of yours is lost: sign in with the GitHub account you used before. A superadmin can merge the two accounts on **Admin > People > Merge duplicate accounts** (see [organizations](organizations.md)).
 
 Organizations can also sign their people in through their own identity provider (Google Workspace, Okta, Microsoft Entra ID, any OpenID Connect issuer), and require it: see [single sign-on](organizations.md#single-sign-on). The sign-in page then offers **Sign in with single sign-on**; `vx login` works the same way, by choosing it on the approval page.
 

@@ -60,7 +60,7 @@ func (s *Service) AddTask(ctx context.Context, actor Actor, in AddTaskInput) (Ta
 	if len(deps) > maxTaskDeps {
 		return Task{}, errf(CodeInvalid, "the task waits for %d tasks; give at most %d, or split it", len(deps), maxTaskDeps)
 	}
-	row := store.Task{EffortID: v.Effort.ID, Title: title, Body: body, State: TaskOpen, CreatedBy: actor.ID, CreatedAt: s.Now()}
+	row := store.Task{EffortID: v.Effort.ID, Title: title, Body: body, State: TaskOpen, CreatedBy: actor.ID, CreatedAt: s.Clock()}
 	after := map[string]any{"effort": v.Effort.Slug, "title": title, "depends_on": deps}
 	if strings.TrimSpace(in.Owner) != "" {
 		owner, err := s.resolvePrincipal(ctx, actor, in.Owner)
@@ -123,7 +123,7 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, in UpdateTaskInpu
 		}
 		assignee = &p
 	}
-	now := s.Now()
+	now := s.Clock()
 	var row store.Task
 	var unblocked []store.Task
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {

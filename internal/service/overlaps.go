@@ -509,7 +509,7 @@ func (r *forecastRun) save(ctx context.Context, repo store.Repo, a, b store.Effo
 	row := store.EffortOverlap{
 		RepoID: repo.ID, EffortA: a.ID, EffortB: b.ID, Status: fc.status,
 		SharedFiles: fc.shared, Conflicts: fc.conflicts, Warnings: storeWarnings(fc.warnings),
-		AHead: a.Head.String(), BHead: b.Head.String(), TargetHead: fc.targetHead.String(), CheckedAt: s.Now(),
+		AHead: a.Head.String(), BHead: b.Head.String(), TargetHead: fc.targetHead.String(), CheckedAt: s.Clock(),
 	}
 	return s.Store.InTx(ctx, func(tx *store.Tx) error {
 		if err := tx.LockOverlapPair(ctx, a.ID, b.ID); err != nil {
@@ -538,7 +538,7 @@ func (r *forecastRun) save(ctx context.Context, repo store.Repo, a, b store.Effo
 			body, targets := overlapNoteText(other, otherOwner, fc, mine, theirs)
 			n, err := tx.InsertNote(ctx, store.Note{
 				EffortID: on.ID, Kind: string(NoteOverlap), Targets: targets, AuthorID: vx.ID, Body: body,
-				State: NoteOpen, CreatedAt: s.Now(), Supersedes: prevNote, System: true,
+				State: NoteOpen, CreatedAt: s.Clock(), Supersedes: prevNote, System: true,
 			})
 			if err != nil {
 				return nil, err

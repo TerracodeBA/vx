@@ -384,7 +384,7 @@ func (s *Service) replayOne(ctx context.Context, actor Actor, repo store.Repo, r
 	nc.Tree = next
 	nc.Rebase = &object.Rebase{
 		Onto: r.Onto, OntoGitSHA: r.OntoGitSHA, Branch: r.OntoBranch, From: c.Hash,
-		By: actor.Ref(), ResolvedBy: resolvedBy, At: s.Now(),
+		By: actor.Ref(), ResolvedBy: resolvedBy, At: s.Clock(),
 	}
 	var warnings []engine.Warning
 	if len(changes) > 0 {

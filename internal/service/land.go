@@ -241,7 +241,7 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		Intent:    intent,
 		DependsOn: in.DependsOn,
 		Evidence:  in.Evidence,
-		CreatedAt: s.Now(),
+		CreatedAt: s.Clock(),
 	}
 	if newTree != in.Tree {
 		cs.SnapshotTree = in.Tree
@@ -290,10 +290,10 @@ func (s *Service) landOnce(ctx context.Context, actor Actor, v WorkspaceView, ba
 		}
 		// A move that landed keeps its claim a while, so changes still made
 		// at the old location are warned about.
-		if err := tx.KeepMovingClaims(ctx, ws.ID, s.Now().Add(MovedClaimTTL)); err != nil {
+		if err := tx.KeepMovingClaims(ctx, ws.ID, s.Clock().Add(MovedClaimTTL)); err != nil {
 			return err
 		}
-		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, ws.ID, nil, s.Now()); err != nil {
+		if _, err := s.releaseWorkspaceClaims(ctx, tx, actor, v.Repo.ID, ws.ID, nil, s.Clock()); err != nil {
 			return err
 		}
 		if res.OverlappingClaims, err = s.landedOverClaims(ctx, tx, actor, eff.ID, files); err != nil {

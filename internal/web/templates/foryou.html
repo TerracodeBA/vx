@@ -14,10 +14,12 @@
   <li><span class="fy-count">{{.OnEfforts}}</span> on your efforts</li>
 </ul>
 {{if not .Rows}}
+{{if .Access}}{{template "noaccess" .}}{{else}}
 <div class="panel empty">
   <h2>Nothing waits for you</h2>
   <p class="muted">Questions your agents could not get answered, changes waiting for your approval and failed CI show up here. Turn on notifications in <a href="/ui/settings#notifications">Settings</a> to hear about them on this device.</p>
 </div>
+{{end}}
 {{else}}
 <ol class="fy-list">
 {{range $row := .Rows}}
