@@ -134,6 +134,7 @@ var okMessages = map[string]string{
 	"quota":          "Quotas saved.",
 	"sso":            "Single sign-on saved.",
 	"sso-removed":    "Single sign-on turned off.",
+	"agreement":      "Data processing agreement accepted. The acceptance is recorded below.",
 	"merged":         "Accounts merged. The merged account is disabled; its tokens, agents and memberships now belong to the account you kept.",
 }
 
@@ -290,6 +291,7 @@ func (u *UI) renderOrg(w http.ResponseWriter, r *http.Request, actor service.Act
 		"Quota": u.orgQuota(r, actor, d.Org.Handle),
 	}
 	u.orgSSO(r, actor, d.MyRole, data)
+	u.orgAgreement(r, actor, d.Org.Handle, data)
 	u.renderStatus(w, r, f.Status, "org", data)
 }
 

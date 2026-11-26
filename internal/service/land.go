@@ -90,6 +90,9 @@ func (s *Service) Land(ctx context.Context, actor Actor, in LandInput) (res Land
 	if v.Workspace.State != store.WorkspaceOpen {
 		return LandResult{}, errf(CodeFailedPrecondition, "workspace is already %s", v.Workspace.State)
 	}
+	if err := s.requireAgreement(ctx, v.Repo, "landing"); err != nil {
+		return LandResult{}, err
+	}
 	if in.Base.IsZero() {
 		in.Base = v.Workspace.Base
 	}

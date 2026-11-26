@@ -28,6 +28,7 @@ type harness struct {
 	server string
 	home   string
 	st     *store.Store
+	svc    *service.Service
 }
 
 type user struct {
@@ -72,7 +73,7 @@ func newHarnessWith(t *testing.T, gitBridge bool) (*harness, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &harness{t: t, server: srv.URL, home: t.TempDir(), st: st}, tok
+	return &harness{t: t, server: srv.URL, home: t.TempDir(), st: st, svc: svc}, tok
 }
 
 func (h *harness) user(label, token, dir string) *user {

@@ -29,6 +29,9 @@ func (s *Service) CreateEffort(ctx context.Context, actor Actor, in CreateEffort
 	if err != nil {
 		return store.Effort{}, err
 	}
+	if err := s.requireAgreement(ctx, repo, "starting efforts"); err != nil {
+		return store.Effort{}, err
+	}
 	if err := s.checkEffortQuota(ctx, repo); err != nil {
 		return store.Effort{}, err
 	}
@@ -151,6 +154,9 @@ func (s *Service) OpenWorkspace(ctx context.Context, actor Actor, repoName, slug
 	}
 	v, err := s.effortFor(ctx, actor, repoName, slug, RoleWrite)
 	if err != nil {
+		return WorkspaceView{}, err
+	}
+	if err := s.requireAgreement(ctx, v.Repo, "opening workspaces"); err != nil {
 		return WorkspaceView{}, err
 	}
 	if v.Effort.State != store.EffortOpen {

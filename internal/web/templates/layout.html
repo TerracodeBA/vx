@@ -43,6 +43,7 @@
   </header>
   <main class="content">
   {{with .DiskLow}}<p class="note bad" role="alert">The data disk of this server is almost full: {{.FreePercent}}% free ({{bytes .Free}} of {{bytes .Total}}). Add disk space before lands and imports fail. Only superadmins see this.</p>{{end}}
+  {{range .AgreementNotices}}<p class="note {{if .Blocking}}bad{{else}}warn{{end}}" role="alert">{{if .Blocking}}{{if .Personal}}Your personal organization{{else}}Organization{{end}} <strong>{{.Org}}</strong> cannot be used for work until an owner accepts the data processing agreement (version {{.Version.ID}}).{{else}}Version {{.Version.ID}} of the data processing agreement takes effect {{.Version.EffectiveDay}}; accept it for <strong>{{.Org}}</strong> before then so work there goes on.{{end}} <a href="/ui/orgs/{{.Org}}#agreement">Read and accept</a></p>{{end}}
   {{template "content" .}}
   </main>
 </div>

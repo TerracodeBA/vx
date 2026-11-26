@@ -373,6 +373,45 @@ Empty or `0` means no limit, which is the default. Sizes take `KB`, `MB`, `GB` a
 
 **Disk space.** Superadmins see a warning on every page when the data directory's disk has less than `VX_DISK_WARN_PERCENT` (default 10) percent free, and the free space on Admin > Audit.
 
+## Data processing agreement
+
+A server that offers vx as a service (vx Cloud) can ask every organization to accept its data processing agreement before it is used for work: an owner of the organization reads the agreement in the web UI and accepts it ([organizations.md](organizations.md#data-processing-agreement)). The step is **off by default**: a self-hosted server never shows it.
+
+vx never ships or writes agreement text. You, the operator, publish the versions as files in a directory:
+
+```
+/etc/vx/dpa/
+  manifest.json
+  2026-12.md
+  2027-06.md
+```
+
+```json
+{
+  "versions": [
+    {"id": "2026-12", "file": "2026-12.md", "published": "2026-12-01", "effective": "2026-12-01", "title": "Data Processing Agreement"},
+    {"id": "2027-06", "file": "2027-06.md", "published": "2027-05-01", "effective": "2027-06-01"}
+  ]
+}
+```
+
+- **One Markdown file per version**, UTF-8, at most 1 MiB, in the same directory. The page renders it as Markdown (headings, lists, emphasis, links, tables); raw HTML in it is left out. vx shows its SHA-256 next to it and records it with each acceptance.
+- **`id`**: 1 to 64 letters, digits, dots, dashes or underscores, unique. **`published`** and **`effective`**: dates (`YYYY-MM-DD`, midnight UTC) or RFC 3339 times. **`title`** is optional.
+- **A new version is published at least 30 days before it takes effect.** From its publication date owners see it (a banner, the For you page, a push notification if they turned notifications on); until its effective date the earlier acceptance still counts; from then an organization that has not accepted it is refused work. The first version may take effect when it is published: there is nobody to announce it to.
+- **Never edit a published file.** A changed text is a new version with a new id. The server refuses to start when the text of a version differs from the one owners accepted under that id. Accepted texts are kept in the database, so they stay readable however the files change.
+- Add a version by adding its file and its entry, then restart the server (or roll out a new revision). Old versions can stay listed; removing one leaves its acceptances and accepted texts in place.
+
+Turn it on with:
+
+| Variable | Meaning |
+|---|---|
+| `VX_REQUIRE_DPA` | `1` (or `true`) asks every organization to accept the data processing agreement. Empty or `0`: off, the default; `VX_DPA_DIR` is then not read. |
+| `VX_DPA_DIR` | The directory with `manifest.json` and the version files; mount it read-only. |
+
+With `VX_REQUIRE_DPA=1` the server refuses to start, with a message that says why, when `VX_DPA_DIR` is not set, the manifest is missing or invalid (a missing or empty file, a duplicate id or effective date, a version published less than 30 days before it takes effect), or no version is in effect yet. With Helm, set both through `extraEnv`; the chart has no setting to mount the directory yet, so add the volume (a ConfigMap works) to the Deployment yourself, or build an image with the files in it.
+
+Each acceptance is kept in the database for as long as the organization exists, independent of `VX_AUDIT_RETENTION` (which only prunes the `org.dpa_accept` entries of the operation log).
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -402,6 +441,7 @@ Empty or `0` means no limit, which is the default. Sizes take `KB`, `MB`, `GB` a
 | `VX_QUOTA_REPOS`, `VX_QUOTA_STORED`, `VX_QUOTA_IMPORT`, `VX_QUOTA_PUSH`, `VX_QUOTA_OPEN_EFFORTS` | no limit | Default quotas of every organization |
 | `VX_DISK_WARN_PERCENT` | `10` | Warn superadmins below this share of free disk |
 | `VX_AUDIT_RETENTION` | forever | Delete operation log entries older than this, like `365d` (at least 7 days) |
+| `VX_REQUIRE_DPA`, `VX_DPA_DIR` | off | Ask organizations to accept the data processing agreement, with its versions in that directory (see [Data processing agreement](#data-processing-agreement)) |
 | `POSTGRES_PASSWORD` | `vx` | Database password used by compose |
 | `VX_VERSION` | `latest` | Image tag |
 

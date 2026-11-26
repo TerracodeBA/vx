@@ -1,0 +1,13 @@
+{{define "crumbs"}}<a href="/ui/orgs">Organizations</a><span class="sep">/</span><a href="/ui/orgs/{{.Org}}">{{.Org}}</a><span class="sep">/</span><span>Agreement</span>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div class="page-title">
+    <h1>{{.Title}}</h1>
+    {{with .V}}<p class="muted">Version <span class="mono">{{.ID}}</span> · published {{.PublishedDay}} · in effect from {{.EffectiveDay}} · SHA-256 <span class="mono">{{.SHA256}}</span></p>{{end}}
+    {{with .Record}}<p class="muted">Version <span class="mono">{{.VersionID}}</span> · SHA-256 <span class="mono">{{.SHA256}}</span></p>{{end}}
+  </div>
+  <div class="page-actions"><a class="btn ghost" href="{{.Download}}">Download</a><a class="btn ghost" href="/ui/orgs/{{.Org}}#agreement">Back to {{.Org}}</a></div>
+</div>
+{{with .Record}}<p class="note ok" role="status">Accepted for {{$.Org}} by <span class="mono">{{.AcceptedByRef}}</span> on {{.AcceptedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{if .IP}} from {{.IP}}{{end}}. This is the text exactly as it was accepted.</p>{{end}}
+<article class="panel agreement-text agreement-doc">{{.HTML}}</article>
+{{end}}

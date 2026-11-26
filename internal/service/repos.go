@@ -77,6 +77,9 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 	if err != nil {
 		return store.Repo{}, err
 	}
+	if err := s.requireOrgAgreement(ctx, org, "creating, connecting or importing repositories"); err != nil {
+		return store.Repo{}, err
+	}
 	if err := s.checkRepoQuota(ctx, org); err != nil {
 		return store.Repo{}, err
 	}
@@ -162,6 +165,9 @@ func (s *Service) CreateRepo(ctx context.Context, actor Actor, in CreateRepoInpu
 func (s *Service) SyncBranch(ctx context.Context, actor Actor, repoName, branch string) (store.Branch, int, error) {
 	repo, _, err := s.Authorize(ctx, actor, repoName, RoleWrite)
 	if err != nil {
+		return store.Branch{}, 0, err
+	}
+	if err := s.requireAgreement(ctx, repo, "importing upstream commits"); err != nil {
 		return store.Branch{}, 0, err
 	}
 	b, n, err := s.syncBranch(ctx, actor, repo, branch)

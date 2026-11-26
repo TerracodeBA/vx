@@ -55,6 +55,9 @@ type Config struct {
 	Quotas service.QuotaSettings
 	// Audit configures the operation log (VX_AUDIT_RETENTION).
 	Audit service.AuditSettings
+	// Agreement is the data processing agreement step (VX_REQUIRE_DPA,
+	// VX_DPA_DIR); off by default.
+	Agreement service.AgreementSettings
 }
 
 // Server is a running vx server.
@@ -104,7 +107,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if cfg.Limits != nil {
 		svc.Limits = ratelimit.New(cfg.Limits)
 	}
-	svc.Quotas, svc.Audit = cfg.Quotas, cfg.Audit
+	svc.Quotas, svc.Audit, svc.Agreement = cfg.Quotas, cfg.Audit, cfg.Agreement
+	if err := svc.CheckAgreements(ctx); err != nil {
+		st.Close()
+		return nil, err
+	}
+	if svc.Agreement.Required {
+		cur := svc.Agreement.Versions[len(svc.Agreement.Versions)-1]
+		log.Info("data processing agreement required", "dir", svc.Agreement.Dir, "versions", len(svc.Agreement.Versions), "latest", cur.ID, "latest_effective", service.AgreementDay(cur.Effective))
+	}
 	if svc.Quotas.DataDir == "" {
 		svc.Quotas.DataDir = cfg.DataDir
 	}

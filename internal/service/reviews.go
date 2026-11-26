@@ -514,6 +514,9 @@ func (s *Service) ApproveReview(ctx context.Context, actor Actor, id string) (Re
 	if err := s.checkDecide(ctx, actor, r); err != nil {
 		return ReviewDecision{}, err
 	}
+	if err := s.requireAgreement(ctx, repo, "approving reviews, which lands them"); err != nil {
+		return ReviewDecision{}, err
+	}
 	author, err := s.Store.PrincipalByID(ctx, r.AuthorID)
 	if err != nil {
 		return ReviewDecision{}, err

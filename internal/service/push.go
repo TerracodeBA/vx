@@ -294,6 +294,22 @@ func (s *Service) pushItems(ctx context.Context, actor Actor) ([]pushItem, error
 			URL: "/ui/for-you#r-" + rv.ID.String(), Tag: "r-" + rv.ID.String()[:8],
 		}})
 	}
+	notices, err := s.AgreementNotices(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range notices {
+		it := pushItem{key: "dpa:" + n.Org + ":" + n.Version.ID, at: n.At, msg: PushMessage{
+			Title: "Data processing agreement: " + n.Org,
+			Body:  fmt.Sprintf("Version %s takes effect %s. As an owner of %s, read and accept it in Organization > Agreement.", n.Version.ID, agreementDay(n.Version.Effective), n.Org),
+			URL:   "/ui/orgs/" + n.Org + "#agreement", Tag: "dpa-" + n.Org,
+		}}
+		if n.Blocking {
+			it.key += ":due"
+			it.msg.Body = fmt.Sprintf("Version %s is in effect and %s cannot be used for work until an owner accepts it in Organization > Agreement.", n.Version.ID, n.Org)
+		}
+		out = append(out, it)
+	}
 	return out, nil
 }
 

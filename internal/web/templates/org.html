@@ -148,6 +148,59 @@
   {{end}}
 </section>
 
+{{with .Agreement}}{{$ag := .}}
+<section class="panel" id="agreement">
+  <div class="panel-head"><h2>Agreement</h2><span class="muted small">data processing agreement</span>{{if .Usable}}<span class="badge badge-merged">accepted</span>{{else}}<span class="badge badge-conflict">not accepted</span>{{end}}</div>
+  {{if .Usable}}{{with .CurrentAccepted}}
+  <p class="note ok panel-note">{{$o.Handle}} has accepted version {{.VersionID}}, in effect since {{$ag.Current.EffectiveDay}}: {{.AcceptedByRef}}, {{ago .AcceptedAt}}.</p>
+  {{end}}{{else if .Current}}
+  <p class="note bad panel-note" role="alert">{{$o.Handle}} cannot be used for work until an owner accepts version {{.Current.ID}} of the data processing agreement: creating, connecting or importing repositories, starting efforts, opening workspaces, uploading and landing, approving reviews and shipping are refused. Everything can still be read. Owners: {{.Owners}}.</p>
+  {{end}}
+  {{range .Announced}}{{$acc := index $ag.AnnouncedAccepted .ID}}
+  <p class="note warn panel-note">Version {{.ID}} was published {{.PublishedDay}} and takes effect {{.EffectiveDay}}. Until then the earlier acceptance counts; from then {{$o.Handle}} needs version {{.ID}} accepted.{{if $acc.VersionID}} Accepted already: {{$acc.AcceptedByRef}}, {{ago $acc.AcceptedAt}}.{{end}}</p>
+  {{end}}
+  {{with .Pending}}
+  <div class="agreement">
+    <div class="agreement-head">
+      <h3>{{.Title}}</h3>
+      <p class="muted small">Version <span class="mono">{{.ID}}</span> · published {{.PublishedDay}} · in effect from {{.EffectiveDay}} · SHA-256 <span class="mono">{{slice .SHA256 0 16}}</span> · <a href="/ui/orgs/{{$o.Handle}}/agreement?version={{.ID}}&amp;download=1">Download</a></p>
+    </div>
+    <div class="agreement-text">{{$ag.PendingHTML}}</div>
+    {{if $ag.CanAccept}}
+    <form method="post" action="/ui/orgs/{{$o.Handle}}/agreement" class="admin-form">
+      <input type="hidden" name="version" value="{{.ID}}">
+      <input type="hidden" name="sha256" value="{{.SHA256}}">
+      <label class="field-check"><input type="checkbox" name="agree" value="yes" required> I have read version {{.ID}} of the data processing agreement and accept it for {{$o.Handle}}.</label>
+      <button class="btn primary" type="submit">Accept</button>
+      <p class="field-hint">You accept as an owner of {{$o.Handle}}. vx records the version, the SHA-256 of the text above, you, the time and the address you accept from, and keeps the record for as long as the organization exists.</p>
+    </form>
+    {{else}}
+    <p class="muted panel-note">Only an owner of {{$o.Handle}}, signed in to the web UI as themselves, accepts it: {{$ag.Owners}}.</p>
+    {{end}}
+  </div>
+  {{end}}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Version</th><th>Accepted by</th><th>When</th><th>From</th><th>SHA-256</th><th></th></tr></thead>
+    <tbody>
+    {{range .History}}
+      <tr>
+        <td class="cell-main mono">{{.VersionID}}{{if not .Known}} <span class="badge">no longer published</span>{{end}}</td>
+        <td class="mono">{{.AcceptedByRef}}</td>
+        <td class="nowrap" title="{{.AcceptedAt.UTC}}">{{ago .AcceptedAt}}</td>
+        <td class="mono">{{if .IP}}{{.IP}}{{else}}<span class="muted">unknown</span>{{end}}</td>
+        <td class="mono" title="{{.SHA256}}">{{slice .SHA256 0 12}}</td>
+        <td class="num"><div class="row-actions"><a class="btn ghost small-btn" href="/ui/orgs/{{$o.Handle}}/agreement/accepted/{{.ID}}">View</a><a class="btn ghost small-btn" href="/ui/orgs/{{$o.Handle}}/agreement/accepted/{{.ID}}?download=1">Download</a></div></td>
+      </tr>
+    {{else}}
+      <tr><td colspan="6" class="muted">No version accepted yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}
+
 {{with .Quota}}
 <section class="panel" id="quotas">
   <div class="panel-head"><h2>Quotas</h2><span class="muted small">what this organization may use on this server</span></div>

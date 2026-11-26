@@ -82,6 +82,9 @@ func (s *Service) PlanShipment(ctx context.Context, actor Actor, repoName, slug,
 	if err != nil {
 		return ShipPlan{}, err
 	}
+	if err := s.requireAgreement(ctx, v.Repo, "shipping"); err != nil {
+		return ShipPlan{}, err
+	}
 	if v.Repo.Provider == store.ProviderNone {
 		return ShipPlan{}, errf(CodeFailedPrecondition, "repo %s has no git upstream to ship to", v.Repo.Name)
 	}
@@ -261,7 +264,11 @@ type ShipResult struct {
 // the same PR. vx never merges: that stays a decision on the git host.
 // PlanShipment checks admin on the repository.
 func (s *Service) OpenShipment(ctx context.Context, actor Actor, in ShipInput) (ShipResult, error) {
-	if _, _, err := s.Authorize(ctx, actor, in.Repo, RoleAdmin); err != nil {
+	repo, _, err := s.Authorize(ctx, actor, in.Repo, RoleAdmin)
+	if err != nil {
+		return ShipResult{}, err
+	}
+	if err := s.requireAgreement(ctx, repo, "shipping"); err != nil {
 		return ShipResult{}, err
 	}
 	if s.Shipper == nil {
