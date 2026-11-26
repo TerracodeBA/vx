@@ -340,6 +340,10 @@ func (a *App) statusCmd() *cobra.Command {
 				files = append(files, map[string]string{"op": string(ch.Op), "path": ch.Path})
 			}
 			out["changes"] = files
+			limit := largeFileLimit(wc)
+			strays := strayFiles(wc, changes, limit)
+			a.printStrays(strays, limit, false)
+			out["stray_files"] = strays
 			marked, err := filesWithMarkers(ctx, wc, changes)
 			if err != nil {
 				return err

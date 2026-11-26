@@ -31,7 +31,7 @@ const verifiedAttempts = 3
 func (a *App) landCmd() *cobra.Command {
 	var intent, model, session string
 	var checks, runs, dependsOn, newTests []string
-	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh, noReuse bool
+	var allowMarkers, upToDate, allowFailing, allowUnverified, fresh, noReuse, allowBinary bool
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land your changes into the effort",
@@ -176,6 +176,10 @@ the result.`,
 			if err := a.precheckScope(ctx, c, wc); err != nil {
 				return err
 			}
+			opts.allowBinary = allowBinary
+			if err := a.precheckStrays(ctx, wc, allowBinary); err != nil {
+				return err
+			}
 			if len(runs) == 0 {
 				return a.landOnce(ctx, c, wc, opts)
 			}
@@ -246,12 +250,31 @@ the result.`,
 	cmd.Flags().StringVar(&model, "model", "", "model that wrote the change (default: VX_MODEL)")
 	cmd.Flags().StringVar(&session, "session", "", "agent session id (default: VX_SESSION)")
 	cmd.Flags().BoolVar(&allowMarkers, "allow-markers", false, "land even if files contain conflict markers")
+	cmd.Flags().BoolVar(&allowBinary, "allow-binary", false, "land new executables (ELF, Mach-O, PE) too; vx land refuses them otherwise")
 	cmd.Flags().BoolVar(&upToDate, "require-up-to-date", false, "refuse to land if others landed since your last sync")
 	cmd.Flags().BoolVar(&allowFailing, "allow-failing", false, "with --run: land even if a command fails")
 	cmd.Flags().BoolVar(&fresh, "fresh", false, "ignore the evidence flags saved from an interrupted land")
 	cmd.Flags().BoolVar(&a.noGenerate, "no-generate", false, "do not run vx.toml [[generated]] commands for generated files a merge kept from one side")
 	cmd.Flags().BoolVar(&noReuse, "no-reuse", false, "with --run: run every command, even one that already passed on exactly these files")
 	return cmd
+}
+
+// precheckStrays warns about new binary or large files before the checks
+// run and refuses new executables unless allowed.
+func (a *App) precheckStrays(ctx context.Context, wc *workcopy.WorkingCopy, allow bool) error {
+	changes, err := wc.Status(ctx)
+	if err != nil {
+		return err
+	}
+	limit := largeFileLimit(wc)
+	strays := strayFiles(wc, changes, limit)
+	if !allow {
+		if err := refuseExecutables(strays); err != nil {
+			return err
+		}
+	}
+	a.printStrays(strays, limit, true)
+	return nil
 }
 
 // errNoWorkspace is vx land's refusal without a workspace or -m.
@@ -275,6 +298,8 @@ type landOptions struct {
 	ran                    []*vxv1.Check
 	allowMarkers           bool
 	requireUpToDate        bool
+	// allowBinary lands new executables (--allow-binary).
+	allowBinary bool
 	// keptBoth are files a sync before this land merged by keeping both
 	// sides' insertions; shown with the server's list.
 	keptBoth []string
@@ -300,6 +325,12 @@ func (a *App) landOnce(ctx context.Context, c *client.Client, wc *workcopy.Worki
 	}
 	if len(changes) == 0 {
 		return errors.New("nothing to land: no local changes")
+	}
+	if !o.allowBinary {
+		// Checks run before this may have built one.
+		if err := refuseExecutables(strayFiles(wc, changes, largeFileLimit(wc))); err != nil {
+			return err
+		}
 	}
 	if !o.allowMarkers {
 		if bad, err := filesWithMarkers(ctx, wc, changes); err != nil {
@@ -539,7 +570,8 @@ func (a *App) printWarnings(ws []*vxv1.Warning, regenerated map[string]bool) {
 		}
 		a.printf("Warning: %s\n", w.Detail)
 		switch engine.WarningKind(w.Kind) {
-		case engine.WarningDuplicate, engine.WarningParse, engine.WarningSignature, engine.WarningRemoved:
+		case engine.WarningDuplicate, engine.WarningParse, engine.WarningSignature, engine.WarningRemoved,
+			engine.WarningUnreachable, engine.WarningUndefined, engine.WarningUnusedImport:
 			code = true
 		case engine.WarningGenerated:
 			generated = true
@@ -679,12 +711,15 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	if err != nil {
 		return syncResult{}, err
 	}
+	// The base of the merge: wc.Config moves to the effort head below,
+	// before the checks that compare both sides with it.
+	baseTree := wc.Config.BaseTreeHash()
 	result := theirs
 	var conflicts []engine.Conflict
 	var keptBoth, byDecl []string
 	var generated []engine.GeneratedFile
 	if len(local) > 0 {
-		mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, wc.Config.BaseTreeHash(), ours, theirs, merge.Labels{
+		mr, err := engine.MergeTreesKeepConflicts(ctx, wc.Objects, baseTree, ours, theirs, merge.Labels{
 			Base: "base " + short(wc.Config.Base), Ours: "local", Theirs: "effort " + short(head),
 		}, rules.MergeOptions(ctx, wc.Objects, ours, theirs)...)
 		if err != nil {
@@ -724,7 +759,7 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 	}
 	if len(local) > 0 {
 		sides, _ := engine.CheckGoSides(ctx, wc.Objects, engine.GoSides{
-			Base: wc.Config.BaseTreeHash(), Ours: ours, Theirs: theirs, Merged: result,
+			Base: baseTree, Ours: ours, Theirs: theirs, Merged: result,
 			OursName: "your local changes", TheirsName: "the effort",
 		})
 		for _, w := range sides {
@@ -734,6 +769,17 @@ func (a *App) syncWorkingCopy(ctx context.Context, c *client.Client, wc *workcop
 			a.printf("  A signature or name changed on one side is used the old way by the other; update the callers (or the signature) before landing.\n")
 		}
 		warnings = append(warnings, sides...)
+		typed, _ := engine.CheckGoMerge(ctx, wc.Objects, engine.GoSides{
+			Base: baseTree, Ours: ours, Theirs: theirs, Merged: result,
+		})
+		typed = engine.WithoutCovered(sides, typed)
+		for _, w := range typed {
+			a.printf("Warning: %s\n", w.Detail)
+		}
+		if len(typed) > 0 {
+			a.printf("  Your edits and the incoming changes merged as text, but together the code no longer compiles cleanly; fix it before landing.\n")
+		}
+		warnings = append(warnings, typed...)
 	}
 	regen, stale := a.regenerate(ctx, wc, generated)
 	more := engine.GeneratedWarnings(stale)

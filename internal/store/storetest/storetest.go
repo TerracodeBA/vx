@@ -8,15 +8,10 @@ package storetest
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/TerracodeBA/vx/internal/blob"
 	"github.com/TerracodeBA/vx/internal/hash"
@@ -40,44 +35,16 @@ func NewWithURL(t testing.TB) (*store.Store, string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	admin := os.Getenv("VX_TEST_DATABASE_URL")
-	if admin == "" {
-		admin = DefaultURL
-	}
-	conn, err := pgx.Connect(ctx, admin)
-	if err != nil {
-		if os.Getenv("VX_REQUIRE_DB") != "" {
-			t.Fatalf("test database not reachable: %v", err)
-		}
-		t.Skipf("skipping: no test database (%v). Run `make db`.", err)
-	}
-	name := fmt.Sprintf("vx_test_%d", time.Now().UnixNano())
-	if _, err := conn.Exec(ctx, "create database "+name); err != nil {
-		conn.Close(ctx)
-		t.Fatalf("create test database: %v", err)
-	}
-	u, err := url.Parse(admin)
+	dbURL := freshDatabase(t)
+	s, err := store.Open(ctx, dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	u.Path = "/" + name
-	s, err := store.Open(ctx, u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Cleanup(s.Close) // runs before the database is dropped
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() {
-		s.Close()
-		ctx := context.Background()
-		_, err := conn.Exec(ctx, "drop database if exists "+name+" with (force)")
-		if err != nil && !strings.Contains(err.Error(), "does not exist") {
-			t.Logf("drop test database: %v", err)
-		}
-		conn.Close(ctx)
-	})
-	return s, u.String()
+	return s, dbURL
 }
 
 // AddTree records the objects of tree that are not at the same path in

@@ -39,11 +39,17 @@ type Note struct {
 	// CCID is the person a question was copied to because the agent it is
 	// addressed to was not working when it was asked.
 	CCID *uuid.UUID
+	// SimilarTo is the open question this question closely matched when it
+	// was asked. Similar is read from the later questions that matched this
+	// one, oldest first.
+	SimilarTo *uuid.UUID
+	Similar   []uuid.UUID
 }
 
 const noteCols = `n.id, n.seq, n.repo_id, n.effort_id, n.thread_id, n.kind, n.targets, n.author_id, n.to_id,
 	n.body, n.state, n.answer_by, n.created_at, r.name, e.slug, n.supersedes,
-	(select s.id from notes s where s.supersedes = n.id order by s.created_at desc, s.seq desc limit 1), n.system, n.cc_id`
+	(select s.id from notes s where s.supersedes = n.id order by s.created_at desc, s.seq desc limit 1), n.system, n.cc_id,
+	n.similar_to, coalesce((select array_agg(s.id order by s.created_at, s.seq) from notes s where s.similar_to = n.id), '{}')`
 
 // notSuperseded is a where clause that leaves out notes a newer one replaced.
 const notSuperseded = `not exists (select 1 from notes s where s.supersedes = n.id)`
@@ -53,7 +59,8 @@ const noteFrom = ` from notes n join efforts e on e.id = n.effort_id join repos 
 func scanNote(row interface{ Scan(...any) error }) (Note, error) {
 	var n Note
 	err := row.Scan(&n.ID, &n.Seq, &n.RepoID, &n.EffortID, &n.ThreadID, &n.Kind, &n.Targets, &n.AuthorID, &n.ToID,
-		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug, &n.Supersedes, &n.SupersededBy, &n.System, &n.CCID)
+		&n.Body, &n.State, &n.AnswerBy, &n.CreatedAt, &n.RepoName, &n.EffortSlug, &n.Supersedes, &n.SupersededBy, &n.System, &n.CCID,
+		&n.SimilarTo, &n.Similar)
 	if n.Targets == nil {
 		n.Targets = []string{}
 	}
@@ -79,8 +86,8 @@ func (q Q) queryNotes(ctx context.Context, sql string, args ...any) ([]Note, err
 
 // InsertNote stores a note. A zero ID gets a new one; a zero ThreadID makes
 // the note a thread root; a zero CreatedAt means now. The repo is taken from
-// the effort. Supersedes and System are stored as given; SupersededBy is
-// ignored.
+// the effort. Supersedes, System and SimilarTo are stored as given;
+// SupersededBy and Similar are ignored.
 func (q Q) InsertNote(ctx context.Context, n Note) (Note, error) {
 	if n.ID == uuid.Nil {
 		n.ID = NewID()
@@ -98,10 +105,10 @@ func (q Q) InsertNote(ctx context.Context, n Note) (Note, error) {
 	if !n.CreatedAt.IsZero() {
 		created = &n.CreatedAt
 	}
-	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at, supersedes, system, cc_id)
-		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now()), $12::uuid, $13::boolean, $14::uuid
+	tag, err := q.db.Exec(ctx, `insert into notes (id, repo_id, effort_id, thread_id, kind, targets, author_id, to_id, body, state, answer_by, created_at, supersedes, system, cc_id, similar_to)
+		select $1::uuid, e.repo_id, e.id, $3::uuid, $4::text, $5::text[], $6::uuid, $7::uuid, $8::text, $9::text, $10::timestamptz, coalesce($11::timestamptz, now()), $12::uuid, $13::boolean, $14::uuid, $15::uuid
 		from efforts e where e.id = $2::uuid`,
-		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created, n.Supersedes, n.System, n.CCID)
+		n.ID, n.EffortID, n.ThreadID, n.Kind, n.Targets, n.AuthorID, n.ToID, n.Body, n.State, n.AnswerBy, created, n.Supersedes, n.System, n.CCID, n.SimilarTo)
 	if err != nil {
 		return Note{}, err
 	}
@@ -200,6 +207,13 @@ func (q Q) ListNotes(ctx context.Context, f NoteFilter) ([]Note, error) {
 func (q Q) OpenQuestionsTo(ctx context.Context, to []uuid.UUID, limit int) ([]Note, error) {
 	return q.queryNotes(ctx, `select `+noteCols+noteFrom+`where n.to_id = any($1) and n.state = 'open' and n.kind = 'question'
 		order by n.created_at desc, n.seq desc limit $2`, to, limit)
+}
+
+// OpenQuestionsIn returns the effort's open questions (overdue ones
+// included), newest first.
+func (q Q) OpenQuestionsIn(ctx context.Context, effortID uuid.UUID, limit int) ([]Note, error) {
+	return q.queryNotes(ctx, `select `+noteCols+noteFrom+`where n.effort_id = $1 and n.state = 'open' and n.kind = 'question'
+		order by n.created_at desc, n.seq desc limit $2`, effortID, limit)
 }
 
 // OpenQuestionsCopiedTo returns open questions copied to person (their

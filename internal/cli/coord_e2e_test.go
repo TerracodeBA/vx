@@ -2,8 +2,10 @@ package cli_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A question to an agent that is not working says so at once and lands in
@@ -104,5 +106,91 @@ func TestMovingClaimCLI(t *testing.T) {
 	}
 	if out := a.must("inbox"); !strings.Contains(out, "About your claims (1):") || !strings.Contains(out, "agent:bob/audit landed a change to auth.Login, which you are moving to auth/login.go") {
 		t.Errorf("mover's inbox:\n%s", out)
+	}
+}
+
+// waitQuestion returns the id of the first question in u's inbox, polling
+// until it arrives.
+func waitQuestion(t *testing.T, u *user) string {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		var in struct{ Questions []noteJSON }
+		_ = json.Unmarshal([]byte(u.must("inbox", "--json", "--all")), &in)
+		if len(in.Questions) > 0 {
+			return in.Questions[0].ID
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the question never reached the inbox")
+	return ""
+}
+
+// vx ask --wait --timeout keeps waiting after the question escalates at
+// --within and prints an answer that comes later (exit 0).
+func TestAskWaitPastEscalationCLI(t *testing.T) {
+	_, a, b := boardPair(t)
+	done := make(chan struct {
+		out  string
+		code int
+	}, 1)
+	go func() {
+		out, code := a.run("ask", "Is limit.go yours?", "--to", "bob/audit", "--within", "1s", "--wait", "--timeout", "30s", "--interval", "50ms")
+		done <- struct {
+			out  string
+			code int
+		}{out, code}
+	}()
+	id := waitQuestion(t, b)
+	time.Sleep(1500 * time.Millisecond) // past --within: the question escalates
+	b.must("answer", id, "Yes, until my next land.")
+	select {
+	case r := <-done:
+		if r.code != 0 || !strings.Contains(r.out, "the question escalated to the people involved. Still waiting until --timeout") ||
+			!strings.Contains(r.out, "│ Yes, until my next land.") {
+			t.Fatalf("ask --wait --timeout = %d\n%s", r.code, r.out)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ask --wait did not return on the answer")
+	}
+}
+
+// At --timeout, vx ask --wait looks for an answer a last time before it
+// exits 4: an answer given since its last check is printed.
+func TestAskWaitFinalCheckCLI(t *testing.T) {
+	_, a, b := boardPair(t)
+	done := make(chan string, 1)
+	go func() {
+		// The interval is longer than the timeout: the only checks are the
+		// first one and the final one.
+		out, code := a.run("ask", "Is limit.go yours?", "--to", "bob/audit", "--wait", "--timeout", "2s", "--interval", "1m")
+		done <- fmt.Sprintf("exit %d\n%s", code, out)
+	}()
+	b.must("answer", waitQuestion(t, b), "Yes.")
+	select {
+	case out := <-done:
+		if !strings.HasPrefix(out, "exit 0\n") || !strings.Contains(out, "│ Yes.") {
+			t.Fatalf("ask --wait --timeout:\n%s", out)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ask --wait did not return")
+	}
+}
+
+// Asking what is already open in the effort says so and links the two on
+// the board.
+func TestAskSimilarCLI(t *testing.T) {
+	_, a, b := boardPair(t)
+	var first struct{ Question noteJSON }
+	if err := json.Unmarshal([]byte(a.must("ask", "Does Allow take the client IP?", "--on", "limit.Allow", "--json")), &first); err != nil || first.Question.ID == "" {
+		t.Fatalf("ask --json: %v", err)
+	}
+	id := first.Question.ID[:8]
+	out := b.must("ask", "Does Allow take the client IP or not?", "--on", "limit.Allow")
+	if want := "Note: a similar open question exists: " + id + " by agent:alice/backend (vx board " + id + ").\n"; !strings.Contains(out, want) {
+		t.Fatalf("ask: missing %q in\n%s", want, out)
+	}
+	board := b.must("board", "--full")
+	if !strings.Contains(board, "similar to "+id) || !strings.Contains(board, "asked again as ") {
+		t.Fatalf("board does not link the questions:\n%s", board)
 	}
 }

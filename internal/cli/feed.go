@@ -681,6 +681,9 @@ func noteLine(n *vxv1.Note, o noteOpts) (line string, cut bool) {
 	if n.SupersededBy != "" {
 		b.WriteString(" replaced by " + noteID(n.SupersededBy))
 	}
+	if n.SimilarTo != "" {
+		b.WriteString(" similar to " + noteID(n.SimilarTo))
+	}
 	b.WriteString("  id " + noteID(n.Id))
 	body, cut := clipBody(n.Body)
 	if body != "" {

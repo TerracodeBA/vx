@@ -270,6 +270,8 @@ vx ask "Does Allow take the client IP?" --on limit.Allow --to backend</pre></div
     {{if .Unread}}<span class="pill unread" title="you have not been shown this note yet">unread</span>{{else if ne .Trust "self"}}<span class="muted small" title="you were shown this note (CLI, MCP or inbox)">read</span>{{end}}
     {{if .SupersededBy}}<span class="small">replaced by <a class="mono" href="#n-{{.SupersededBy.String}}">{{printf "%.8s" .SupersededBy.String}}</a></span>{{end}}
     {{if .Supersedes}}<span class="muted small">replaces <a class="mono" href="#n-{{.Supersedes.String}}">{{printf "%.8s" .Supersedes.String}}</a></span>{{end}}
+    {{if .SimilarTo}}<span class="small">similar to <a class="mono" href="#n-{{.SimilarTo.String}}">{{printf "%.8s" .SimilarTo.String}}</a></span>{{end}}
+    {{if .Similar}}<span class="small">asked again as{{range .Similar}} <a class="mono" href="#n-{{.String}}">{{printf "%.8s" .String}}</a>{{end}}</span>{{end}}
     <span class="mono muted small bn-id">{{printf "%.8s" .ID.String}}</span>
   </header>
   {{if .Targets}}<div class="bn-targets">{{range .Targets}}<span class="mono">{{.}}</span>{{end}}</div>{{end}}

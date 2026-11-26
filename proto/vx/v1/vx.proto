@@ -804,6 +804,11 @@ message Note {
   string superseded_by = 15; // set when a newer note of the author replaced this one
   bool system = 16; // posted by vx itself (overlaps, reviews, CI), not by a person or agent
   bool read = 17; // the caller has seen this note
+  // Questions: the open question this one closely matched when it was
+  // asked (same --on targets, nearly the same words), and the later
+  // questions that matched this one, oldest first.
+  string similar_to = 18;
+  repeated string similar = 19;
 }
 
 message PostNoteRequest {
@@ -837,6 +842,11 @@ message AskResponse {
   string notice = 2;
   string to_last_seen = 3; // RFC 3339; empty: never seen (or the agent is working)
   string copied_to = 4; // the person the question was copied to at once (ref); empty: none
+  // Set when a similar question was already open in the effort: what to
+  // tell the asker, e.g. "a similar open question exists: 1a2b3c4d by
+  // agent:alice/backend (vx board 1a2b3c4d)". The question is posted
+  // anyway, with similar_to set.
+  string similar_notice = 5;
 }
 
 message AnswerRequest {

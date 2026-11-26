@@ -21,6 +21,7 @@ import (
 	"github.com/TerracodeBA/vx/internal/provider"
 	"github.com/TerracodeBA/vx/internal/service"
 	"github.com/TerracodeBA/vx/internal/store"
+	"github.com/TerracodeBA/vx/internal/store/storetest"
 )
 
 // memHost is a git host in memory: main lives in the store (moveMain-style
@@ -54,6 +55,8 @@ func (h *memHost) SyncBranch(ctx context.Context, repo store.Repo, branch string
 	if err != nil {
 		return store.Branch{}, 0, err
 	}
+	// A real import records the commit's objects as part of the repository.
+	storetest.AddTree(h.e.t, h.e.svc.Store, h.e.blobs, repo.ID, hash.Hash{}, tree)
 	b = store.Branch{RepoID: repo.ID, Name: branch, Head: hsh, GitSHA: cs.GitSHA}
 	return b, 1, h.e.svc.Store.UpsertBranch(ctx, b)
 }

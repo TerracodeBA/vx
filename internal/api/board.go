@@ -31,6 +31,12 @@ func notePB(caller service.Actor, n service.Note) *vxv1.Note {
 	if n.SupersededBy != nil {
 		out.SupersededBy = n.SupersededBy.String()
 	}
+	if n.SimilarTo != nil {
+		out.SimilarTo = n.SimilarTo.String()
+	}
+	for _, id := range n.Similar {
+		out.Similar = append(out.Similar, id.String())
+	}
 	return out
 }
 
@@ -65,7 +71,7 @@ func (h *Handlers) Ask(ctx context.Context, req *connect.Request[vxv1.AskRequest
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &vxv1.AskResponse{Question: notePB(actor, n), Notice: service.AwayNotice(n, h.svc.Clock())}
+	out := &vxv1.AskResponse{Question: notePB(actor, n), Notice: service.AwayNotice(n, h.svc.Clock()), SimilarNotice: service.SimilarNotice(n)}
 	if n.ToAway != nil && n.ToAway.LastSeen != nil {
 		out.ToLastSeen = ts(*n.ToAway.LastSeen)
 	}

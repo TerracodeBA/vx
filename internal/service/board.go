@@ -92,6 +92,14 @@ type Note struct {
 	// ToAway is set by Ask when the agent asked is not working right now
 	// (AwayNotice says so to the asker).
 	ToAway *Presence
+	// SimilarTo is the open question of the effort this question closely
+	// matched when it was asked (same targets, nearly the same words);
+	// Similar lists the later questions that matched this one.
+	SimilarTo *uuid.UUID
+	Similar   []uuid.UUID
+	// SimilarOpen is set by Ask to the open question SimilarTo names
+	// (SimilarNotice says so to the asker).
+	SimilarOpen *Note
 }
 
 // PostNoteInput is a non-question note.
@@ -277,12 +285,35 @@ func (s *Service) Ask(ctx context.Context, actor Actor, in AskInput) (Note, erro
 		row.CCID = to.ParentID
 		extra["copied_to"] = to.ParentID.String()
 	}
+	// A question someone already asked and nobody answered yet: post it
+	// anyway (the asker may need it sooner, or of someone else), but link
+	// the two and tell the asker.
+	open, err := s.Store.OpenQuestionsIn(ctx, v.Effort.ID, maxSimilarCandidates)
+	if err != nil {
+		return Note{}, err
+	}
+	similar, found := similarQuestion(body, targets, row.ToID, open)
+	if found {
+		row.SimilarTo = &similar.ID
+		extra["similar_to"] = similar.ID.String()
+	}
 	if row, err = s.insertNote(ctx, actor, "note.ask", row, extra); err != nil {
 		return Note{}, err
 	}
-	n, err := s.newNoteCache().note(ctx, row, now)
+	cache := s.newNoteCache()
+	n, err := cache.note(ctx, row, now)
+	if err != nil {
+		return Note{}, err
+	}
 	n.ToAway = away
-	return n, err
+	if found {
+		sn, err := cache.note(ctx, similar, now)
+		if err != nil {
+			return Note{}, err
+		}
+		n.SimilarOpen = &sn
+	}
+	return n, nil
 }
 
 // AnswerNote answers a question (by id or an 8+ character id prefix) and

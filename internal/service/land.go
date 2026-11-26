@@ -329,14 +329,19 @@ func (s *Service) treeWarnings(ctx context.Context, tree hash.Hash, changes []ob
 
 // sideWarnings runs the checks that need both sides of a merge: a
 // signature one side changed that the other side's new code calls the old
-// way, a name one side removed that the other side's new code uses. They
-// only warn; a failing check becomes a warning.
+// way, a name one side removed that the other side's new code uses, and
+// unreachable code, undefined names and unused imports that only the
+// merged packages have. They only warn; a failing check becomes a warning.
 func (s *Service) sideWarnings(ctx context.Context, sides engine.GoSides) []engine.Warning {
 	ws, err := engine.CheckGoSides(ctx, s.Blobs, sides)
 	if err != nil {
 		return []engine.Warning{{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not check Go signatures across the merge: %v", err)}}
 	}
-	return ws
+	tws, err := engine.CheckGoMerge(ctx, s.Blobs, sides)
+	if err != nil {
+		return append(ws, engine.Warning{Kind: engine.WarningCheck, Detail: fmt.Sprintf("could not type-check the merged Go packages: %v", err)})
+	}
+	return append(ws, engine.WithoutCovered(ws, tws)...)
 }
 
 // storeWarnings converts engine warnings to the form kept with a changeset.

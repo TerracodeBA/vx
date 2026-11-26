@@ -176,8 +176,11 @@ also goes to that agent's person, instead of waiting unseen until it
 escalates.
 
 With --wait, vx ask blocks until the question is answered (exit 0, the
-answer is printed) or escalates without an answer (exit 3). --timeout, as
-for vx wait, stops waiting earlier (exit 4); the question stays open.`,
+answer is printed) or escalates without an answer (exit 3). With --timeout
+as well, it waits until --timeout however --within compares: the question
+still escalates at --within, vx says so and keeps waiting, prints the
+answer when it comes (exit 0) and, when --timeout passes, checks for an
+answer once more before it gives up (exit 4); the question stays open.`,
 		Example: `  vx ask "Does Allow take the client IP or the user id?" --on limit.Allow --to backend --wait
   vx ask "Who ships first, auth or audit?" --to user:bob --wait --timeout 10m`,
 		Args: cobra.ExactArgs(1),
@@ -210,6 +213,9 @@ for vx wait, stops waiting earlier (exit 4); the question stays open.`,
 			if n := resp.Msg.Notice; n != "" {
 				a.printf("Note: %s\n", n)
 			}
+			if n := resp.Msg.SimilarNotice; n != "" {
+				a.printf("Note: %s\n", n)
+			}
 			if !wait {
 				a.printf("See the answer with `vx inbox`, or wait for it: vx wait\n")
 				a.emit(resp.Msg)
@@ -220,10 +226,16 @@ for vx wait, stops waiting earlier (exit 4); the question stays open.`,
 			if timeout > 0 {
 				until = time.Now().Add(timeout)
 			}
-			answer, escalated, err := a.waitForAnswer(ctx, c, q, repo, slug, interval, until)
+			answer, escalated, err := a.waitForAnswer(ctx, c, q, repo, slug, interval, until, func() {
+				a.printf("Nobody answered by %s; the question escalated to the people involved. Still waiting until --timeout (%s)...\n", clock(q.AnswerBy), clock(until.UTC().Format(time.RFC3339Nano)))
+			})
 			if errors.Is(err, errWaitTimeout) {
-				a.printf("No answer within %s; the question stays open and escalates at %s if nobody answers. vx wait returns when it is answered.\n", timeout, clock(q.AnswerBy))
-				a.emit(map[string]any{"question": q, "notice": resp.Msg.Notice, "escalated": false, "timed_out": true})
+				if escalated {
+					a.printf("No answer within %s; the question escalated at %s and stays open. vx wait returns when it is answered.\n", timeout, clock(q.AnswerBy))
+				} else {
+					a.printf("No answer within %s; the question stays open and escalates at %s if nobody answers. vx wait returns when it is answered.\n", timeout, clock(q.AnswerBy))
+				}
+				a.emit(map[string]any{"question": q, "notice": resp.Msg.Notice, "escalated": escalated, "timed_out": true})
 				a.exitCode = ExitTimeout
 				return nil
 			}
@@ -234,7 +246,7 @@ for vx wait, stops waiting earlier (exit 4); the question stays open.`,
 				a.printf("\n")
 				a.printNote(answer, noteOpts{})
 				a.markRead(ctx, c, answer)
-				a.emit(map[string]any{"question": q, "answer": answer, "notice": resp.Msg.Notice, "escalated": false})
+				a.emit(map[string]any{"question": q, "answer": answer, "notice": resp.Msg.Notice, "escalated": escalated})
 				return nil
 			}
 			a.printf("Nobody answered by %s; the question escalated to the people involved.\nCarry on with what you can do without the answer; vx wait returns when it is answered.\n", clock(q.AnswerBy))
@@ -247,8 +259,8 @@ for vx wait, stops waiting earlier (exit 4); the question stays open.`,
 	cmd.Flags().StringSliceVar(&targets, "on", nil, "path or symbol the question is about (repeatable)")
 	cmd.Flags().StringVar(&to, "to", "", "agent name, handle or ref to ask (default: anyone in the effort)")
 	cmd.Flags().DurationVar(&within, "within", 5*time.Minute, "escalate to people if nobody answers within this long")
-	cmd.Flags().BoolVar(&wait, "wait", false, "block until answered (exit 0) or escalated (exit 3)")
-	cmd.Flags().DurationVar(&timeout, "timeout", 0, "with --wait: stop waiting after this long (exit 4); the question stays open. 0: until answered or escalated")
+	cmd.Flags().BoolVar(&wait, "wait", false, "block until answered (exit 0) or escalated (exit 3; with --timeout, until the timeout)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 0, "with --wait: wait this long, also past the escalation at --within (exit 4 when it passes); the question stays open. 0: until answered or escalated")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "how often --wait checks")
 	return cmd
 }
@@ -256,14 +268,18 @@ for vx wait, stops waiting earlier (exit 4); the question stays open.`,
 // errWaitTimeout: vx ask --wait --timeout ran out before an answer.
 var errWaitTimeout = errors.New("no answer within --timeout")
 
-// waitForAnswer polls the question's thread until it has an answer, the
-// question escalated or, when until is set, until passes (errWaitTimeout).
-func (a *App) waitForAnswer(ctx context.Context, c *client.Client, q *vxv1.Note, repo, slug string, interval time.Duration, until time.Time) (*vxv1.Note, bool, error) {
+// waitForAnswer polls the question's thread until it has an answer. Without
+// until it also stops when the question escalates (escalated true). With
+// until (--timeout) it keeps waiting through the escalation, calling
+// onEscalate once when it happens, and when until passes it looks for an
+// answer a last time before returning errWaitTimeout.
+func (a *App) waitForAnswer(ctx context.Context, c *client.Client, q *vxv1.Note, repo, slug string, interval time.Duration, until time.Time, onEscalate func()) (*vxv1.Note, bool, error) {
 	deadline, _ := time.Parse(time.RFC3339Nano, q.AnswerBy)
-	for {
+	escalated := false
+	poll := func() (*vxv1.Note, string, error) {
 		resp, err := c.Board.ListNotes(ctx, connect.NewRequest(&vxv1.ListNotesRequest{Repo: repo, Effort: slug, ThreadId: q.Id}))
 		if err != nil {
-			return nil, false, err
+			return nil, "", err
 		}
 		var answer *vxv1.Note
 		state := ""
@@ -275,23 +291,44 @@ func (a *App) waitForAnswer(ctx context.Context, c *client.Client, q *vxv1.Note,
 				state = n.State
 			}
 		}
-		if answer != nil {
-			return answer, false, nil
+		return answer, state, nil
+	}
+	for {
+		answer, state, err := poll()
+		if err != nil {
+			return nil, escalated, err
 		}
-		if state == "escalated" || (state == "" && !deadline.IsZero() && time.Now().After(deadline.Add(interval))) {
-			return nil, true, nil
+		if answer != nil {
+			return answer, escalated, nil
+		}
+		if !escalated && (state == "escalated" || (state == "" && !deadline.IsZero() && time.Now().After(deadline.Add(interval)))) {
+			escalated = true
+			if until.IsZero() {
+				return nil, true, nil
+			}
+			if onEscalate != nil {
+				onEscalate()
+			}
 		}
 		if !until.IsZero() && !time.Now().Add(interval).Before(until) {
 			select {
 			case <-ctx.Done():
-				return nil, false, ctx.Err()
+				return nil, escalated, ctx.Err()
 			case <-time.After(time.Until(until)):
 			}
-			return nil, false, errWaitTimeout
+			// An answer given in the last interval still counts.
+			answer, _, err := poll()
+			if err != nil {
+				return nil, escalated, err
+			}
+			if answer != nil {
+				return answer, escalated, nil
+			}
+			return nil, escalated, errWaitTimeout
 		}
 		select {
 		case <-ctx.Done():
-			return nil, false, ctx.Err()
+			return nil, escalated, ctx.Err()
 		case <-time.After(interval):
 		}
 	}
@@ -1143,6 +1180,12 @@ func (a *App) printNote(n *vxv1.Note, o noteOpts) {
 	if n.SupersededBy != "" {
 		b.WriteString("  replaced by " + noteID(n.SupersededBy))
 	}
+	if n.SimilarTo != "" {
+		b.WriteString("  similar to " + noteID(n.SimilarTo))
+	}
+	if len(n.Similar) > 0 {
+		b.WriteString("  asked again as " + noteIDs(n.Similar))
+	}
 	b.WriteString("  id " + noteID(n.Id))
 	a.printf("%s%s\n", o.indent, b.String())
 	for _, line := range strings.Split(cleanBody(n.Body), "\n") {
@@ -1164,6 +1207,15 @@ func cleanBody(s string) string {
 		return r
 	}, s)
 	return strings.TrimRight(s, " \t\n")
+}
+
+// noteIDs shortens and joins note ids.
+func noteIDs(ids []string) string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = noteID(id)
+	}
+	return strings.Join(out, ", ")
 }
 
 func noteID(id string) string {

@@ -260,6 +260,13 @@ func (s *Service) checkInRepo(ctx context.Context, repo store.Repo, baseTree, tr
 	if tree.IsZero() {
 		return errf(CodeInvalid, "land needs a snapshot tree")
 	}
+	if tree == baseTree {
+		// Nothing new: the base is the repository's own changeset, so its
+		// tree belongs to it even when its objects were never recorded
+		// (an import that predates repo_objects). The land then says there
+		// is nothing to land instead of asking for an upload.
+		return nil
+	}
 	if err := s.ensureObjectsIndexed(ctx, repo.ID); err != nil {
 		return err
 	}
