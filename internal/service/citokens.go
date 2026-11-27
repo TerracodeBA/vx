@@ -98,7 +98,7 @@ func (s *Service) CreateCIToken(ctx context.Context, actor Actor, repo, name str
 		}
 		secret = sec
 		if out, err = tx.InsertCIToken(ctx, store.CIToken{RepoID: r.ID, Name: name, PrincipalID: p.ID, TokenID: tok.ID,
-			Checks: checks, CreatedBy: &actor.ID, CreatedAt: s.now()}); err != nil {
+			Checks: checks, CreatedBy: &actor.ID, CreatedAt: s.Clock()}); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, &r.ID, &actor.ID, "repo.ci_token.create", r.Name, nil,
@@ -145,7 +145,7 @@ func (s *Service) RevokeCIToken(ctx context.Context, actor Actor, repo, name str
 	var out store.CIToken
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
 		var err error
-		if out, err = tx.RevokeCIToken(ctx, r.ID, strings.TrimSpace(name), s.now()); err != nil {
+		if out, err = tx.RevokeCIToken(ctx, r.ID, strings.TrimSpace(name), s.Clock()); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, &r.ID, &actor.ID, "repo.ci_token.revoke", r.Name, map[string]any{"name": out.Name, "checks": out.Checks}, nil)
@@ -181,7 +181,7 @@ func (s *Service) ciRepo(ctx context.Context, ci *CITokenView, repo string) (sto
 	if ci == nil || ci.RepoName != repo {
 		return store.Repo{}, repoNotFound(repo)
 	}
-	r, _, err := s.Store.RepoRoleFacts(ctx, repo, ci.PrincipalID, true, s.now())
+	r, _, err := s.Store.RepoRoleFacts(ctx, repo, ci.PrincipalID, true, s.Clock())
 	if err != nil {
 		return store.Repo{}, repoNotFound(repo)
 	}

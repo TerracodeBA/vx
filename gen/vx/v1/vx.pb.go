@@ -5994,11 +5994,16 @@ type Note struct {
 	// "same_person" (the caller's own person or another of that person's
 	// agents; servers before v0.3 sent "yours"),
 	// "teammate" (someone else's). Clients show it next to the note.
-	Trust         string `protobuf:"bytes,13,opt,name=trust,proto3" json:"trust,omitempty"`
-	Supersedes    string `protobuf:"bytes,14,opt,name=supersedes,proto3" json:"supersedes,omitempty"`                         // id of the note this one replaces
-	SupersededBy  string `protobuf:"bytes,15,opt,name=superseded_by,json=supersededBy,proto3" json:"superseded_by,omitempty"` // set when a newer note of the author replaced this one
-	System        bool   `protobuf:"varint,16,opt,name=system,proto3" json:"system,omitempty"`                                // posted by vx itself (overlaps, reviews, CI), not by a person or agent
-	Read          bool   `protobuf:"varint,17,opt,name=read,proto3" json:"read,omitempty"`                                    // the caller has seen this note
+	Trust        string `protobuf:"bytes,13,opt,name=trust,proto3" json:"trust,omitempty"`
+	Supersedes   string `protobuf:"bytes,14,opt,name=supersedes,proto3" json:"supersedes,omitempty"`                         // id of the note this one replaces
+	SupersededBy string `protobuf:"bytes,15,opt,name=superseded_by,json=supersededBy,proto3" json:"superseded_by,omitempty"` // set when a newer note of the author replaced this one
+	System       bool   `protobuf:"varint,16,opt,name=system,proto3" json:"system,omitempty"`                                // posted by vx itself (overlaps, reviews, CI), not by a person or agent
+	Read         bool   `protobuf:"varint,17,opt,name=read,proto3" json:"read,omitempty"`                                    // the caller has seen this note
+	// Questions: the open question this one closely matched when it was
+	// asked (same --on targets, nearly the same words), and the later
+	// questions that matched this one, oldest first.
+	SimilarTo     string   `protobuf:"bytes,18,opt,name=similar_to,json=similarTo,proto3" json:"similar_to,omitempty"`
+	Similar       []string `protobuf:"bytes,19,rep,name=similar,proto3" json:"similar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6150,6 +6155,20 @@ func (x *Note) GetRead() bool {
 		return x.Read
 	}
 	return false
+}
+
+func (x *Note) GetSimilarTo() string {
+	if x != nil {
+		return x.SimilarTo
+	}
+	return ""
+}
+
+func (x *Note) GetSimilar() []string {
+	if x != nil {
+		return x.Similar
+	}
+	return nil
 }
 
 type PostNoteRequest struct {
@@ -6371,9 +6390,14 @@ type AskResponse struct {
 	// active in the last 2 hours, no token use in the last 15 minutes): what
 	// to tell the asker, e.g. "agent:alice/backend is not working right now
 	// (last seen 40 min ago); the question also goes to user:alice."
-	Notice        string `protobuf:"bytes,2,opt,name=notice,proto3" json:"notice,omitempty"`
-	ToLastSeen    string `protobuf:"bytes,3,opt,name=to_last_seen,json=toLastSeen,proto3" json:"to_last_seen,omitempty"` // RFC 3339; empty: never seen (or the agent is working)
-	CopiedTo      string `protobuf:"bytes,4,opt,name=copied_to,json=copiedTo,proto3" json:"copied_to,omitempty"`         // the person the question was copied to at once (ref); empty: none
+	Notice     string `protobuf:"bytes,2,opt,name=notice,proto3" json:"notice,omitempty"`
+	ToLastSeen string `protobuf:"bytes,3,opt,name=to_last_seen,json=toLastSeen,proto3" json:"to_last_seen,omitempty"` // RFC 3339; empty: never seen (or the agent is working)
+	CopiedTo   string `protobuf:"bytes,4,opt,name=copied_to,json=copiedTo,proto3" json:"copied_to,omitempty"`         // the person the question was copied to at once (ref); empty: none
+	// Set when a similar question was already open in the effort: what to
+	// tell the asker, e.g. "a similar open question exists: 1a2b3c4d by
+	// agent:alice/backend (vx board 1a2b3c4d)". The question is posted
+	// anyway, with similar_to set.
+	SimilarNotice string `protobuf:"bytes,5,opt,name=similar_notice,json=similarNotice,proto3" json:"similar_notice,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6432,6 +6456,13 @@ func (x *AskResponse) GetToLastSeen() string {
 func (x *AskResponse) GetCopiedTo() string {
 	if x != nil {
 		return x.CopiedTo
+	}
+	return ""
+}
+
+func (x *AskResponse) GetSimilarNotice() string {
+	if x != nil {
+		return x.SimilarNotice
 	}
 	return ""
 }
@@ -17676,7 +17707,7 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\tshipments\x18\x01 \x03(\v2\x0f.vx.v1.ShipmentR\tshipments\",\n" +
 	"\x0fMarkReadRequest\x12\x19\n" +
 	"\bnote_ids\x18\x01 \x03(\tR\anoteIds\"\x12\n" +
-	"\x10MarkReadResponse\"\xb4\x03\n" +
+	"\x10MarkReadResponse\"\xed\x03\n" +
 	"\x04Note\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x16\n" +
@@ -17698,7 +17729,10 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"supersedes\x12#\n" +
 	"\rsuperseded_by\x18\x0f \x01(\tR\fsupersededBy\x12\x16\n" +
 	"\x06system\x18\x10 \x01(\bR\x06system\x12\x12\n" +
-	"\x04read\x18\x11 \x01(\bR\x04read\"\x9f\x01\n" +
+	"\x04read\x18\x11 \x01(\bR\x04read\x12\x1d\n" +
+	"\n" +
+	"similar_to\x18\x12 \x01(\tR\tsimilarTo\x12\x18\n" +
+	"\asimilar\x18\x13 \x03(\tR\asimilar\"\x9f\x01\n" +
 	"\x0fPostNoteRequest\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06effort\x18\x02 \x01(\tR\x06effort\x12\x12\n" +
@@ -17717,13 +17751,14 @@ const file_vx_v1_vx_proto_rawDesc = "" +
 	"\atargets\x18\x03 \x03(\tR\atargets\x12\x12\n" +
 	"\x04body\x18\x04 \x01(\tR\x04body\x12\x0e\n" +
 	"\x02to\x18\x05 \x01(\tR\x02to\x122\n" +
-	"\x15answer_within_seconds\x18\x06 \x01(\x05R\x13answerWithinSeconds\"\x8d\x01\n" +
+	"\x15answer_within_seconds\x18\x06 \x01(\x05R\x13answerWithinSeconds\"\xb4\x01\n" +
 	"\vAskResponse\x12'\n" +
 	"\bquestion\x18\x01 \x01(\v2\v.vx.v1.NoteR\bquestion\x12\x16\n" +
 	"\x06notice\x18\x02 \x01(\tR\x06notice\x12 \n" +
 	"\fto_last_seen\x18\x03 \x01(\tR\n" +
 	"toLastSeen\x12\x1b\n" +
-	"\tcopied_to\x18\x04 \x01(\tR\bcopiedTo\"<\n" +
+	"\tcopied_to\x18\x04 \x01(\tR\bcopiedTo\x12%\n" +
+	"\x0esimilar_notice\x18\x05 \x01(\tR\rsimilarNotice\"<\n" +
 	"\rAnswerRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\tR\x06noteId\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"^\n" +

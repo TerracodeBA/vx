@@ -235,7 +235,7 @@ func (s *Service) enqueueCheckJob(ctx context.Context, spec JobSpec) (store.Chec
 	var created bool
 	err := s.Store.InTx(ctx, func(tx *store.Tx) error {
 		var err error
-		if out, created, err = tx.EnqueueCheckJob(ctx, j, s.now()); err != nil {
+		if out, created, err = tx.EnqueueCheckJob(ctx, j, s.Clock()); err != nil {
 			return err
 		}
 		if !created {
@@ -605,7 +605,7 @@ func (s *Service) NextCheckJob(ctx context.Context, actor Actor, in NextJobInput
 	if err != nil {
 		return nil, err
 	}
-	now := s.now()
+	now := s.Clock()
 	if _, _, err := s.Store.ReapCheckJobs(ctx, now); err != nil {
 		return nil, err
 	}
@@ -747,7 +747,7 @@ func (s *Service) RenewCheckJob(ctx context.Context, actor Actor, repo, id strin
 	if d > MaxJobLease {
 		return CheckJobView{}, errf(CodeInvalid, "--for %s: a lease lasts at most %s; renew again later", d, MaxJobLease)
 	}
-	now := s.now()
+	now := s.Clock()
 	if _, _, err := s.Store.ReapCheckJobs(ctx, now); err != nil {
 		return CheckJobView{}, err
 	}
@@ -777,7 +777,7 @@ func (s *Service) ReleaseCheckJob(ctx context.Context, actor Actor, repo, id, re
 	} else {
 		reason = "released by " + actor.Ref() + ": " + reason
 	}
-	out, err := s.Store.ReleaseCheckJob(ctx, j.ID, actor.ID, s.now(), reason)
+	out, err := s.Store.ReleaseCheckJob(ctx, j.ID, actor.ID, s.Clock(), reason)
 	if errors.Is(err, store.ErrLeaseLost) {
 		return CheckJobView{}, s.leaseLost(ctx, actor, j.ID)
 	}
@@ -837,7 +837,7 @@ func (s *Service) ListCheckJobs(ctx context.Context, actor Actor, in ListJobsInp
 	if err != nil || len(repoIDs) == 0 {
 		return nil, err
 	}
-	if _, _, err := s.Store.ReapCheckJobs(ctx, s.now()); err != nil {
+	if _, _, err := s.Store.ReapCheckJobs(ctx, s.Clock()); err != nil {
 		return nil, err
 	}
 	var runners []string
@@ -887,7 +887,7 @@ func (s *Service) HumanJobs(ctx context.Context, actor Actor) ([]CheckJobView, e
 // a tree of an effort: it finishes the check's pending jobs for that tree
 // (and pipelines start what comes after it).
 func (s *Service) afterCheckResult(ctx context.Context, repo store.Repo, effortID uuid.UUID, check string, tree hash.Hash, resultID uuid.UUID) {
-	jobs, err := s.Store.FinishCheckJobs(ctx, effortID, check, tree, resultID.String(), s.now())
+	jobs, err := s.Store.FinishCheckJobs(ctx, effortID, check, tree, resultID.String(), s.Clock())
 	if err != nil {
 		slog.Warn("finishing check jobs", "repo", repo.Name, "check", check, "err", err)
 		return
