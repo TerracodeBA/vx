@@ -852,7 +852,7 @@ func (s *Service) recordLandChecks(ctx context.Context, tx *store.Tx, actor Acto
 	}
 	var out []store.CheckResult
 	r, _ := rules.At(ctx, s.Blobs, in.Tree)
-	now := s.Now().UTC()
+	now := s.Clock().UTC()
 	for _, c := range in.Evidence.Checks {
 		if !c.RanByVX {
 			continue
@@ -904,7 +904,7 @@ func (s *Service) afterLandChecks(ctx context.Context, repo store.Repo, eff stor
 // as a passing result of the policy's check "review" on the reviewed
 // snapshot.
 func (s *Service) recordReviewCheck(ctx context.Context, tx *store.Tx, actor Actor, r store.Review) error {
-	now := s.Now().UTC()
+	now := s.Clock().UTC()
 	_, err := tx.InsertCheckResult(ctx, store.CheckResult{
 		RepoID: r.RepoID, EffortID: &r.EffortID, ChangeID: r.ChangeID, Tree: r.Tree, CheckName: rules.PolicyReviewCheck,
 		Status: store.CheckPass, Summary: "approved review " + shortID(r.ID), ReporterID: &actor.ID, Reporter: actor.Ref(),

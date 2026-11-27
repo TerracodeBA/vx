@@ -96,7 +96,7 @@ func (s *Service) SetAgentRunner(ctx context.Context, actor Actor, agent string,
 		return RunnerView{}, err
 	}
 	err = s.Store.InTx(ctx, func(tx *store.Tx) error {
-		if err := tx.SetAgentRunnerKinds(ctx, target.ID, clean, actor.ID, s.now()); err != nil {
+		if err := tx.SetAgentRunnerKinds(ctx, target.ID, clean, actor.ID, s.Clock()); err != nil {
 			return err
 		}
 		return tx.LogOp(ctx, nil, &actor.ID, "agent.runner", target.Ref(), map[string]any{"kinds": before}, map[string]any{"kinds": clean})
